@@ -11,8 +11,8 @@ abstract: >-
 authors:
   - given-names: Nimesh
     alias: npandeya
-version: 0.1.0
-date-released: "2026-09-24"
+version: 0.2.0
+date-released: "2026-09-25"
 license: Apache-2.0
 repository-code: "https://github.com/nimeshbuilds/cloudseed"
 url: "https://nimeshbuilds.github.io/cloudseed/"

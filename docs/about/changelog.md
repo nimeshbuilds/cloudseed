@@ -1,6 +1,6 @@
 ---
-title: "Changelog - cloudseed v0.1.0 highlights"
-description: "What is in cloudseed v0.1.0: landing zones on AWS, GCP, Azure and VMware, Kubernetes, DR, chaos, scans, FIPS, FinOps, a web console, MCP and agents."
+title: "Changelog - cloudseed v0.2.0 highlights"
+description: "Cloudseed v0.2.0 adds Well-Architected assessments, operational readiness, trusted runtime releases, expanded scenarios and runtime fixes."
 ---
 
 # Changelog
@@ -9,13 +9,25 @@ The full, detailed history is in [CHANGELOG.md](https://github.com/nimeshbuilds/
 GitHub. cloudseed follows [Semantic Versioning](https://semver.org/); while it is 0.x, a minor release may change
 commands or defaults, and such changes are called out.
 
-## Unreleased operational readiness
+## v0.2.0 - 2026-09-25
 
 Shared operations now cover health/network evidence, real topology profiles, portable specifications, budget/plan
 policy, explicit expiry cleanup, drift, guarded upgrades, application recovery, sandbox acceptance, native keychain
 storage and release verification across CLI/MCP/UI/skills. [Scenarios 16–19](../scenarios/index.md#operational-readiness-walkthroughs)
 and the [coverage guide](../scenarios/interfaces-and-coverage.md) describe what is locally tested and what still
 requires live cloud evidence. See the full changelog for implementation and compatibility details.
+
+- **Well-Architected assessments** evaluate saved configuration and local evidence across AWS, GCP, Azure and
+  VMware, through CLI, MCP, console and skills. Missing evidence remains explicit.
+- **Trusted runtime releases** build and test Linux/macOS amd64/arm64 binaries and amd64/arm64 containers.
+  Version-tag publication includes checksums, manifests, complete dependency inventories and signed provenance.
+- **Runtime fixes** preserve VMware recovery state, enforce environment locks, bound console streams, retain
+  bundled service assets, and repair tunnel detection and MCP cleanup.
+- **Documentation and scenarios** use the new white-and-blue Pages design and cover all operations through
+  CLI, agent, MCP and UI routes in 19 scenarios.
+
+Download versioned artifacts from [GitHub Releases](https://github.com/nimeshbuilds/cloudseed/releases) and follow
+[scenario 19](../scenarios/19-acceptance-and-releases.md) to verify their integrity and provenance.
 
 ## v0.1.0 - 2026-09-24
 

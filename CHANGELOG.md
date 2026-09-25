@@ -7,6 +7,8 @@ commands or defaults; such changes are called out under **Changed**.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-25
+
 ### Added
 
 - Shared `cs ops` contract across CLI, generated MCP tools, typed console forms and agent skills: health/network
@@ -16,7 +18,8 @@ commands or defaults; such changes are called out under **Changed**.
   GKE node-zone multiplication and mark unsupported pricing incomplete. Profile/import saves never auto-apply.
 - Native OS-keychain credential storage, bounded MCP job/output handling, release integrity/provenance verification
   and a build-tested release workflow. Complete SBOM file digests and image-bound manifests preserve inventories
-  larger than GitHub's embedded-attestation limit. Tagged signing/publication requires a separate version release.
+  larger than GitHub's embedded-attestation limit. Version-tag releases publish Linux/macOS amd64/arm64 binaries,
+  multi-architecture container images, checksums, manifests and signed provenance after the release checks pass.
   No cloud account is required for previews; live acceptance is separate.
 - Scenarios 16–19 plus concrete agent/MCP/UI routes on every earlier scenario, a checked command/catalog coverage
   manifest, and expanded Terraform provider-schema tests for production topology.
@@ -114,5 +117,6 @@ The first public release.
   the mocked `terraform test` suites, `go vet`/`test`/`build` for the VMware provider, and the scenario scripts in
   dry-run mode.
 
-[Unreleased]: https://github.com/nimeshbuilds/cloudseed/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/nimeshbuilds/cloudseed/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/nimeshbuilds/cloudseed/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nimeshbuilds/cloudseed/releases/tag/v0.1.0
