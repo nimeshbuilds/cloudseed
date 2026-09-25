@@ -36,8 +36,8 @@ commands or defaults; such changes are called out under **Changed**.
   as MCP stop/restart already does, instead of opening a second tunnel or leaving one running.
 - A stdio MCP server stopped right after it starts no longer leaves its parked-credentials session behind.
 - MCP client configs on Linux ignore an empty or relative `XDG_CONFIG_HOME` (`~/.config`, not the current directory).
-- The MetalLB pool pre-check of `cs platform install` only warns: a `kubectl` that cannot run or does not answer within
-  60 s no longer stops or hangs the install.
+- The MetalLB pool check in `cs platform install` is advisory only: its silent `kubectl` query gives up after 60 s instead
+  of holding the install indefinitely, and a `kubectl` that cannot start is left for the apply that follows to report.
 
 ## [0.1.0] - 2026-09-24
 
