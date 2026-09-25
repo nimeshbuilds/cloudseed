@@ -717,7 +717,7 @@
   // run modes of the wizard's last step, vault groups of the Credentials page, report kinds
   const XQ_MODE = { plan: 'plan', dry_run: 'setup', apply: 'apply' };
   const XQ_CREDS = { aws: 'target aws', gcp: 'target gcp', azure: 'target azure', agents: 'agentic', services: 'services', custom: 'creds' };
-  const XQ_REPORT = { drill: 'dr', report: 'chaos', scan: 'scan' };
+  const XQ_REPORT = { drill: 'dr', report: 'chaos', scan: 'scan', operations: 'command ops' };
   const XQ_POPULAR = ['overview', 'network', 'bastion', 'kubernetes', 'vpn', 'state', 'platform', 'dr', 'chaos', 'scan', 'fips', 'mcp'];
   // an action's page is its command's (cloudseed_update_ip -> command update-ip); the exceptions are listed
   const XQ_ACTION = { cloudseed_vpn_connect: 'command vpn' };
@@ -2154,7 +2154,7 @@
     if (it.checks && it.checks.length) { body.append(el('h4', {}, 'Checks')); const t = el('table', {}, el('tr', {}, el('th', {}, 'status'), el('th', {}, 'area'), el('th', {}, 'check'), el('th', {}, 'detail'))); for (const c of it.checks) t.append(el('tr', {}, el('td', {}, cellChip(c.status || 'INFO')), el('td', {}, c.area || it.operation || kind), el('td', { class: 'small' }, c.check || c.id), el('td', { class: 'small muted' }, c.detail))); body.append(el('div', { class: 'table-wrap' }, t)); }
     body.append(el('p', { class: 'muted small mono', style: 'margin-top:12px' }, it.path));
     const e = currentEnv();
-    modal(`${it.operation ? colLabel(kind) : REPORT_KIND[kind] || scanTitle(kind)} · ${it.generated_at ? fmtTime(it.generated_at) : runLabel(it.name)}${e ? ' · ' + e.id : ''}`, body, { explain: it.operation ? 'command ops' : XQ_REPORT[REPORT_KIND[kind] ? kind : 'scan'] });
+    modal(`${it.operation ? colLabel(kind) : REPORT_KIND[kind] || scanTitle(kind)} · ${it.generated_at ? fmtTime(it.generated_at) : runLabel(it.name)}${e ? ' · ' + e.id : ''}`, body, { explain: XQ_REPORT[it.operation ? 'operations' : REPORT_KIND[kind] ? kind : 'scan'] });
   }
 
   // Agents & MCP. Switches and the MCP enable button read the state when clicked (never a value captured when the page

@@ -209,7 +209,7 @@ Configuration saves and assessments never silently apply infrastructure. Missing
 ```bash
 cs ops health aws --env prod --json
 cs ops profile aws --env prod --profile production --json
-cs ops spec-export aws --env prod --output cloudseed.yaml --json
+cs ops spec-export aws --env prod --output cloudseed.yaml --approve --json
 cs ops acceptance aws --json
 ```
 

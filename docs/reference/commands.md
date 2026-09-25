@@ -810,7 +810,7 @@ Health, network, deployment profiles/specs, policy/expiry, drift, upgrades, reco
 ```text
 cloudseed ops list --json
 cloudseed ops ACTION [aws|gcp|azure|vmware] --env NAME [--params '{...}'] [--approve] [--json]
-cloudseed ops spec-export aws --env prod --output cloudseed.yaml --json
+cloudseed ops spec-export aws --env prod --output cloudseed.yaml --approve --json
 cloudseed ops spec-validate --input cloudseed.yaml --json
 ```
 

@@ -42,7 +42,7 @@ class Operation:
 
     def changing(self, params):
         return self.effect == "change" or (self.effect == "live" and bool(params.get("live"))) or (self.effect == "active" and bool(params.get("active"))) or (
-            self.effect == "save" and bool(params.get("approve")))
+            self.effect == "save" and bool(params.get("approve"))) or (self.effect == "output" and bool(params.get("output")))
 
 
 OPERATIONS = {
@@ -65,7 +65,7 @@ OPERATIONS = {
         Operation("profile", "blueprints", "Preview or save a lab, team or production deployment profile; never applies infrastructure.",
                   {"profile": text(enum=["lab", "team", "production"])}, "save"),
         Operation("spec-export", "blueprints", "Export a portable environment specification without credentials or local state.",
-                  {"output": text("Optional destination file for the portable specification (JSON, also valid YAML)")}),
+                  {"output": text("Optional destination file for the portable specification (requires approval; JSON, also valid YAML)")}, "output"),
         Operation("spec-validate", "blueprints", "Validate a versioned portable specification without cloud calls.",
                   {"spec": OBJECT}, requires_env=False),
         Operation("spec-diff", "blueprints", "Compare a portable specification with the saved environment.", {"spec": OBJECT}),

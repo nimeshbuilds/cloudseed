@@ -237,7 +237,7 @@ The scripts live next to the code in [`tests/scenarios/`](https://github.com/nim
 They never touch your `~/.cloudseed` unless you ask for a live run:
 
 ```bash
-tests/scenarios/run.sh                      # all 15: cloud ones as dry runs, VMware ones as their dry-run equivalent
+tests/scenarios/run.sh                      # all 19: cloud/VMware dry runs plus local operational checks
 tests/scenarios/run.sh 02 14                # just these
 tests/scenarios/run.sh -v 03                # stream every command's output
 CLOUDSEED_LIVE=1 tests/scenarios/run.sh 01 05 06 08

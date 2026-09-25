@@ -55,7 +55,7 @@ description: "The cloudseed MCP server's 48 tools, resources and prompts: an MCP
 | [`cloudseed_ops_health`](#cloudseed_ops_health) | – | Environment health with explicit evidence and freshness; live queries are opt-in. |
 | [`cloudseed_ops_network`](#cloudseed_ops_network) | some uses | Diagnose private cluster DNS, API, registry and outbound connectivity. Changes need confirm=true; previews do not. |
 | [`cloudseed_ops_profile`](#cloudseed_ops_profile) | some uses | Preview or save a lab, team or production deployment profile; never applies infrastructure. Changes need confirm=true; previews do not. |
-| [`cloudseed_ops_spec_export`](#cloudseed_ops_spec_export) | – | Export a portable environment specification without credentials or local state. |
+| [`cloudseed_ops_spec_export`](#cloudseed_ops_spec_export) | some uses | Export a portable environment specification without credentials or local state. Changes need confirm=true; previews do not. |
 | [`cloudseed_ops_spec_validate`](#cloudseed_ops_spec_validate) | – | Validate a versioned portable specification without cloud calls. |
 | [`cloudseed_ops_spec_diff`](#cloudseed_ops_spec_diff) | – | Compare a portable specification with the saved environment. |
 | [`cloudseed_ops_spec_import`](#cloudseed_ops_spec_import) | some uses | Preview or save a validated portable specification; never applies infrastructure. Changes need confirm=true; previews do not. |
@@ -532,14 +532,15 @@ Preview or save a lab, team or production deployment profile; never applies infr
 
 ### cloudseed_ops_spec_export
 
-Export a portable environment specification without credentials or local state.
+Export a portable environment specification without credentials or local state. Changes need confirm=true; previews do not.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `cloud` | `aws` \| `gcp` \| `azure` \| `vmware` |  |  |
 | `env` | string |  |  |
-| `output` | string |  | Optional destination file for the portable specification (JSON, also valid YAML) |
+| `output` | string |  | Optional destination file for the portable specification (requires approval; JSON, also valid YAML) |
 | `json` | boolean |  | Return structured JSON (default true) |
+| `confirm` | boolean |  | Approve the described change |
 
 ### cloudseed_ops_spec_validate
 

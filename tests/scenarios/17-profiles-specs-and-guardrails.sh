@@ -10,7 +10,7 @@ has '"saved": false'
 ok cs ops profile aws --env review --profile lab --approve --json
 has '"saved": true'
 step "2. Export, validate, compare and import a portable specification"
-ok cs ops spec-export aws --env review --output cloudseed.yaml --json
+ok cs ops spec-export aws --env review --output cloudseed.yaml --approve --json
 check "specification exists" test -f cloudseed.yaml
 ok cs ops spec-validate --input cloudseed.yaml --json
 ok cs ops spec-diff aws --env review --input cloudseed.yaml --json

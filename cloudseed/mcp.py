@@ -1210,17 +1210,20 @@ def _environments() -> list[dict]:
             cfg = json.loads(_resource_text(e.config_path))
             if not isinstance(cfg, dict):
                 raise ValueError("not a JSON object")
-        except (OSError, ValueError, ui.Abort) as err:   # one broken env must not hide the others
+        except (OSError, ValueError, RecursionError, ui.Abort) as err:   # one broken env must not hide the others
             item["error"] = f"unreadable config.json ({type(err).__name__}); fix or remove {e.config_path}"
+            size += len(json.dumps(item, separators=(",", ":")).encode("utf-8"))
+            if size > MAX_RESOURCE:
+                raise ValueError("Environment resource exceeds 2 MiB; use targeted inventory calls")
             envs.append(item)
             continue
         try:
             outputs = json.loads(_resource_text(e.dir / "outputs.json"))
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):
             outputs = {}
             item["outputs_note"] = "Saved outputs are unavailable, invalid or exceed the resource size limit"
         item.update({"config": {k: v for k, v in cfg.items() if k not in ("ssh_public_key", "ssh_private_key_path")}, "outputs": outputs})
-        size += len(json.dumps(item).encode("utf-8"))
+        size += len(json.dumps(item, separators=(",", ":")).encode("utf-8"))
         if size > MAX_RESOURCE:
             raise ValueError("Environment resource exceeds 2 MiB; use targeted inventory calls")
         envs.append(item)
@@ -1235,7 +1238,12 @@ def read_resource(uri: str) -> dict | None:
         text = json.dumps(_explain_lookup(query), indent=2, ensure_ascii=False)
         return {"contents": [{"uri": uri, "mimeType": "application/json", "text": text}]}
     if uri == "cloudseed://environments":
-        return {"contents": [{"uri": uri, "mimeType": "application/json", "text": secrets.redact(json.dumps(_environments(), indent=2))}]}
+        # Pretty indentation can expand a small nested document by orders of
+        # magnitude. Bound the actual serialized/redacted resource returned.
+        text = secrets.redact(json.dumps(_environments(), separators=(",", ":")))
+        if len(text.encode("utf-8")) > MAX_RESOURCE:
+            raise ValueError("Environment resource exceeds 2 MiB; use targeted inventory calls")
+        return {"contents": [{"uri": uri, "mimeType": "application/json", "text": text}]}
     m = re.fullmatch(r"cloudseed://skills/([A-Za-z0-9-]+)", uri)
     p = skills._lookup(m.group(1)) if m else None     # short names too: cloudseed://skills/aws is cloudseed-aws
     if p is not None and (p / "SKILL.md").exists():
@@ -1471,19 +1479,26 @@ def dispatch(payload, session: Session, notify=None):
             return _err(None, -32600, "invalid request: empty batch")
         if len(payload) > MAX_BATCH:
             return _err(None, -32600, "invalid request: at most 32 calls per batch")
-        out = []
-        response_size = 0
+        # Reserve a bounded share for each entry before executing any call. A
+        # large resource must not erase outcomes of mutations already executed.
+        budget = (MAX_BODY - 2 - 2 * (len(payload) - 1)) // len(payload)
+        oversized = []
         for m in payload:
+            rid = m.get("id") if isinstance(m, dict) else None
+            fallback = _err(rid if _valid_id(rid) else None, -32603,
+                            "Response exceeds this batch's size limit; request may have completed. "
+                            "Inspect operation reports/status before retrying separately.")
+            if len(json.dumps(fallback).encode("utf-8")) > budget:
+                return _err(None, -32600, "Batch request IDs exceed the response size budget; send smaller requests separately")
+            oversized.append(fallback)
+        out = []
+        for index, m in enumerate(payload):
             if isinstance(m, dict) and m.get("method") == "initialize":
-                if m.get("id") is not None:
-                    out.append(_err(m.get("id"), -32600, "invalid request: initialize must not be part of a batch"))
-                continue
-            r = handle(m, session, notify)
+                r = _err(m.get("id"), -32600, "invalid request: initialize must not be part of a batch") if m.get("id") is not None else None
+            else:
+                r = handle(m, session, notify)
             if r is not None:
-                response_size += len(json.dumps(r).encode("utf-8"))
-                if response_size > MAX_BODY:
-                    return _err(None, -32600, "Batch response too large; request fewer resources per batch")
-                out.append(r)
+                out.append(r if len(json.dumps(r).encode("utf-8")) <= budget else oversized[index])
         return out or None
     return handle(payload, session, notify)
 

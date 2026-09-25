@@ -1418,7 +1418,7 @@ EXAMPLES
 COMMANDS["ops"] = """\
 cloudseed ops list --json
 cloudseed ops ACTION [aws|gcp|azure|vmware] --env NAME [--params '{...}'] [--approve] [--json]
-cloudseed ops spec-export aws --env prod --output cloudseed.yaml --json
+cloudseed ops spec-export aws --env prod --output cloudseed.yaml --approve --json
 cloudseed ops spec-validate --input cloudseed.yaml --json
 
 A shared operation contract drives CLI, MCP (cloudseed_ops_ACTION with underscores), web-console All actions >

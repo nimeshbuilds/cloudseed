@@ -14,7 +14,7 @@ are 0, 1 and 3 respectively (invalid inputs exit 2).
 |---|---|---|
 | Health and private networking | `health`, `network` | Local evidence by default; `live` queries resources. `network` with `active` creates a temporary probe workload and cleans it up. |
 | Deployment profiles | `profile` | Preview lab/team/production; approval saves desired configuration. Apply remains separate. |
-| Portable specification | `spec-export`, `spec-validate`, `spec-diff`, `spec-import` | A versioned document; import requires approval to save and never applies infrastructure. |
+| Portable specification | `spec-export`, `spec-validate`, `spec-diff`, `spec-import` | A versioned document; export to a file and import/save require approval. Neither applies infrastructure. |
 | Cost, policy and expiry | `policy-check`, `expiry-plan`, `expiry-cleanup` | Evaluate a supplied plan, enforce saved apply guardrails, or explicitly clean up a saved opted-in expired environment. |
 | Drift and upgrades | `drift`, `upgrade-plan`, `upgrade-apply` | Read actual state and plan a pinned upgrade; apply requires approval and repeats readiness checks. |
 | Application recovery | `recovery-plan`, `recovery-test` | Restore a selected application into a separate namespace, compare evidence and measure objectives. |
@@ -128,7 +128,7 @@ resource ownership IDs are excluded. Import retains the current environment's id
 To copy intent to another environment, explicitly change the document's `environment` and review its scope.
 
 ```bash
-cs ops spec-export aws --env prod --output cloudseed.yaml --json
+cs ops spec-export aws --env prod --output cloudseed.yaml --approve --json
 cs ops spec-validate --input cloudseed.yaml --json
 cs ops spec-diff aws --env prod --input cloudseed.yaml --json
 cs ops spec-import aws --env prod --input cloudseed.yaml --approve --json

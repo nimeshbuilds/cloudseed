@@ -40,7 +40,7 @@ class OperationContractTests(unittest.TestCase):
     def test_mutations_need_confirmation_and_previews_do_not(self):
         for action, params in [('network', {'live': True, 'active': True}), ('acceptance', {'live': True}),
                                ('profile', {'profile': 'production', 'confirm': True}), ('upgrade-apply', {}),
-                               ('recovery-test', {}), ('expiry-cleanup', {})]:
+                               ('recovery-test', {}), ('expiry-cleanup', {}), ('spec-export', {'output': '/tmp/spec.yaml'})]:
             name = 'cloudseed_ops_' + action.replace('-', '_')
             if action == 'profile':
                 self.assertTrue(mcp._is_destructive(mcp.TOOLS[name], params))
@@ -101,7 +101,7 @@ class OperationCLITests(unittest.TestCase):
 
     def test_export_validate_preview_save_health_reports_without_external_tools(self):
         target = self.home / 'cloudseed.yaml'
-        result = self.run_cli('ops', 'spec-export', 'aws', '--env', 'review', '--output', str(target), '--json')
+        result = self.run_cli('ops', 'spec-export', 'aws', '--env', 'review', '--output', str(target), '--approve', '--json')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         spec = json.loads(target.read_text())
         self.assertEqual(spec, json.loads(result.stdout)['spec'])
@@ -126,10 +126,23 @@ class OperationCLITests(unittest.TestCase):
         self.assertFalse(list((self.directory / 'stack').glob('*.tf')))
         self.assertFalse((self.directory / 'stack/terraform.tfstate').exists())
 
-    def test_export_preserves_previous_copy(self):
+    def test_export_file_requires_approval_across_interfaces(self):
         target = self.home / 'cloudseed.yaml'
         target.write_text('original: keep me\n')
         result = self.run_cli('ops', 'spec-export', 'aws', '--env', 'review', '--output', str(target), '--json')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('explicit --approve', result.stderr)
+        self.assertEqual(target.read_text(), 'original: keep me\n')
+        self.assertEqual(list(self.home.glob('*.bak')), [])
+        args = cli.build_parser().parse_args(['ops', 'spec-export', 'aws', '--output', str(target)])
+        self.assertTrue(builtin_agent._approval_reason(args))
+        with self.assertRaises(webui.NeedsConfirm):
+            webui.raw_argv({'argv': ['ops', 'spec-export', 'aws', '--output', str(target)]})
+
+    def test_export_preserves_previous_copy(self):
+        target = self.home / 'cloudseed.yaml'
+        target.write_text('original: keep me\n')
+        result = self.run_cli('ops', 'spec-export', 'aws', '--env', 'review', '--output', str(target), '--approve', '--json')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(Path(json.loads(result.stdout)['previous_output']).read_text(), 'original: keep me\n')
 

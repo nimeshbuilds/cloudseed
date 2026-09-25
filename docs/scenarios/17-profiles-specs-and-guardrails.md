@@ -54,7 +54,7 @@ Saving a profile enables Kubernetes and may make the next apply more expensive o
 
 ```bash
 cs ops profile aws --env prod --profile production --approve --json
-cs ops spec-export aws --env prod --output cloudseed.yaml --json
+cs ops spec-export aws --env prod --output cloudseed.yaml --approve --json
 cs ops spec-validate --input cloudseed.yaml --json
 ```
 
@@ -120,7 +120,7 @@ keeps the existing protections for shared cloud settings, and records cleanup ev
 Export cloudseed.yaml, validate it and show the diff. Save the reviewed profile only; do not deploy or clean up.”
 
 **MCP:** use `cloudseed_ops_profile` with `{"cloud":"aws","env":"prod","profile":"production"}`;
-repeat with `confirm:true` only to save. Use `cloudseed_ops_spec_export` to get `spec`, pass that object to
+repeat with `confirm:true` only to save. Use `cloudseed_ops_spec_export` to get `spec` (no approval for the returned object; adding an `output` file requires `confirm:true`), pass that object to
 `cloudseed_ops_spec_validate`, `cloudseed_ops_spec_diff` and `cloudseed_ops_spec_import`. Import needs `confirm:true`
 to save. `cloudseed_ops_policy_check` and `cloudseed_ops_expiry_plan` are previews; `cloudseed_ops_expiry_cleanup`
 requires `confirm:true` and the saved expiry guards.

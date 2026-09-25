@@ -207,6 +207,7 @@ nav:
           - Infrastructure audit: development/infrastructure-audit.md
           - CI diagnosis and repairs: development/ci-repair.md
           - Runtime acceptance coverage: development/acceptance.md
+          - Operations verification: development/operations-verification.md
       - FAQ: about/faq.md
       - Changelog: about/changelog.md
       - Roadmap: https://github.com/nimeshbuilds/cloudseed/blob/main/ROADMAP.md
