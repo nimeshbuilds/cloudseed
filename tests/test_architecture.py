@@ -53,6 +53,40 @@ class ArchitectureTests(unittest.TestCase):
         report.update(updates)
         return report
 
+    def diagnostic(self, kind="health", **updates):
+        report = {"schema_version": 1, "kind": kind, "cloud": "aws", "env": "aws-review", "live": True,
+                  "generated_at": (self.now - timedelta(seconds=1)).isoformat(), "active": True,
+                  "findings": [{"id": "cluster.nodes", "status": "PASS", "detail": "sensitive raw detail",
+                                "evidence": [{"type": "live_query", "live_verified": True}]}]}
+        report.update(updates)
+        return self.save("scans", kind, report)
+
+    def test_diagnostics_attach_only_fresh_verified_matching_historical_checks(self):
+        self.diagnostic()
+        report = self.assess()
+        finding = next(f for f in report["findings"] if f["id"] == "evidence.health.cluster.nodes")
+        self.assertEqual(finding["status"], "PASS")
+        self.assertFalse(finding["evidence"][0]["live_verified"])
+        self.assertTrue(finding["evidence"][0]["source_live_verified"])
+        self.assertNotIn("sensitive raw detail", json.dumps(report))
+        self.assertEqual(self.finding("reliability.workload_objectives")["status"], "UNKNOWN")
+
+    def test_diagnostics_reject_stale_offline_wrong_target_and_unverified_results(self):
+        for changes in ({"live": False}, {"env": "aws-other"}, {"cloud": "azure"}, {"schema_version": 3},
+                        {"generated_at": (self.now - timedelta(days=31)).isoformat()},
+                        {"findings": [{"id": "cluster.nodes", "status": "PASS", "evidence": []}]},
+                        {"findings": [{"id": "cluster.nodes", "status": "PASS", "evidence": [{"type": "declared_configuration", "live_verified": False}]}]}):
+            with self.subTest(changes=changes):
+                self.diagnostic(**changes)
+                self.assertEqual(self.finding("evidence.health")["status"], "UNKNOWN")
+
+    def test_diagnostic_failure_is_visible_and_network_requires_active_evidence(self):
+        rows = [{"id": "network.dns", "status": "FAIL", "evidence": [{"type": "live_query", "live_verified": True}]}]
+        self.diagnostic("network", findings=rows, active=False)
+        self.assertEqual(self.finding("evidence.network")["status"], "UNKNOWN")
+        self.diagnostic("network", findings=rows, active=True)
+        self.assertEqual(self.finding("evidence.network.network.dns")["status"], "FAIL")
+
     def test_all_targets_have_stable_json_schema_and_six_domains(self):
         for target in ("aws", "gcp", "azure", "vmware"):
             with self.subTest(target=target):
@@ -189,6 +223,22 @@ class ArchitectureTests(unittest.TestCase):
         self.cfg["extra_vars"] = {"enable_cloudtrail": False, "enable_flow_logs": False}
         self.assertEqual(self.finding("security.audit_logging")["status"], "FAIL")
         self.assertEqual(self.finding("operations.network_logs")["status"], "FAIL")
+
+    def test_configured_regional_gke_and_aks_zones_are_declared_not_live_evidence(self):
+        self.cfg["vars"]["enable_kubernetes"] = True
+        self.cfg["region"] = "us-central1"
+        self.cfg["extra_vars"] = {"kubernetes_regional": True, "kubernetes_node_locations": ["us-central1-a", "us-central1-b", "us-central1-c"]}
+        finding = self.finding("reliability.gke_location", "gcp")
+        self.assertEqual(finding["status"], "PASS")
+        self.assertFalse(finding["evidence"][0]["live_verified"])
+        self.cfg["extra_vars"]["kubernetes_node_locations"] = ["wrong-region-a"]
+        self.assertEqual(self.finding("reliability.gke_location", "gcp")["status"], "UNKNOWN")
+        self.cfg["extra_vars"] = {"kubernetes_sku_tier": "Standard", "kubernetes_zones": ["1", "2", "3"]}
+        finding = self.finding("reliability.aks_availability", "azure")
+        self.assertEqual(finding["status"], "PASS")
+        self.assertFalse(finding["evidence"][0]["live_verified"])
+        self.cfg["extra_vars"]["kubernetes_zones"] = ["1", "1"]
+        self.assertEqual(self.finding("reliability.aks_availability", "azure")["status"], "UNKNOWN")
 
     def test_lab_relaxes_topology_without_claiming_complete_coverage(self):
         self.assertEqual(self.assess("vmware", profile="lab")["verdict"], "INCOMPLETE")

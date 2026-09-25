@@ -162,6 +162,30 @@ cs kubectl -n shop get pods -o wide
 Everything after `cs kubectl` goes to kubectl as typed. Mutating calls are recorded as undo points: a create is
 undone by deleting exactly what it created.
 
+## Use an agent, MCP or the UI
+
+Follow the same numbered steps and verification/cleanup conditions through your chosen interface. Start with the
+[interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
+placeholders before any live request.
+
+**Agent prompt:** “Follow the local Kubernetes walkthrough for vmware-lab. Preview the selected RKE2 or kubeadm setup, verify nodes and kubeconfig, then show the Helm release list. Do not start an interactive terminal on my behalf.”
+
+**MCP starter:** `cloudseed_k8s` with:
+
+```json
+{
+  "cloud": "vmware",
+  "env": "lab",
+  "action": "info"
+}
+```
+
+Use the matching tool for each remaining step in this page; the [command-to-tool map](interfaces-and-coverage.md#command-to-interface-map)
+lists the tool family. Keep `vmware-lab` selected. Preview first; add `confirm:true` only to the specific change
+you have authorized. Host bootstrap, provider login and interactive applications retain their documented human steps.
+
+**UI:** Create → VMware creates the selected lab cluster. Select vmware-lab, then Environments → Kubernetes for info/kubeconfig. All actions → kubectl/Helm runs the listed noninteractive checks. k9s and interactive SSH remain terminal experiences; their readiness checks are available in the UI.
+
 ## Verify it worked
 
 ```bash

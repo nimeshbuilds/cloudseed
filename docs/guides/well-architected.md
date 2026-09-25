@@ -32,7 +32,8 @@ and `--env` explicitly when several environments exist. No cloud credentials are
 | `--max-age-days 30` | Maximum age of saved evidence; 1–3650 days, default 30. |
 | `--json` | Print the assessment as structured JSON for scripts and agents. |
 
-These are **assessment profiles**, not deployment presets. Selecting one never changes the environment.
+These are **assessment profiles**, not deployment presets. To preview/save actual topology settings, use
+[`cs ops profile`](operations.md). Selecting one never changes the environment.
 `cs scan all` continues to run the security suite; run `cs scan architecture` explicitly.
 
 ## Interpret the result
@@ -60,10 +61,11 @@ configuration or collecting evidence; it does not silently refresh evidence with
 | Input | Checks and limits |
 |---|---|
 | Saved configuration | SSH source ranges, Kubernetes API exposure and provider logging settings. A pass describes declared intent. |
-| Provider topology | AWS zones and NAT layout; current zonal GKE design; AKS tier/zone limitations; VMware's single physical host. Production expectations are explicit. |
+| Provider topology | AWS zones and NAT layout; GKE zonal/regional location and node zones; AKS Free/Standard tier and node zones; VMware's single physical host. Production expectations are explicit. |
 | Latest cloud security report | Freshness and failed checks. Even a security `PASS` cannot prove complete coverage or permissions. |
 | Latest Kubernetes DR drill | A complete, recent sample restore with verified volume contents. It does not establish application recovery targets. |
 | Inventory installation notes | Whether Vault or Kyverno policies were recently installed. Effective values and overrides remain unknown. |
+| Saved operational diagnostics | Fresh, matching health/network reports contribute supplemental live observations; they do not satisfy every manual review or authenticate themselves. |
 | Manual review | Baseline ownership, alerts, recovery objectives, drift/upgrades, performance, cost allocation/budgets and sustainability remain unknown. |
 
 Only the newest saved report is considered, so an older success cannot conceal a newer failure or unreadable report.

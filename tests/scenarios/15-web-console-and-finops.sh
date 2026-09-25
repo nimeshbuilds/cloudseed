@@ -78,6 +78,15 @@ has "INCOMPLETE"
 ok api GET '/api/reports?env=aws-web'
 has '"architecture"'
 has '"INCOMPLETE"'
+rc 3 job cloudseed_ops_health '{"cloud":"aws","env":"web"}'
+has '"verdict": "INCOMPLETE"'
+ok job cloudseed_ops_profile '{"cloud":"aws","env":"web","profile":"lab"}'
+has '"saved": false'
+ok job cloudseed_ops_spec_export '{"cloud":"aws","env":"web"}'
+has '"spec"'
+ok api GET '/api/reports?env=aws-web'
+has '"operations"'
+has '"health"'
 EXPLAIN_CODE="$(curl -s -o /dev/null -w "%{http_code}" -H "X-CS-Token: $TOKEN" "$URL/api/explain?q=vpn")"
 if [[ "$EXPLAIN_CODE" == "200" ]]; then
   ok api GET "/api/explain?q=vpn"

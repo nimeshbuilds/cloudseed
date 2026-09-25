@@ -254,3 +254,19 @@ variable "fips_mode" {
   type        = bool
   default     = false
 }
+
+variable "kubernetes_regional" {
+  description = "Create a regional GKE control plane instead of a zonal one. Changing this replaces the cluster; review the plan and backups first."
+  type        = bool
+  default     = false
+}
+
+variable "kubernetes_node_locations" {
+  description = "Explicit GKE node zones. Empty preserves the zonal default; regional clusters require explicit zones so node counts and costs are predictable. Node count/min/max are per zone."
+  type        = list(string)
+  default     = []
+  validation {
+    condition     = alltrue([for z in var.kubernetes_node_locations : startswith(z, "${var.region}-") && can(regex("-[a-z]$", z))]) && length(distinct(var.kubernetes_node_locations)) == length(var.kubernetes_node_locations) && (!var.kubernetes_regional || length(var.kubernetes_node_locations) > 0)
+    error_message = "Regional GKE requires explicit, distinct kubernetes_node_locations in this region. Counts are per zone."
+  }
+}

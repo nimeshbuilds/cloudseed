@@ -158,6 +158,9 @@ def _norm_value(key: str, value: str) -> str:
 
 
 def load() -> dict:
+    from . import credential_store
+    if credential_store.metadata(STORE)["backend"] == "os-keychain":
+        return credential_store.read(STORE)
     try:
         data = json.loads(STORE.read_text())
     except (OSError, ValueError):
@@ -173,6 +176,10 @@ def _write_private(path: Path, text: str) -> None:
 
 
 def save(data: dict) -> None:
+    from . import credential_store
+    if credential_store.metadata(STORE)["backend"] == "os-keychain":
+        credential_store.write(STORE, data)
+        return
     paths.ensure_home()
     _write_private(STORE, json.dumps(data, indent=2) + "\n")
 
@@ -214,6 +221,9 @@ def unset(key: str) -> bool:
 
 
 def clear() -> None:
+    from . import credential_store
+    if credential_store.metadata(STORE)["backend"] == "os-keychain":
+        credential_store.clear(STORE)
     try:
         STORE.unlink()
     except OSError:
@@ -225,6 +235,10 @@ def env() -> dict:
     """Variables to inject into cloudseed processes (a JSON key pasted for GCP is materialised to a 0600 file).
     Names the vault refuses (e.g. written by an older version or by hand) are never injected."""
     data = load()
+    from . import credential_scope, secrets
+    scope = credential_scope.parse(os.environ.get(credential_scope.MARKER))
+    if scope:
+        data = {k: v for k, v in data.items() if credential_scope.permitted(k, scope, secrets.is_secret_env(k) or kind(k) == "secret")}
     out = {}
     for k, v in data.items():
         if isinstance(k, str) and isinstance(v, str) and valid_key(k):
@@ -244,7 +258,7 @@ def env() -> dict:
             out["GOOGLE_APPLICATION_CREDENTIALS"] = str(GCP_FILE)
         except OSError:
             pass
-    elif GCP_FILE.exists() and str(GCP_FILE) not in (out.get("GOOGLE_APPLICATION_CREDENTIALS"),
+    elif (scope is None or scope["cloud"] == "gcp") and GCP_FILE.exists() and str(GCP_FILE) not in (out.get("GOOGLE_APPLICATION_CREDENTIALS"),
                                                      os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")):
         _drop_gcp_file()   # the pasted key was removed or replaced by a key-file path: no stale copy on disk
     return out

@@ -182,7 +182,7 @@ def config_owner(config_path: Path) -> str | None:
 # What cloudseed itself creates in a working directory (every command's outputs included). Anything else found in a
 # directory offered as a new working directory belongs to someone else.
 ENV_ARTIFACTS = ("config.json", "inventory.json", "outputs.json", "stack", "bootstrap", "ssh", "logs", "vms", "k8s",
-                 "dry-run", "scans", "finops", "chaos", "dr", "vpn", "platform")
+                 "dry-run", "scans", "finops", "chaos", "dr", "vpn", "platform", "operations")
 _OS_DEBRIS = (".DS_Store", "Thumbs.db", "desktop.ini")
 
 

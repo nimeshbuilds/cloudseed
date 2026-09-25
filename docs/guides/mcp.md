@@ -26,7 +26,7 @@ flowchart TB
 
 ## What your assistant gets
 
-**30 tools**, one per feature area:
+**48 tools**, one per feature area:
 
 | Area | Tools |
 |---|---|

@@ -493,3 +493,44 @@ run "aks_module_count_above_max" {
     error_message = "velero prerequisites only exist when requested"
   }
 }
+
+run "production_topology" {
+  module {
+    source = "./modules/kubernetes"
+  }
+  variables {
+    prefix                     = "cloudseed-production"
+    resource_group_name        = "cloudseed-production-rg"
+    vnet_id                    = "/subscriptions/0123abcd-0000-0000-0000-000000000000/resourceGroups/cloudseed-production-rg/providers/Microsoft.Network/virtualNetworks/v"
+    subnet_id                  = "/subscriptions/0123abcd-0000-0000-0000-000000000000/resourceGroups/cloudseed-production-rg/providers/Microsoft.Network/virtualNetworks/v/subnets/private"
+    kubernetes_version         = null
+    node_vm_size               = "Standard_B2s"
+    node_count                 = 2
+    sku_tier                   = "Standard"
+    zones                      = ["1", "2", "3"]
+    node_min                   = 3
+    node_max                   = 5
+    public_endpoint            = false
+    authorized_ip_ranges       = []
+    log_analytics_workspace_id = "/subscriptions/0123abcd-0000-0000-0000-000000000000/resourceGroups/cloudseed-production-rg/providers/Microsoft.OperationalInsights/workspaces/logs"
+    platform_prereqs           = ["velero"]
+    private_nsg_name           = "cloudseed-production-private-nsg"
+    bastion_private_ip         = "10.20.0.4"
+    tags                       = {}
+  }
+
+  assert {
+    condition     = azurerm_kubernetes_cluster.this.sku_tier == "Standard" && toset(azurerm_kubernetes_cluster.this.default_node_pool[0].zones) == toset(["1", "2", "3"])
+    error_message = "AKS production controls must set Standard tier and three system-pool zones."
+  }
+}
+run "unsupported_tier_rejected" {
+  command = plan
+  variables { kubernetes_sku_tier = "Unsupported" }
+  expect_failures = [var.kubernetes_sku_tier]
+}
+run "duplicate_zones_rejected" {
+  command = plan
+  variables { kubernetes_zones = ["1", "1"] }
+  expect_failures = [var.kubernetes_zones]
+}

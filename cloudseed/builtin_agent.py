@@ -674,6 +674,14 @@ def _approval_reason(ns: argparse.Namespace | None) -> str | None:
         return _undo_reason(ns, auto)
     if cmd == "vpn" and getattr(ns, "vpn_cmd", None) in ("connect", "disconnect"):
         return f"vpn {ns.vpn_cmd} changes this machine's network; it may also install the OpenVPN client"
+    if cmd == "ops":
+        from . import operations
+        if ns.ops_cmd == "list":
+            return None
+        params = operations.parameters(ns)
+        if operations.OPERATIONS[ns.ops_cmd].changing(params):
+            return operations.OPERATIONS[ns.ops_cmd].description
+        return None
     if cmd == "provision":
         return "provision runs Ansible as root on the environment's hosts"
     if cmd == "scan" and getattr(ns, "scan_cmd", None) not in ("architecture", "fips", "reports"):

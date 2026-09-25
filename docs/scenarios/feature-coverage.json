@@ -1,0 +1,3099 @@
+{
+  "schema_version": 1,
+  "meaning": "Documented interface and feature coverage; not proof of live cloud deployment or every chart installation.",
+  "scenario_count": 19,
+  "commands": [
+    {
+      "command": "ops",
+      "subcommand": "list",
+      "scenarios": [
+        "16"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "ops",
+      "subcommand": "credentials-backend",
+      "scenarios": [
+        "19"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_credentials_backend",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "acceptance",
+      "scenarios": [
+        "19"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_acceptance",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "release-verify",
+      "scenarios": [
+        "19"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_release_verify",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "expiry-plan",
+      "scenarios": [
+        "17"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_expiry_plan",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "expiry-cleanup",
+      "scenarios": [
+        "17"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_expiry_cleanup",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "health",
+      "scenarios": [
+        "16",
+        "18"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_health",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "network",
+      "scenarios": [
+        "16"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_network",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "profile",
+      "scenarios": [
+        "17"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_profile",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "spec-export",
+      "scenarios": [
+        "17"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_spec_export",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "spec-validate",
+      "scenarios": [
+        "17"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_spec_validate",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "spec-diff",
+      "scenarios": [
+        "17"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_spec_diff",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "spec-import",
+      "scenarios": [
+        "17"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_spec_import",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "policy-check",
+      "scenarios": [
+        "17"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_policy_check",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "drift",
+      "scenarios": [
+        "18"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_drift",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "upgrade-plan",
+      "scenarios": [
+        "18"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_upgrade_plan",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "upgrade-apply",
+      "scenarios": [
+        "18"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_upgrade_apply",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "recovery-plan",
+      "scenarios": [
+        "18"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_recovery_plan",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ops",
+      "subcommand": "recovery-test",
+      "scenarios": [
+        "18"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ops_recovery_test",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "setup",
+      "subcommand": "aws",
+      "scenarios": [
+        "02",
+        "11",
+        "12",
+        "15"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_setup",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "setup",
+      "subcommand": "gcp",
+      "scenarios": [
+        "03",
+        "11",
+        "12"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_setup",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "setup",
+      "subcommand": "azure",
+      "scenarios": [
+        "04"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_setup",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "setup",
+      "subcommand": "vmware",
+      "scenarios": [
+        "01",
+        "05",
+        "11",
+        "13"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_setup",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "provision",
+      "subcommand": null,
+      "scenarios": [
+        "12",
+        "13"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_provision",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "k8s",
+      "subcommand": "info",
+      "scenarios": [
+        "03",
+        "04",
+        "05"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_k8s",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "k8s",
+      "subcommand": "kubeconfig",
+      "scenarios": [
+        "03",
+        "05",
+        "16"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_k8s",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "k8s",
+      "subcommand": "tunnel",
+      "scenarios": [
+        "03",
+        "16"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_k8s",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "k8s",
+      "subcommand": "untunnel",
+      "scenarios": [
+        "03",
+        "16"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_k8s",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "vpn",
+      "subcommand": "status",
+      "scenarios": [
+        "12"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_vpn",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "vpn",
+      "subcommand": "add-user",
+      "scenarios": [
+        "12"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_vpn",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "vpn",
+      "subcommand": "revoke",
+      "scenarios": [
+        "12"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_vpn",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "vpn",
+      "subcommand": "users",
+      "scenarios": [
+        "12"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_vpn",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "vpn",
+      "subcommand": "connect",
+      "scenarios": [
+        "12"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_vpn",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "vpn",
+      "subcommand": "disconnect",
+      "scenarios": [
+        "12"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_vpn",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "vpn",
+      "subcommand": "provision",
+      "scenarios": [
+        "12"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_vpn",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "plan",
+      "subcommand": null,
+      "scenarios": [
+        "02",
+        "13",
+        "17"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_plan",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "apply",
+      "subcommand": null,
+      "scenarios": [
+        "02",
+        "13",
+        "17"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_apply",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "destroy",
+      "subcommand": null,
+      "scenarios": [
+        "01",
+        "02",
+        "03",
+        "04",
+        "05",
+        "11",
+        "12",
+        "15"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_destroy",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "status",
+      "subcommand": null,
+      "scenarios": [
+        "01",
+        "02",
+        "03",
+        "04",
+        "13"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_status",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "troubleshoot",
+      "subcommand": null,
+      "scenarios": [
+        "01",
+        "02",
+        "03",
+        "05",
+        "12",
+        "13"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_troubleshoot",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "inventory",
+      "subcommand": null,
+      "scenarios": [
+        "01",
+        "02",
+        "13"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_inventory",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "output",
+      "subcommand": null,
+      "scenarios": [
+        "01",
+        "02",
+        "12"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_output",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "ssh",
+      "subcommand": null,
+      "scenarios": [
+        "01",
+        "02",
+        "03",
+        "11"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_ssh",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "update-ip",
+      "subcommand": null,
+      "scenarios": [
+        "02",
+        "13"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_update_ip",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "list",
+      "subcommand": null,
+      "scenarios": [
+        "01",
+        "13"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_list",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "doctor",
+      "subcommand": null,
+      "scenarios": [
+        "01",
+        "02",
+        "03",
+        "04",
+        "05",
+        "13"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_doctor",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "deps",
+      "subcommand": "status",
+      "scenarios": [
+        "02"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "deps",
+      "subcommand": "install",
+      "scenarios": [
+        "02"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "deps",
+      "subcommand": "image",
+      "scenarios": [
+        "02"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "deps",
+      "subcommand": "bundle",
+      "scenarios": [
+        "02"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "deps",
+      "subcommand": "runtime",
+      "scenarios": [
+        "02"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "enable",
+      "subcommand": "agentic",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "enable",
+      "subcommand": "headliner",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "enable",
+      "subcommand": "mcp",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "enable",
+      "subcommand": "ui",
+      "scenarios": [
+        "15"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "disable",
+      "subcommand": "agentic",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "disable",
+      "subcommand": "headliner",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "disable",
+      "subcommand": "mcp",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "disable",
+      "subcommand": "ui",
+      "scenarios": [
+        "15"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "use",
+      "subcommand": null,
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "agents",
+      "subcommand": null,
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "model",
+      "subcommand": null,
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "agentic",
+      "subcommand": null,
+      "scenarios": [
+        "14",
+        "15"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "do",
+      "subcommand": null,
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "skill",
+      "subcommand": "list",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "skill",
+      "subcommand": "install",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "skill",
+      "subcommand": "show",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_skill",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "install",
+      "subcommand": null,
+      "scenarios": [
+        "03",
+        "04",
+        "05",
+        "10",
+        "12",
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "env",
+      "subcommand": "show",
+      "scenarios": [
+        "05"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_env",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "env",
+      "subcommand": "use",
+      "scenarios": [
+        "05"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_env",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "env",
+      "subcommand": "clear",
+      "scenarios": [
+        "05"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_env",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "node",
+      "subcommand": "add",
+      "scenarios": [
+        "04",
+        "13"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_node",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "node",
+      "subcommand": "list",
+      "scenarios": [
+        "03",
+        "04",
+        "05",
+        "13"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_node",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "node",
+      "subcommand": "remove",
+      "scenarios": [
+        "04",
+        "13"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_node",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "node",
+      "subcommand": "scale",
+      "scenarios": [
+        "03",
+        "04",
+        "13"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_node",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "platform",
+      "subcommand": "list",
+      "scenarios": [
+        "06"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_platform",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "platform",
+      "subcommand": "info",
+      "scenarios": [
+        "06",
+        "07",
+        "08"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_platform",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "platform",
+      "subcommand": "plan",
+      "scenarios": [
+        "06",
+        "07",
+        "08",
+        "09",
+        "11"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_platform",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "platform",
+      "subcommand": "install",
+      "scenarios": [
+        "06",
+        "07",
+        "08",
+        "15"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_platform",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "platform",
+      "subcommand": "uninstall",
+      "scenarios": [
+        "06",
+        "07",
+        "08",
+        "09"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_platform",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "platform",
+      "subcommand": "status",
+      "scenarios": [
+        "06",
+        "07"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_platform",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "platform",
+      "subcommand": "ui",
+      "scenarios": [
+        "06",
+        "07"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_platform",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "platform",
+      "subcommand": "template",
+      "scenarios": [
+        "06"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_platform",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "finops",
+      "subcommand": "estimate",
+      "scenarios": [
+        "02",
+        "03",
+        "04",
+        "12",
+        "15"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_finops",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "finops",
+      "subcommand": "cloud",
+      "scenarios": [
+        "15"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_finops",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "finops",
+      "subcommand": "k8s",
+      "scenarios": [
+        "15"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_finops",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "finops",
+      "subcommand": "report",
+      "scenarios": [
+        "15"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_finops",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "chaos",
+      "subcommand": "run",
+      "scenarios": [
+        "09"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_chaos",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "chaos",
+      "subcommand": "list",
+      "scenarios": [
+        "09"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_chaos",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "chaos",
+      "subcommand": "status",
+      "scenarios": [
+        "09"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_chaos",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "chaos",
+      "subcommand": "stop",
+      "scenarios": [
+        "09"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_chaos",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "chaos",
+      "subcommand": "report",
+      "scenarios": [
+        "09"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_chaos",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "dr",
+      "subcommand": "status",
+      "scenarios": [
+        "08",
+        "18"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_dr",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "dr",
+      "subcommand": "backup",
+      "scenarios": [
+        "08",
+        "18"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_dr",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "dr",
+      "subcommand": "restore",
+      "scenarios": [
+        "08"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_dr",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "dr",
+      "subcommand": "backups",
+      "scenarios": [
+        "08",
+        "18"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_dr",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "dr",
+      "subcommand": "schedule",
+      "scenarios": [
+        "08",
+        "17"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_dr",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "dr",
+      "subcommand": "test",
+      "scenarios": [
+        "08"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_dr",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "dr",
+      "subcommand": "describe",
+      "scenarios": [
+        "08"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_dr",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "dr",
+      "subcommand": "logs",
+      "scenarios": [
+        "08"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_dr",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "scan",
+      "subcommand": "cis",
+      "scenarios": [
+        "10"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_scan",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "scan",
+      "subcommand": "kube",
+      "scenarios": [
+        "10"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_scan",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "scan",
+      "subcommand": "images",
+      "scenarios": [
+        "10"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_scan",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "scan",
+      "subcommand": "host",
+      "scenarios": [
+        "10"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_scan",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "scan",
+      "subcommand": "stig",
+      "scenarios": [
+        "10"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_scan",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "scan",
+      "subcommand": "cloud",
+      "scenarios": [
+        "04",
+        "10"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_scan",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "scan",
+      "subcommand": "fips",
+      "scenarios": [
+        "10",
+        "11"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_scan",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "scan",
+      "subcommand": "architecture",
+      "scenarios": [
+        "10",
+        "16"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_scan",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "scan",
+      "subcommand": "all",
+      "scenarios": [
+        "10"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_scan",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "scan",
+      "subcommand": "reports",
+      "scenarios": [
+        "10",
+        "11"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_scan",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "databricks",
+      "subcommand": "connect",
+      "scenarios": [
+        "07"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_managed",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "databricks",
+      "subcommand": "test",
+      "scenarios": [
+        "07"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_managed",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "databricks",
+      "subcommand": "status",
+      "scenarios": [
+        "07"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_managed",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "databricks",
+      "subcommand": "CLI passthrough",
+      "scenarios": [
+        "07"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_managed",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "snowflake",
+      "subcommand": "connect",
+      "scenarios": [
+        "07"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_managed",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "snowflake",
+      "subcommand": "test",
+      "scenarios": [
+        "07"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_managed",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "snowflake",
+      "subcommand": "status",
+      "scenarios": [
+        "07"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_managed",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "snowflake",
+      "subcommand": "CLI passthrough",
+      "scenarios": [
+        "07"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_managed",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "kubectl",
+      "subcommand": null,
+      "scenarios": [
+        "03",
+        "04",
+        "05",
+        "06",
+        "07",
+        "08"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_kubectl",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "helm",
+      "subcommand": null,
+      "scenarios": [
+        "04",
+        "05",
+        "06"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_helm",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "k9s",
+      "subcommand": null,
+      "scenarios": [
+        "05"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "explain",
+      "subcommand": null,
+      "scenarios": [
+        "01",
+        "02",
+        "03",
+        "04",
+        "05",
+        "06",
+        "07",
+        "08",
+        "09",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_explain",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "mcp",
+      "subcommand": "setup",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "mcp",
+      "subcommand": "status",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "mcp",
+      "subcommand": "guide",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "mcp",
+      "subcommand": "connect",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "mcp",
+      "subcommand": "disconnect",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "mcp",
+      "subcommand": "tools",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "mcp",
+      "subcommand": "config",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "mcp",
+      "subcommand": "test",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "mcp",
+      "subcommand": "serve",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "mcp",
+      "subcommand": "start",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "mcp",
+      "subcommand": "stop",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "mcp",
+      "subcommand": "restart",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "mcp",
+      "subcommand": "logs",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "mcp",
+      "subcommand": "token",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "mcp",
+      "subcommand": "uninstall",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "ui",
+      "subcommand": "open",
+      "scenarios": [
+        "15"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "ui",
+      "subcommand": "start",
+      "scenarios": [
+        "15"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "ui",
+      "subcommand": "status",
+      "scenarios": [
+        "15"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "ui",
+      "subcommand": "stop",
+      "scenarios": [
+        "15"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "ui",
+      "subcommand": "restart",
+      "scenarios": [
+        "15"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "ui",
+      "subcommand": "logs",
+      "scenarios": [
+        "15"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "ui",
+      "subcommand": "token",
+      "scenarios": [
+        "15"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "ui",
+      "subcommand": "serve",
+      "scenarios": [
+        "15"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "undo",
+      "subcommand": "newest",
+      "scenarios": [
+        "06",
+        "08",
+        "13"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_undo",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "undo",
+      "subcommand": "--list",
+      "scenarios": [
+        "13",
+        "14"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_undo",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "undo",
+      "subcommand": "--global",
+      "scenarios": [
+        "13"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_undo",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "undo",
+      "subcommand": "--id",
+      "scenarios": [
+        "13"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_undo",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "undo",
+      "subcommand": "--drop",
+      "scenarios": [
+        "13"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_undo",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "creds",
+      "subcommand": "list",
+      "scenarios": [
+        "13"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "creds",
+      "subcommand": "set",
+      "scenarios": [
+        "02",
+        "11",
+        "12",
+        "13",
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "creds",
+      "subcommand": "unset",
+      "scenarios": [
+        "11",
+        "13"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "creds",
+      "subcommand": "clear",
+      "scenarios": [
+        "13"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "help",
+      "subcommand": null,
+      "scenarios": [
+        "01",
+        "02",
+        "03",
+        "04",
+        "05",
+        "08",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_help",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    }
+  ],
+  "operations": [
+    {
+      "name": "credentials-backend",
+      "scenarios": [
+        "19"
+      ],
+      "mcp_tool": "cloudseed_ops_credentials_backend",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "acceptance",
+      "scenarios": [
+        "19"
+      ],
+      "mcp_tool": "cloudseed_ops_acceptance",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "release-verify",
+      "scenarios": [
+        "19"
+      ],
+      "mcp_tool": "cloudseed_ops_release_verify",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "expiry-plan",
+      "scenarios": [
+        "17"
+      ],
+      "mcp_tool": "cloudseed_ops_expiry_plan",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "expiry-cleanup",
+      "scenarios": [
+        "17"
+      ],
+      "mcp_tool": "cloudseed_ops_expiry_cleanup",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "health",
+      "scenarios": [
+        "16"
+      ],
+      "mcp_tool": "cloudseed_ops_health",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "network",
+      "scenarios": [
+        "16"
+      ],
+      "mcp_tool": "cloudseed_ops_network",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "profile",
+      "scenarios": [
+        "17"
+      ],
+      "mcp_tool": "cloudseed_ops_profile",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "spec-export",
+      "scenarios": [
+        "17"
+      ],
+      "mcp_tool": "cloudseed_ops_spec_export",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "spec-validate",
+      "scenarios": [
+        "17"
+      ],
+      "mcp_tool": "cloudseed_ops_spec_validate",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "spec-diff",
+      "scenarios": [
+        "17"
+      ],
+      "mcp_tool": "cloudseed_ops_spec_diff",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "spec-import",
+      "scenarios": [
+        "17"
+      ],
+      "mcp_tool": "cloudseed_ops_spec_import",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "policy-check",
+      "scenarios": [
+        "17"
+      ],
+      "mcp_tool": "cloudseed_ops_policy_check",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "drift",
+      "scenarios": [
+        "18"
+      ],
+      "mcp_tool": "cloudseed_ops_drift",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "upgrade-plan",
+      "scenarios": [
+        "18"
+      ],
+      "mcp_tool": "cloudseed_ops_upgrade_plan",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "upgrade-apply",
+      "scenarios": [
+        "18"
+      ],
+      "mcp_tool": "cloudseed_ops_upgrade_apply",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "recovery-plan",
+      "scenarios": [
+        "18"
+      ],
+      "mcp_tool": "cloudseed_ops_recovery_plan",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    },
+    {
+      "name": "recovery-test",
+      "scenarios": [
+        "18"
+      ],
+      "mcp_tool": "cloudseed_ops_recovery_test",
+      "ui": "All actions > Operations & readiness",
+      "agent": "bundled-skill-guided"
+    }
+  ],
+  "catalog": [
+    {
+      "item": "agentgateway",
+      "group": "agentic",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "agentgateway-crds",
+      "group": "agentic",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "airflow",
+      "group": "data",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "alloy",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "argocd",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "artifactory",
+      "group": "devsecops",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "aws-load-balancer-controller",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [
+        "aws"
+      ],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "cert-manager",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "cert-manager-issuer",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "chaos-mesh",
+      "group": "chaos",
+      "scenarios": [
+        "09"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "clickhouse-operator",
+      "group": "data",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "clickhouse-operator-official",
+      "group": "data",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "cloudnative-pg",
+      "group": "data",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "cluster-autoscaler",
+      "group": "scaling",
+      "scenarios": [
+        "06",
+        "13"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [
+        "aws",
+        "gcp",
+        "azure"
+      ],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "descheduler",
+      "group": "resilience",
+      "scenarios": [
+        "08",
+        "18"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "envoy-gateway",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "external-dns",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [
+        "aws",
+        "gcp",
+        "azure"
+      ],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "external-secrets",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "falco",
+      "group": "security",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "gateway-api",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "gitlab",
+      "group": "devsecops",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "gitlab-runner",
+      "group": "devsecops",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "goldilocks",
+      "group": "scaling",
+      "scenarios": [
+        "06",
+        "13"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "gpu-operator",
+      "group": "ai",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [
+        "aws",
+        "gcp",
+        "azure"
+      ],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "harbor",
+      "group": "devsecops",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "ingress-nginx",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "istio",
+      "group": "security",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "istio-base",
+      "group": "security",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "istio-cni",
+      "group": "security",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "istio-gateway",
+      "group": "security",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "istiod",
+      "group": "security",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "jupyterhub",
+      "group": "ai",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "kagent",
+      "group": "agentic",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "kagent-crds",
+      "group": "agentic",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "karpenter",
+      "group": "scaling",
+      "scenarios": [
+        "06",
+        "13"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [
+        "aws"
+      ],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "keda",
+      "group": "scaling",
+      "scenarios": [
+        "06",
+        "13"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "kiali",
+      "group": "security",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "kmcp",
+      "group": "agentic",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "kserve",
+      "group": "ai",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "kserve-crd",
+      "group": "ai",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "kube-green",
+      "group": "finops",
+      "scenarios": [
+        "15"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "kube-prometheus-stack",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "kubecost-cost-analyzer",
+      "group": "finops",
+      "scenarios": [
+        "15"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "kubeflow-pipelines",
+      "group": "ai",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "kubeflow-trainer",
+      "group": "ai",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "kuberay",
+      "group": "ai",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "kubescape-operator",
+      "group": "security",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "kured",
+      "group": "resilience",
+      "scenarios": [
+        "08",
+        "18"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "kyverno",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "kyverno-policies",
+      "group": "security",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "langfuse",
+      "group": "agentic",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "litellm",
+      "group": "agentic",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "litmus",
+      "group": "chaos",
+      "scenarios": [
+        "09"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "local-path-provisioner",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [
+        "vmware"
+      ],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "loki",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "metallb",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [
+        "vmware"
+      ],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "metrics-server",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "minio",
+      "group": "data",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "mlflow",
+      "group": "ai",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "neuvector",
+      "group": "devsecops",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "nexus",
+      "group": "devsecops",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "ollama",
+      "group": "ai",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "open-webui",
+      "group": "agentic",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "opencost",
+      "group": "finops",
+      "scenarios": [
+        "15"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "opentelemetry-operator",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "polaris",
+      "group": "data",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "qdrant",
+      "group": "agentic",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "reloader",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "sealed-secrets",
+      "group": "basek8s",
+      "scenarios": [
+        "06"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "sonarqube",
+      "group": "devsecops",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "spark-history-server",
+      "group": "data",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "spark-operator",
+      "group": "data",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "starrocks",
+      "group": "data",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "strimzi",
+      "group": "data",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "trino",
+      "group": "data",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "trivy-operator",
+      "group": "devsecops",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "vault",
+      "group": "security",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "velero",
+      "group": "resilience",
+      "scenarios": [
+        "08",
+        "18"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "vllm-stack",
+      "group": "ai",
+      "scenarios": [
+        "07"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "vpa",
+      "group": "scaling",
+      "scenarios": [
+        "06",
+        "13"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    },
+    {
+      "item": "ztunnel",
+      "group": "security",
+      "scenarios": [
+        "06",
+        "10"
+      ],
+      "mcp_tool": "cloudseed_platform",
+      "ui": "Platform: inspect / plan / install / verify / uninstall",
+      "provider_restrictions": [],
+      "live_validation": "item-specific prerequisites and readiness must be verified on your cluster"
+    }
+  ]
+}

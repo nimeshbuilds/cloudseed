@@ -847,7 +847,7 @@ def exit_on_signals():
         _restore_signal_handlers()
 
 
-def open_session(keep: tuple = ()) -> tuple:
+def open_session(keep: tuple = (), scope: dict | None = None) -> tuple:
     """Park credential env vars with a broker. Returns (session_id, env_for_agent).
     `keep` names env vars the agent itself needs (its own API key); everything else secret is parked."""
     _sweep_stale()
@@ -856,10 +856,15 @@ def open_session(keep: tuple = ()) -> tuple:
     def secret(k: str) -> bool:
         return is_secret_env(k) or k in extra
 
-    parked = {k: v for k, v in os.environ.items() if secret(k)}
+    source = dict(os.environ)
+    if scope is not None:
+        from . import credential_scope
+        source = {k: v for k, v in source.items() if credential_scope.permitted(k, scope, secret(k))}
+        source[credential_scope.MARKER] = json.dumps(scope)
+    parked = {k: v for k, v in source.items() if secret(k)}
     _register_parked(parked)
     set_strict(True)
-    env = {k: v for k, v in os.environ.items() if not secret(k) or k in keep}
+    env = {k: v for k, v in source.items() if not secret(k) or k in keep}
     sid = _secrets.token_hex(8)
     # SIGTERM/SIGHUP handlers first, and the session known under its file's name before anything is written: a signal
     # at any point from here on ends the session through close_all_sessions, so the plaintext session file (the

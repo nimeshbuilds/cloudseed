@@ -493,3 +493,68 @@ run "node_labels_are_kubernetes_safe" {
     error_message = "the cluster's GCP resource labels keep the GCP form"
   }
 }
+
+run "production_topology" {
+  command = plan
+  module {
+    source = "./modules/kubernetes"
+  }
+  variables {
+    location            = "us-east1"
+    node_locations      = ["us-east1-b", "us-east1-c", "us-east1-d"]
+    prefix              = "lab-dv-"
+    cluster_name        = "lab-dv--gke"
+    node_pool_name      = "lab-dv--gke-default"
+    service_account_ids = { gke_nodes = "lab-dv-gke-nodes", external_secrets = "lab-dv-eso", external_dns = "lab-dv-edns", velero = "lab-dv-velero" }
+    velero_bucket_name  = "lab-dv-velero-proj-123456"
+    network_id          = "https://www.googleapis.com/compute/v1/projects/proj-123456/global/networks/net"
+    subnetwork_id       = "projects/proj-123456/regions/us-east1/subnetworks/snet"
+    master_cidr         = "172.16.0.0/28"
+    authorized_cidrs    = ["10.10.0.0/20"]
+    public_endpoint     = false
+    kubernetes_version  = null
+    node_machine_type   = "e2-standard-2"
+    node_count          = 2
+    node_min            = 1
+    node_max            = 4
+    private_network_tag = "lab-dv-private"
+    labels = {
+      team         = "platform-eng-"
+      "team-"      = "other"
+      version      = "v1-2-"
+      environment  = "dv-"
+      "ключ"       = "значение"
+      "donn-es"    = "données"
+      managedby    = "cloudseed"
+      cloudseedenv = "gcp-dv-"
+      "_leading"   = "-x-"
+      "t-1abc"     = "ok"
+    }
+  }
+  assert {
+    condition     = google_container_cluster.this.location == "us-east1" && toset(google_container_cluster.this.node_locations) == toset(["us-east1-b", "us-east1-c", "us-east1-d"]) && google_container_node_pool.default.location == "us-east1" && length(google_container_node_pool.default.node_locations) == 3
+    error_message = "Regional GKE must place both the control plane and pool in the region with explicit node zones."
+  }
+}
+run "regional_stack_location" {
+  command = plan
+  variables {
+    enable_kubernetes         = true
+    kubernetes_regional       = true
+    kubernetes_node_locations = ["us-east1-b", "us-east1-c", "us-east1-d"]
+  }
+  assert {
+    condition     = output.kubernetes_location == "us-east1"
+    error_message = "The stack must pass its regional option into the real cluster."
+  }
+}
+run "regional_missing_zones_rejected" {
+  command = plan
+  variables { kubernetes_regional = true }
+  expect_failures = [var.kubernetes_node_locations]
+}
+run "regional_foreign_zone_rejected" {
+  command = plan
+  variables { kubernetes_node_locations = ["us-central1-a"] }
+  expect_failures = [var.kubernetes_node_locations]
+}

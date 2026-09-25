@@ -395,6 +395,7 @@ def actions_catalog() -> list[dict]:
               "Agents & MCP": ["cloudseed_agentic", "cloudseed_enable", "cloudseed_disable", "cloudseed_use", "cloudseed_model", "cloudseed_agents", "cloudseed_mcp", "cloudseed_skill"],
               "Tools & help": ["cloudseed_deps", "cloudseed_install", "cloudseed_help", "cloudseed_explain"]}
     reg = registry()
+    groups["Operations & readiness"] = list(mcp.operation_contracts.mcp_tools())
     out = []
     for group, names in groups.items():
         for n in names:
@@ -551,7 +552,15 @@ def raw_argv(body: dict) -> list[str]:
     if cmd in ("ssh", "k9s") and "--" not in argv:
         raise ValueError("interactive commands need a remote command (use the SSH action)")
     local_assessment = rest[:2] == ["scan", "architecture"]
-    if cmd not in READ_ONLY_COMMANDS and not local_assessment and body.get("confirm") is not True:
+    local_operation = False
+    if cmd == "ops":
+        from . import cli, operations
+        try:
+            parsed = cli.build_parser().parse_args(argv)
+            local_operation = parsed.ops_cmd == "list" or not operations.OPERATIONS[parsed.ops_cmd].changing(operations.parameters(parsed))
+        except (ValueError, KeyError, SystemExit):
+            pass
+    if cmd not in READ_ONLY_COMMANDS and not local_assessment and not local_operation and body.get("confirm") is not True:
         raise NeedsConfirm(f"`cloudseed {cmd}` can change things; send \"confirm\": true to run it.", audit.safe_argv(argv))
     if "-y" not in head and "--yes" not in head:
         argv = ["-y"] + argv
@@ -1680,7 +1689,7 @@ def platform_status(env_id: str) -> dict:
 
 # ---------------------------------------------------------------- reports and verdicts
 
-REPORT_PREFIXES = ("architecture-", "cis-", "stig-", "kube-", "images-", "host-", "cloud-", "fips-")   # saved scan reports
+REPORT_PREFIXES = ("architecture-", "health-", "network-", "cis-", "stig-", "kube-", "images-", "host-", "cloud-", "fips-")   # saved scan reports
 RAW_PREFIXES = ("kubescape-", "trivy-")                                                # tool dumps next to them: never reports
 MAX_REPORT_BYTES = 32 << 20
 
@@ -1766,7 +1775,7 @@ def scan_verdict(kind: str, data: dict) -> str:
         return stored
     sm = data.get("summary") if isinstance(data.get("summary"), dict) else {}
     findings = [f for f in _items(data, "findings") if isinstance(f, dict)]
-    if kind == "architecture":
+    if kind in ("architecture", "health", "network"):
         if _num(sm.get("failed")) or _num(sm.get("fail")) or any(f.get("status") == "FAIL" for f in findings):
             return "FAIL"
         # A damaged / incomplete assessment without its recorded verdict cannot prove that all checks passed.
@@ -1877,12 +1886,12 @@ def verdicts(env) -> dict:
 
 
 def reports(env_id: str) -> dict:
-    out: dict = {"chaos": [], "dr": [], "scans": [], "logs": []}
+    out: dict = {"chaos": [], "dr": [], "scans": [], "operations": [], "logs": []}
     envs = {e.id: e for e in paths.Env.list_all()}
     e = envs.get(env_id)
     if not e:
         return out
-    for kind, sub, pat in (("chaos", "chaos", "report-*.json"), ("dr", "dr", "drill-*.json"), ("scans", "scans", "*-*.json")):
+    for kind, sub, pat in (("chaos", "chaos", "report-*.json"), ("dr", "dr", "drill-*.json"), ("scans", "scans", "*-*.json"), ("operations", "operations", "*-*.json")):
         for p in _report_files(e.dir / sub, pat, scans=kind == "scans"):
             if len(out[kind]) >= 40:
                 break
@@ -1892,7 +1901,7 @@ def reports(env_id: str) -> dict:
             sm = data.get("summary") if isinstance(data.get("summary"), dict) else {}
             if kind == "chaos":
                 verdict = chaos_verdict(data)[0]
-            elif kind == "dr":
+            elif kind in ("dr", "operations"):
                 verdict = _stored_verdict(data)
             else:
                 verdict = scan_verdict(_scan_kind(p), data)
@@ -1900,6 +1909,17 @@ def reports(env_id: str) -> dict:
                    "run": data.get("run") if isinstance(data.get("run"), str) else None,
                    "results": _items(data, "results", 200) or _items(data, "steps", 200), "findings": _items(data, "findings", 100),
                    "checks": _items(data, "checks", 200)}
+            row["coverage_limits"] = [item for item in _items(data, "coverage_limits", 20) if isinstance(item, str)]
+            if kind == "operations":
+                row["operation"] = str(data.get("operation") or data.get("action") or data.get("kind") or "operation")
+                row["generated_at"] = data.get("generated_at") if isinstance(data.get("generated_at"), str) else None
+                row["changes"] = _items(data, "changes", 200)
+                row["notes"] = [item for item in _items(data, "notes", 20) if isinstance(item, str)]
+                for field in ("spec", "cost"):
+                    if isinstance(data.get(field), dict):
+                        row[field] = data[field]
+                if type(data.get("saved")) is bool:
+                    row["summary"] = dict(sm, saved=data["saved"], changes=len(row["changes"]))
             if kind == "scans" and row["kind"] == "architecture":
                 for k in ("profile", "scope", "framework", "max_age_days"):
                     if isinstance(data.get(k), (str, int, dict, list)):
@@ -1920,7 +1940,7 @@ def reports(env_id: str) -> dict:
 
 
 READABLE = {"logs": (".log", ".jsonl", ".txt"), "chaos": (".json", ".md", ".html"), "dr": (".json", ".md", ".html"),
-            "scans": (".json", ".md", ".html", ".txt", ".log")}
+            "scans": (".json", ".md", ".html", ".txt", ".log"), "operations": (".json", ".md")}
 
 
 def read_env_file(path: str) -> str | None:

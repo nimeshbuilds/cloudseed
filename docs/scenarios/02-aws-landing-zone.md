@@ -236,6 +236,32 @@ cs apply aws --env prod
 - `destroy --select` lists modules and resources as a numbered list; `--target` takes Terraform addresses. A partial
   destroy keeps the configuration, so `cs apply` re-creates what was removed.
 
+## Use an agent, MCP or the UI
+
+Follow the same numbered steps and verification/cleanup conditions through your chosen interface. Start with the
+[interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
+placeholders before any live request.
+
+**Agent prompt:** “Follow the AWS landing-zone walkthrough for prod in my approved region and account. Preview setup, estimate cost and show baseline ownership. After approval deploy, verify private routing and inspect the plan before any targeted deletion.”
+
+**MCP starter:** `cloudseed_setup` with:
+
+```json
+{
+  "cloud": "aws",
+  "env": "prod",
+  "region": "us-west-2",
+  "allow_ip": "203.0.113.7/32",
+  "dry_run": true
+}
+```
+
+Use the matching tool for each remaining step in this page; the [command-to-tool map](interfaces-and-coverage.md#command-to-interface-map)
+lists the tool family. Keep `aws-prod` selected. Preview first; add `confirm:true` only to the specific change
+you have authorized. Host bootstrap, provider login and interactive applications retain their documented human steps.
+
+**UI:** Create → AWS: enter prod, your region and real SSH source; choose Dry run first. Use Environments → prod for plan, status, IP update and destroy. Use All actions → FinOps for the estimate. Provider login and runtime installation are host bootstrap steps.
+
 ## Verify it worked
 
 ```bash

@@ -1,3 +1,11 @@
+variable "sku_tier" {
+  type    = string
+  default = "Free"
+}
+variable "zones" {
+  type    = list(string)
+  default = []
+}
 # Private AKS cluster in the private subnet (Azure CNI overlay, NAT-gateway egress, workload identity).
 variable "prefix" { type = string }
 variable "location" { type = string }
@@ -101,7 +109,7 @@ resource "azurerm_kubernetes_cluster" "this" {
   resource_group_name = var.resource_group_name
   dns_prefix          = replace(local.name, "/[^a-zA-Z0-9-]/", "")
   kubernetes_version  = var.kubernetes_version
-  sku_tier            = "Free"
+  sku_tier            = var.sku_tier
 
   private_cluster_enabled = !var.public_endpoint
   # A private cluster's own API name (<prefix>.<id>.privatelink.<region>.azmk8s.io) resolves only inside the VNet: its
@@ -121,6 +129,7 @@ resource "azurerm_kubernetes_cluster" "this" {
     # for it the provider refuses the update.
     temporary_name_for_rotation = "systemtmp"
     vm_size                     = var.node_vm_size
+    zones                       = length(var.zones) > 0 ? var.zones : null
     vnet_subnet_id              = var.subnet_id
     auto_scaling_enabled        = true
     node_count                  = local.initial_node_count

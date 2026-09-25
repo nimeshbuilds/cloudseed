@@ -1,16 +1,17 @@
 ---
-title: "Scenarios: 15 step-by-step cloudseed walkthroughs, tested"
-description: "Fifteen tested, copy-paste walkthroughs covering every cloudseed feature: VMware labs, AWS, GCP and Azure landing zones, Kubernetes platforms, DR, AI agents."
+title: "Scenarios: 19 step-by-step cloudseed walkthroughs, tested"
+description: "Nineteen documented, copy-paste walkthroughs covering every cloudseed feature: VMware labs, AWS, GCP and Azure landing zones, Kubernetes platforms, DR, AI agents."
 ---
 
 # Scenarios
 
-Fifteen walkthroughs, from a first lab on your laptop to a FIPS environment, a private GKE cluster, a DR drill and an
+Nineteen walkthroughs, from a first lab on your laptop to a FIPS environment, a private GKE cluster, a DR drill and an
 AI agent with an MCP server. Each page has numbered steps with exact commands, the output to expect, a
-"verify it worked" check, a clean-up, and what just happened under the hood. Together they use **every command and
-feature** of cloudseed ([coverage matrix](#command-coverage-matrix) below).
+"verify it worked" check, a clean-up, and what just happened under the hood. Every page includes agent, MCP and UI routes. The checked manifest maps every command and catalog item
+to a walkthrough; it does not claim every item was deployed live. Together they document cloudseed’s command surface ([coverage matrix](#command-coverage-matrix) below).
 
-!!! tip "Every page is tested, and says how"
+!!! tip "Every page states its verification level"
+    - New operational scenarios use local checks and deterministic fixtures. **Live cloud deployment is pending** without sandbox credentials.
     - **Verified live on VMware Fusion 13.6**: the page's script builds real VMs and runs every command
       (`CLOUDSEED_LIVE=1 tests/scenarios/run.sh 05`).
     - **Verified with --dry-run**: cloud pages are rendered and checked with `terraform validate`, no account needed; the steps
@@ -192,6 +193,17 @@ feature** of cloudseed ([coverage matrix](#command-coverage-matrix) below).
 | work in a regulated environment | [11](11-fips-140-mode.md) → [10](10-compliance-scans.md) → [02](02-aws-landing-zone.md) → [13](13-day-2-operations.md) |
 | want an AI agent to do it | [14](14-ai-agents-and-mcp.md) → [15](15-web-console-and-finops.md) → [01](01-first-lab-vmware.md) |
 
+## Operational readiness walkthroughs
+
+| Scenario | Outcome | Verification |
+|---|---|---|
+| [16 · Health and private networking](16-health-and-network.md) | current observations and an approved in-cluster egress probe | Local/fixtures; cloud pending |
+| [17 · Profiles, specs and guardrails](17-profiles-specs-and-guardrails.md) | real topology profiles, portable intent, cost/plan gates and explicit expiry | Local/fixtures; cloud pending |
+| [18 · Drift, upgrades and recovery](18-upgrades-and-recovery.md) | identity-bound upgrade plans and isolated application recovery checks | Local/fixtures; cloud pending |
+| [19 · Acceptance and trusted releases](19-acceptance-and-releases.md) | no-account previews, sandbox lifecycle, keychain and artifact evidence | Local/fixtures; cloud pending |
+
+[Choose CLI, agent, MCP or UI and inspect feature coverage](interfaces-and-coverage.md).
+
 ## Every feature, and where to try it
 
 | Feature | What you do with it | Scenarios |
@@ -225,7 +237,7 @@ The scripts live next to the code in [`tests/scenarios/`](https://github.com/nim
 They never touch your `~/.cloudseed` unless you ask for a live run:
 
 ```bash
-tests/scenarios/run.sh                      # all 15: cloud ones as dry runs, VMware ones as their dry-run equivalent
+tests/scenarios/run.sh                      # all 19: cloud/VMware dry runs plus local operational checks
 tests/scenarios/run.sh 02 14                # just these
 tests/scenarios/run.sh -v 03                # stream every command's output
 CLOUDSEED_LIVE=1 tests/scenarios/run.sh 01 05 06 08
@@ -241,6 +253,15 @@ end.
 Every command and sub-command of the CLI, and the scenarios whose steps run it. The tables are generated
 from the pages and checked by `tests/test_scenarios_docs.py`, so they are always current and nothing is left out.
 
+### New shared operations
+
+| Features | Walkthrough |
+|---|---|
+| Live health, DNS/API/registry diagnostics and active egress probe | [16](16-health-and-network.md) |
+| Deployment profiles, portable specs, cost/destructive guards and expiry | [17](17-profiles-specs-and-guardrails.md) |
+| Drift, safe upgrades and isolated application recovery | [18](18-upgrades-and-recovery.md) |
+| Sandbox acceptance, native keychain and release verification | [19](19-acceptance-and-releases.md) |
+
 <!-- coverage-matrix:start (generated: python3 tests/test_scenarios_docs.py --write-matrix) -->
 
 ### Environments
@@ -251,8 +272,8 @@ from the pages and checked by `tests/test_scenarios_docs.py`, so they are always
 | `cs setup gcp` | [03](03-gcp-private-gke.md) · [11](11-fips-140-mode.md) · [12](12-private-access-vpn.md) |
 | `cs setup azure` | [04](04-azure-private-aks.md) |
 | `cs setup vmware` | [01](01-first-lab-vmware.md) · [05](05-local-kubernetes.md) · [11](11-fips-140-mode.md) · [13](13-day-2-operations.md) |
-| `cs plan` | [02](02-aws-landing-zone.md) · [13](13-day-2-operations.md) |
-| `cs apply` | [02](02-aws-landing-zone.md) · [13](13-day-2-operations.md) |
+| `cs plan` | [02](02-aws-landing-zone.md) · [13](13-day-2-operations.md) · [17](17-profiles-specs-and-guardrails.md) |
+| `cs apply` | [02](02-aws-landing-zone.md) · [13](13-day-2-operations.md) · [17](17-profiles-specs-and-guardrails.md) |
 | `cs status` | [01](01-first-lab-vmware.md) · [02](02-aws-landing-zone.md) · [03](03-gcp-private-gke.md) · [04](04-azure-private-aks.md) · [13](13-day-2-operations.md) |
 | `cs output` | [01](01-first-lab-vmware.md) · [02](02-aws-landing-zone.md) · [12](12-private-access-vpn.md) |
 | `cs list` | [01](01-first-lab-vmware.md) · [13](13-day-2-operations.md) |
@@ -281,9 +302,9 @@ from the pages and checked by `tests/test_scenarios_docs.py`, so they are always
 | Command | Scenarios that run it |
 |---|---|
 | `cs k8s info` | [03](03-gcp-private-gke.md) · [04](04-azure-private-aks.md) · [05](05-local-kubernetes.md) |
-| `cs k8s kubeconfig` | [03](03-gcp-private-gke.md) · [05](05-local-kubernetes.md) |
-| `cs k8s tunnel` | [03](03-gcp-private-gke.md) |
-| `cs k8s untunnel` | [03](03-gcp-private-gke.md) |
+| `cs k8s kubeconfig` | [03](03-gcp-private-gke.md) · [05](05-local-kubernetes.md) · [16](16-health-and-network.md) |
+| `cs k8s tunnel` | [03](03-gcp-private-gke.md) · [16](16-health-and-network.md) |
+| `cs k8s untunnel` | [03](03-gcp-private-gke.md) · [16](16-health-and-network.md) |
 | `cs env show` | [05](05-local-kubernetes.md) |
 | `cs env use` | [05](05-local-kubernetes.md) |
 | `cs env clear` | [05](05-local-kubernetes.md) |
@@ -312,11 +333,11 @@ from the pages and checked by `tests/test_scenarios_docs.py`, so they are always
 
 | Command | Scenarios that run it |
 |---|---|
-| `cs dr status` | [08](08-backups-you-can-trust.md) |
-| `cs dr backup` | [08](08-backups-you-can-trust.md) |
+| `cs dr status` | [08](08-backups-you-can-trust.md) · [18](18-upgrades-and-recovery.md) |
+| `cs dr backup` | [08](08-backups-you-can-trust.md) · [18](18-upgrades-and-recovery.md) |
 | `cs dr restore` | [08](08-backups-you-can-trust.md) |
-| `cs dr backups` | [08](08-backups-you-can-trust.md) |
-| `cs dr schedule` | [08](08-backups-you-can-trust.md) |
+| `cs dr backups` | [08](08-backups-you-can-trust.md) · [18](18-upgrades-and-recovery.md) |
+| `cs dr schedule` | [08](08-backups-you-can-trust.md) · [17](17-profiles-specs-and-guardrails.md) |
 | `cs dr test` | [08](08-backups-you-can-trust.md) |
 | `cs dr describe` | [08](08-backups-you-can-trust.md) |
 | `cs dr logs` | [08](08-backups-you-can-trust.md) |
@@ -332,9 +353,33 @@ from the pages and checked by `tests/test_scenarios_docs.py`, so they are always
 | `cs scan stig` | [10](10-compliance-scans.md) |
 | `cs scan cloud` | [04](04-azure-private-aks.md) · [10](10-compliance-scans.md) |
 | `cs scan fips` | [10](10-compliance-scans.md) · [11](11-fips-140-mode.md) |
-| `cs scan architecture` | [10](10-compliance-scans.md) |
+| `cs scan architecture` | [10](10-compliance-scans.md) · [16](16-health-and-network.md) |
 | `cs scan all` | [10](10-compliance-scans.md) |
 | `cs scan reports` | [10](10-compliance-scans.md) · [11](11-fips-140-mode.md) |
+
+### Operational readiness
+
+| Command | Scenarios that run it |
+|---|---|
+| `cs ops list` | [16](16-health-and-network.md) |
+| `cs ops credentials-backend` | [19](19-acceptance-and-releases.md) |
+| `cs ops acceptance` | [19](19-acceptance-and-releases.md) |
+| `cs ops release-verify` | [19](19-acceptance-and-releases.md) |
+| `cs ops expiry-plan` | [17](17-profiles-specs-and-guardrails.md) |
+| `cs ops expiry-cleanup` | [17](17-profiles-specs-and-guardrails.md) |
+| `cs ops health` | [16](16-health-and-network.md) · [18](18-upgrades-and-recovery.md) |
+| `cs ops network` | [16](16-health-and-network.md) |
+| `cs ops profile` | [17](17-profiles-specs-and-guardrails.md) |
+| `cs ops spec-export` | [17](17-profiles-specs-and-guardrails.md) |
+| `cs ops spec-validate` | [17](17-profiles-specs-and-guardrails.md) |
+| `cs ops spec-diff` | [17](17-profiles-specs-and-guardrails.md) |
+| `cs ops spec-import` | [17](17-profiles-specs-and-guardrails.md) |
+| `cs ops policy-check` | [17](17-profiles-specs-and-guardrails.md) |
+| `cs ops drift` | [18](18-upgrades-and-recovery.md) |
+| `cs ops upgrade-plan` | [18](18-upgrades-and-recovery.md) |
+| `cs ops upgrade-apply` | [18](18-upgrades-and-recovery.md) |
+| `cs ops recovery-plan` | [18](18-upgrades-and-recovery.md) |
+| `cs ops recovery-test` | [18](18-upgrades-and-recovery.md) |
 
 ### Cost and data
 

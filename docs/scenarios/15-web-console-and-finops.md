@@ -196,6 +196,31 @@ cs ui serve --port 7440
 cs ui start --no-open
 ```
 
+## Use an agent, MCP or the UI
+
+Follow the same numbered steps and verification/cleanup conditions through your chosen interface. Start with the
+[interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
+placeholders before any live request.
+
+**Agent prompt:** “Follow the console and FinOps walkthrough for aws-web. Inspect local estimates first, distinguish actual bills and OpenCost data that need credentials or a cluster, and show saved reports and audit history. Do not call a partial estimate a spend limit.”
+
+**MCP starter:** `cloudseed_finops` with:
+
+```json
+{
+  "cloud": "aws",
+  "env": "web",
+  "action": "estimate",
+  "save": true
+}
+```
+
+Use the matching tool for each remaining step in this page; the [command-to-tool map](interfaces-and-coverage.md#command-to-interface-map)
+lists the tool family. Keep `aws-web` selected. Preview first; add `confirm:true` only to the specific change
+you have authorized. Host bootstrap, provider login and interactive applications retain their documented human steps.
+
+**UI:** Use Create for the dry-run web environment, then Environments → web and All actions → FinOps. Choose estimate/cloud/k8s/report as each numbered step indicates. Reports opens saved cost evidence; Activity shows the command, exit status and logs. Agents & MCP runs the natural-language equivalent.
+
 ## Verify it worked
 
 ```bash

@@ -93,7 +93,8 @@ module "kubernetes" {
   source = "./modules/kubernetes"
 
   project_id          = var.project_id
-  location            = var.zone
+  location            = var.kubernetes_regional ? var.region : var.zone
+  node_locations      = var.kubernetes_node_locations
   region              = var.region
   prefix              = local.prefix
   cluster_name        = module.names.gke_cluster_name

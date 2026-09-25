@@ -157,6 +157,36 @@ cs snowflake status
 Tokens and passwords are asked with hidden input, never on the command line. To hand the vendor CLI its own
 `--profile`, put its arguments after `--`: `cs databricks -- clusters list --profile DEFAULT`.
 
+## Use an agent, MCP or the UI
+
+Follow the same numbered steps and verification/cleanup conditions through your chosen interface. Start with the
+[interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
+placeholders before any live request.
+
+**Agent prompt:** “On vmware-lab, inspect the data, AI and agentic catalog. Plan MinIO, CloudNativePG, Ollama and Open WebUI, review storage and model requirements, then install approved items and verify them. Do not expose secret connection details.”
+
+**MCP starter:** `cloudseed_platform` with:
+
+```json
+{
+  "cloud": "vmware",
+  "env": "lab",
+  "action": "plan",
+  "items": [
+    "minio",
+    "cloudnative-pg",
+    "ollama",
+    "open-webui"
+  ]
+}
+```
+
+Use the matching tool for each remaining step in this page; the [command-to-tool map](interfaces-and-coverage.md#command-to-interface-map)
+lists the tool family. Keep `vmware-lab` selected. Preview first; add `confirm:true` only to the specific change
+you have authorized. Host bootstrap, provider login and interactive applications retain their documented human steps.
+
+**UI:** Select vmware-lab → Platform and filter data, ai or agentic. Inspect, plan and install the named items; apply the page’s storage settings in the install form. Use All actions → Managed platforms for Databricks/Snowflake commands after the human has completed authentication.
+
 ## Verify it worked
 
 ```bash

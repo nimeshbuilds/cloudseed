@@ -59,9 +59,10 @@ jobs:
           set -o pipefail
           docker run --rm --entrypoint /bin/bash cloudseed:test -euo pipefail -c '
             export CLOUDSEED_HOME="$(mktemp -d)" NO_COLOR=1
-            python3 -m unittest tests.test_cli_e2e tests.test_architecture_cli
+            python3 -m unittest tests.test_cli_e2e tests.test_architecture_cli tests.test_operations_interfaces.OperationCLITests
             bash tests/scenarios/14-ai-agents-and-mcp.sh
             bash tests/scenarios/15-web-console-and-finops.sh
+            bash tests/scenarios/run.sh 16 17 18 19
           ' 2>&1 | tee "$RUNNER_TEMP/container-tests.log"
 
       - uses: actions/upload-artifact@v7.0.1
@@ -103,7 +104,7 @@ jobs:
       - name: CLI end-to-end against the frozen executable
         run: |
           set -o pipefail
-          python3 -m unittest tests.test_cli_e2e tests.test_bundle_lifecycle tests.test_architecture_cli 2>&1 | tee "$RUNNER_TEMP/bundle-tests.log"
+          python3 -m unittest tests.test_cli_e2e tests.test_bundle_lifecycle tests.test_architecture_cli tests.test_operations_interfaces.OperationCLITests 2>&1 | tee "$RUNNER_TEMP/bundle-tests.log"
 
       - name: Real MCP and console HTTP services from the frozen executable
         run: |
@@ -111,6 +112,7 @@ jobs:
           export SCN_BINARY="$CLOUDSEED_TEST_BINARY"
           bash tests/scenarios/14-ai-agents-and-mcp.sh 2>&1 | tee "$RUNNER_TEMP/bundle-mcp.log"
           bash tests/scenarios/15-web-console-and-finops.sh 2>&1 | tee "$RUNNER_TEMP/bundle-ui.log"
+          bash tests/scenarios/run.sh 16 17 18 19 2>&1 | tee "$RUNNER_TEMP/bundle-operations.log"
 
       - uses: actions/upload-artifact@v7.0.1
         if: failure()

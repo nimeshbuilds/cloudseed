@@ -180,6 +180,33 @@ cs undo
 `uninstall` never removes shared dependencies (cert-manager, the Gateway API, MetalLB) and refuses items another
 installed item still needs. `cs undo` re-installs what the uninstall removed. Unattended: add `--auto-approve` to both.
 
+## Use an agent, MCP or the UI
+
+Follow the same numbered steps and verification/cleanup conditions through your chosen interface. Start with the
+[interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
+placeholders before any live request.
+
+**Agent prompt:** “On vmware-lab, follow the platform walkthrough. Inspect and plan basek8s first, explain dependencies and private UI access, then install only approved items and verify their releases. Show undo history before a rollback.”
+
+**MCP starter:** `cloudseed_platform` with:
+
+```json
+{
+  "cloud": "vmware",
+  "env": "lab",
+  "action": "plan",
+  "items": [
+    "basek8s"
+  ]
+}
+```
+
+Use the matching tool for each remaining step in this page; the [command-to-tool map](interfaces-and-coverage.md#command-to-interface-map)
+lists the tool family. Keep `vmware-lab` selected. Preview first; add `confirm:true` only to the specific change
+you have authorized. Host bootstrap, provider login and interactive applications retain their documented human steps.
+
+**UI:** Select vmware-lab → Platform. Choose basek8s, inspect items and Plan before Install. Follow catalog UI links after the install; use All actions → Helm for the verification commands and Undo for the recorded change.
+
 ## Verify it worked
 
 ```bash

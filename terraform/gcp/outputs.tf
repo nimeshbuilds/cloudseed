@@ -59,7 +59,7 @@ output "kubernetes_endpoint" {
   value       = try(module.kubernetes[0].endpoint, null)
 }
 output "kubernetes_location" {
-  description = "Zone of the cluster, for gcloud container clusters get-credentials (null when Kubernetes is disabled)."
+  description = "Zone or region of the cluster, for gcloud container clusters get-credentials (null when Kubernetes is disabled)."
   value       = try(module.kubernetes[0].location, null)
 }
 output "kubernetes_node_pool" {

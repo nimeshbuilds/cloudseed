@@ -84,6 +84,8 @@ module "kubernetes" {
   subnet_id                  = module.network.private_subnet_id
   kubernetes_version         = var.kubernetes_version
   node_vm_size               = var.kubernetes_node_size
+  sku_tier                   = var.kubernetes_sku_tier
+  zones                      = var.kubernetes_zones
   node_count                 = var.kubernetes_node_count
   node_min                   = var.kubernetes_node_min
   node_max                   = var.kubernetes_node_max

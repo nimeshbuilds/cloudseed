@@ -32,7 +32,8 @@ _STAMP = re.compile(r"^\d{8}-\d{6}$")
 _DR_STEPS = ("1. create sample workload", "2. backup", "3. delete it (disaster)", "4. restore from backup", "5. verify")
 # These are raw Terraform overrides, not prompted settings passed by stack_vars. Misplaced legacy values in `vars`
 # do not reach Terraform and must not hide the actual default (module_vars only overlays extra_vars).
-_EXTRA_ONLY = frozenset(("enable_flow_logs", "enable_cloudtrail", "enable_project_baseline"))
+_EXTRA_ONLY = frozenset(("enable_flow_logs", "enable_cloudtrail", "enable_project_baseline", "kubernetes_regional", "kubernetes_node_locations",
+                          "kubernetes_sku_tier", "kubernetes_zones"))
 
 
 def _now() -> datetime:
@@ -185,6 +186,54 @@ def _latest(env, folder: str, prefix: str, now: datetime, days: int) -> tuple[di
     return data, evidence
 
 
+_DIAGNOSTIC_CHECKS = {
+    "cluster.api": ("operational_excellence", "Cluster API readiness"),
+    "cluster.nodes": ("reliability", "Node readiness and pressure"),
+    "cluster.platform": ("reliability", "Deployment availability"),
+    "cluster.certificates": ("security", "Certificate expiry"),
+    "cluster.backups": ("reliability", "Backup freshness"),
+    "network.dns": ("reliability", "Cluster DNS probe"),
+    "network.registry": ("reliability", "Registry image pull probe"),
+    "network.cleanup": ("operational_excellence", "Diagnostic workload cleanup"),
+    **{f"network.tls.{i}": ("security", f"TLS and HTTPS egress probe {i}") for i in range(1, 9)},
+}
+
+
+def _diagnostic_evidence(target, env, now, days, add):
+    """Supplemental historical observations, never substitutes for architecture or workload assurance."""
+    for kind in ("health", "network"):
+        report, source = _latest(env, "scans", kind, now, days)
+        valid = report is not None and type(report.get("schema_version")) is int and report.get("schema_version") == 1 and report.get("kind") == kind and \
+            report.get("cloud") == target and report.get("env") == env.id and report.get("live") is True and \
+            _fresh(report.get("generated_at"), now, days)
+        rows = report.get("findings") if valid else None
+        if not isinstance(rows, list) or len(rows) > 64 or not all(isinstance(f, dict) for f in rows):
+            rows = []
+        ids = [f.get("id") for f in rows if isinstance(f.get("id"), str)]
+        added = False
+        for row in rows:
+            id_ = row.get("id")
+            if not isinstance(id_, str) or id_ not in _DIAGNOSTIC_CHECKS or ids.count(id_) != 1 or row.get("status") not in ("PASS", "FAIL"):
+                continue
+            evidence = row.get("evidence")
+            if not isinstance(evidence, list) or not evidence or len(evidence) > 8 or not all(
+                    isinstance(e, dict) and e.get("type") == "live_query" and e.get("live_verified") is True for e in evidence):
+                continue
+            if id_.startswith("network.") and report.get("active") is not True:
+                continue
+            pillar, title = _DIAGNOSTIC_CHECKS[id_]
+            add(f"evidence.{kind}.{id_}", pillar, row["status"], title + " (saved live observation)",
+                f"The saved {kind} diagnostic recorded {row['status']} for this specific check. This is historical evidence, not a current-state or whole-workload guarantee.",
+                f"Rerun cs ops {kind} with live=true (and active=true for probes); investigate the original diagnostic before changing infrastructure.",
+                [{**source, "live_verified": False, "source_live_verified": True, "source_check": id_,
+                  "generated_at": report["generated_at"]}], severity="HIGH" if row["status"] == "FAIL" else "LOW")
+            added = True
+        if not added:
+            add(f"evidence.{kind}", "operational_excellence", "UNKNOWN", f"Saved live {kind} diagnostics",
+                "No fresh, matching, complete live-check evidence is available. Offline reports and unverified results do not establish deployed health.",
+                f"Collect cs ops {kind} live diagnostics after configuring cluster access.", [source])
+
+
 def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int = 30) -> dict:
     """Return JSON-safe findings, without changing config or touching external infrastructure."""
     target = cloud if isinstance(cloud, str) else cloud.key
@@ -288,26 +337,34 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
         if account is False or regional is False:
             baseline_detail += " At least one baseline is delegated; this does not prove its controls are absent."
     elif target == "gcp":
-        status = "NOT_APPLICABLE" if not production or k8s is False else "UNKNOWN" if k8s is None else "FAIL"
+        regional = _flag(cfg, "kubernetes_regional", False)
+        zones = _value(cfg, "kubernetes_node_locations", [])
+        valid_zones = isinstance(zones, list) and all(isinstance(z, str) and re.fullmatch(re.escape(str(cfg.get("region", ""))) + r"-[a-z]", z) for z in zones) and len(set(zones)) == len(zones)
+        status = "NOT_APPLICABLE" if not production or k8s is False else "UNKNOWN" if k8s is None or regional is None or not valid_zones else "PASS" if regional and len(zones) >= 2 else "FAIL"
         add("reliability.gke_location", "reliability", status, "GKE control-plane failure domains",
-            "Current Terraform passes the environment zone as GKE location; the cluster is zonal." if status == "FAIL" else
-            "Kubernetes enablement cannot be established from the saved configuration." if status == "UNKNOWN" else
+            "Declared regional control plane and multiple node zones; availability and quota require provider validation." if status == "PASS" else
+            "Configuration does not declare both a regional control plane and multiple node zones." if status == "FAIL" else
+            "Kubernetes enablement or topology cannot be established from the saved configuration." if status == "UNKNOWN" else
             "Regional GKE topology is not required when Kubernetes is disabled or the lab profile is selected.",
-            "For zone failure tolerance, add supported regional GKE configuration and plan migration; node count alone does not change control-plane topology.",
-            declared("zone", source="terraform/gcp/main.tf"), "HIGH")
+            "Set kubernetes_regional and explicit kubernetes_node_locations; counts are per zone. Review replacement and recovery plans before migrating a deployed cluster.",
+            declared("kubernetes_regional", "kubernetes_node_locations", source="terraform/gcp/main.tf"), "HIGH")
         baseline = _flag(cfg, "enable_project_baseline", True)
         toggle("security.audit_logging", "security", "enable_data_access_audit_logs", False, "Declared Data Access audit logging",
                "Review data sensitivity and logging costs, enable required Data Access logs, and verify delivery and retention.", baseline)
         baseline_detail = "Project-wide logging ownership and effective controls require cross-environment review."
         baseline_keys = ("enable_project_baseline",)
     elif target == "azure":
-        status = "NOT_APPLICABLE" if not production or k8s is False else "UNKNOWN" if k8s is None else "FAIL"
+        tier = _value(cfg, "kubernetes_sku_tier", "Free")
+        zones = _value(cfg, "kubernetes_zones", [])
+        valid = tier in ("Free", "Standard") and isinstance(zones, list) and all(isinstance(z, str) and z in ("1", "2", "3") for z in zones) and len(set(zones)) == len(zones)
+        status = "NOT_APPLICABLE" if not production or k8s is False else "UNKNOWN" if k8s is None or not valid else "PASS" if tier == "Standard" and len(zones) >= 2 else "FAIL"
         add("reliability.aks_availability", "reliability", status, "AKS tier and node failure domains",
-            "Current Terraform declares the Free tier and no node-pool availability zones." if status == "FAIL" else
-            "Kubernetes enablement cannot be established from the saved configuration." if status == "UNKNOWN" else
+            "Declared Standard tier and multiple node zones; regional VM-size availability and quota require provider validation." if status == "PASS" else
+            "Configuration does not declare both Standard tier and multiple node-pool availability zones." if status == "FAIL" else
+            "Kubernetes enablement or topology cannot be established from the saved configuration." if status == "UNKNOWN" else
             "Higher AKS availability is not required when Kubernetes is disabled or the lab profile is selected.",
-            "Add supported AKS tier and zone controls, choose them against availability requirements, and assess migration costs before changing a deployed cluster.",
-            declared("sku_tier", "default_node_pool.zones", source="terraform/azure/modules/kubernetes/main.tf"), "HIGH")
+            "Set kubernetes_sku_tier=Standard and supported kubernetes_zones; assess costs and node rotation before changing a deployed cluster.",
+            declared("kubernetes_sku_tier", "kubernetes_zones", source="terraform/azure/modules/kubernetes/main.tf"), "HIGH")
         toggle("security.audit_logging", "security", "enable_activity_log", True, "Declared Activity Log export",
                "Confirm subscription-wide ownership and verify Activity Log delivery, retention and alerts.")
         baseline_detail = "Subscription-wide Activity Log and Defender ownership require cross-environment review."
@@ -402,6 +459,8 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
          "Measure utilization and remove idle capacity; evaluate scheduling and scaling against workload requirements."),
     ):
         add(id_, pillar, "UNKNOWN", title, detail, remediation)
+
+    _diagnostic_evidence(target, env, now, max_age_days, add)
 
     counts = {status: sum(f["status"] == status for f in findings) for status in ("PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE")}
     verdict = "FAIL" if counts["FAIL"] else "INCOMPLETE" if counts["UNKNOWN"] else "PASS"

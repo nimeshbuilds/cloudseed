@@ -164,6 +164,11 @@ nav:
       - 13 · Day-2 operations: scenarios/13-day-2-operations.md
       - 14 · AI agents and MCP: scenarios/14-ai-agents-and-mcp.md
       - 15 · Web console and FinOps: scenarios/15-web-console-and-finops.md
+      - 16 · Health and private networking: scenarios/16-health-and-network.md
+      - 17 · Profiles, specs and guardrails: scenarios/17-profiles-specs-and-guardrails.md
+      - 18 · Drift, upgrades and recovery: scenarios/18-upgrades-and-recovery.md
+      - 19 · Acceptance and trusted releases: scenarios/19-acceptance-and-releases.md
+      - Interfaces and coverage: scenarios/interfaces-and-coverage.md
   - Guides:
       - Using the CLI: guides/cli.md
       - Web console: guides/web-console.md
@@ -172,6 +177,7 @@ nav:
       - Resilience, chaos and scans: guides/resilience.md
       - Security and FIPS: guides/security-and-fips.md
       - Well-Architected assessments: guides/well-architected.md
+      - Operational readiness: guides/operations.md
       - VPN access: guides/vpn.md
       - FinOps: guides/finops.md
       - Undo and audit trail: guides/undo-and-audit.md
@@ -201,6 +207,7 @@ nav:
           - Infrastructure audit: development/infrastructure-audit.md
           - CI diagnosis and repairs: development/ci-repair.md
           - Runtime acceptance coverage: development/acceptance.md
+          - Operations verification: development/operations-verification.md
       - FAQ: about/faq.md
       - Changelog: about/changelog.md
       - Roadmap: https://github.com/nimeshbuilds/cloudseed/blob/main/ROADMAP.md

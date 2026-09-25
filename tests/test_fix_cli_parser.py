@@ -185,6 +185,7 @@ class PassthroughTests(unittest.TestCase):
 
 # a minimal valid argv for every command, to prove the global options are accepted after each of them
 MINIMAL = {
+    "ops": ["list"],
     "setup": ["aws"], "provision": ["aws"], "k8s": ["info", "aws"], "vpn": ["status", "aws"], "plan": ["aws"],
     "apply": ["aws"], "destroy": ["aws"], "status": ["aws"], "troubleshoot": ["aws"], "inventory": ["aws"],
     "output": ["aws"], "ssh": ["aws"], "update-ip": ["aws"], "list": [], "doctor": [], "deps": ["status"],

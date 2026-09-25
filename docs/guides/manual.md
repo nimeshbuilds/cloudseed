@@ -403,6 +403,7 @@ bin/cloudseed              launcher (also the PyInstaller entry point)
 cloudseed/                 CLI package (stdlib only): cli, help, explain, clouds/{aws,gcp,azure,vmware}, tf, reconcile,
                            deps, container, provision, localvm, services, platform, managed, finops, dr, chaos, scan, architecture,
                            troubleshoot, audit, undo, creds, secrets, skills, agents, builtin_agent, headliner, mcp,
+                           operations, health, blueprints, guardrails, lifecycle, recovery, acceptance, releases, credential_store,
                            webui + web/ (console assets), netutil, paths, ui
 terraform/<cloud>/         stack module: main.tf + modules/{network,bastion,security-baseline,kubernetes,vpn}
                            (+ kms on aws, names on gcp); tests/ holds its mocked `terraform test` suite
@@ -412,11 +413,11 @@ providers/vmdesktop/       cloudseed's own Terraform provider for VMware Fusion 
 templates/gitlab-ci/       CI pipeline template (cs platform template gitlab-ci)
 skills/                    agent skills (SKILL.md)
 scripts/                   install.sh, build-bundle.sh, container-entrypoint.sh, gen-docs.py (docs/reference/ pages),
-                           build-brand-assets.py (SVG artwork and optional PNG exports)
+                           build-brand-assets.py (SVG artwork and optional PNG exports), live-acceptance.py, release-manifest.py, generate-sbom.py
 Makefile                   install, uninstall, fmt, validate, tftest, provider, test, image, bundle, clean
 Dockerfile                 all-in-one runtime image
 docs/ + mkdocs.yml         documentation site (MkDocs Material, theme overrides in overrides/): getting started,
-                           15 scenarios, guides, and reference pages generated from the CLI by scripts/gen-docs.py
+                           19 scenarios, guides, and reference pages generated from the CLI by scripts/gen-docs.py
 tests/                     unit tests (make test); make validate runs terraform validate on every root, make tftest
                            every terraform/*/tests suite (no cloud access); tests/scenarios/ runs every scenario page
 ```
@@ -507,7 +508,7 @@ cs mcp connect codex cursor  # add clients later (all | claude-code claude-deskt
 cs destroy mcp               # stop + remove the service, the token and every client entry
 ```
 
-`setup mcp` turns cloudseed into a Model Context Protocol server exposing **every feature as a tool** (30 tools; `cs mcp tools`
+`setup mcp` turns cloudseed into a Model Context Protocol server exposing **every feature as a tool** (48 tools; `cs mcp tools`
 lists them: list / doctor / status / output / inventory / env, setup / plan / apply / update-ip / provision / install,
 k8s / node / platform / kubectl / helm, ssh / vpn / managed (Databricks, Snowflake), finops / troubleshoot / explain /
 help / skill, dr / chaos / scan, undo / destroy), plus **resources**

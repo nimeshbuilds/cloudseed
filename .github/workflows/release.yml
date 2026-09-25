@@ -1,0 +1,243 @@
+name: Trusted releases
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NO_COLOR: '1'
+  TF_IN_AUTOMATION: '1'
+  TF_INPUT: '0'
+  TF_VERSION: '1.16.4'
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: providers/vmdesktop/go.mod
+          cache-dependency-path: providers/vmdesktop/go.sum
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: '1.16.4'
+          terraform_wrapper: false
+      - name: Require version tags on main; manual dispatch only builds
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ "$REF_TYPE" == tag ]]; then
+            [[ "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
+            git merge-base --is-ancestor HEAD origin/main
+            test "$REF_NAME" = "v$(python3 -c 'from cloudseed import __version__; print(__version__)')"
+          fi
+      - name: Source tests, Terraform and generated documentation checks
+        run: |
+          export CLOUDSEED_HOME="$(mktemp -d)"
+          python3 -m unittest discover -s tests
+          terraform fmt -check -recursive terraform
+          make validate tftest
+          python3 scripts/gen-docs.py --check
+
+  binary:
+    needs: checks
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, platform: linux-amd64}
+          - {os: ubuntu-24.04-arm, platform: linux-arm64}
+          - {os: macos-15-intel, platform: darwin-amd64}
+          - {os: macos-15, platform: darwin-arm64}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: providers/vmdesktop/go.mod
+          cache-dependency-path: providers/vmdesktop/go.sum
+      - name: Build and exercise the actual binary
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          bash scripts/build-bundle.sh
+          export CLOUDSEED_TEST_BINARY="$PWD/dist/cloudseed-$PLATFORM"
+          export SCN_BINARY="$CLOUDSEED_TEST_BINARY"
+          export PATH="$PWD/build/tfbin:$PATH"
+          export CLOUDSEED_HOME="$(mktemp -d)"
+          python3 -m unittest tests.test_cli_e2e tests.test_bundle_lifecycle tests.test_architecture_cli tests.test_operations_interfaces.OperationCLITests
+          bash tests/scenarios/14-ai-agents-and-mcp.sh
+          bash tests/scenarios/15-web-console-and-finops.sh
+          bash tests/scenarios/run.sh 16 17 18 19
+      - name: Inventory build dependencies and source modules
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: python3 scripts/generate-sbom.py --directory . --output "dist/cloudseed-$PLATFORM.sbom.spdx.json"
+      - name: Release inventory and checksums
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          python3 scripts/release-manifest.py --revision "$GITHUB_SHA" \
+            --artifact "dist/cloudseed-$PLATFORM" --artifact "dist/cloudseed-$PLATFORM.sbom.spdx.json" \
+            --output "dist/cloudseed-$PLATFORM.manifest.json" --checksums "dist/cloudseed-$PLATFORM.SHA256SUMS"
+      - name: Attest tested release bytes
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-checksums: dist/cloudseed-${{ matrix.platform }}.SHA256SUMS
+      - name: Attest dependency inventory
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: dist/cloudseed-${{ matrix.platform }}
+          sbom-path: dist/cloudseed-${{ matrix.platform }}.sbom.spdx.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  container:
+    needs: checks
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, arch: amd64}
+          - {os: ubuntu-24.04-arm, arch: arm64}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build and test the native container
+        run: |
+          docker build -t cloudseed:release .
+          docker run --rm cloudseed:release --version
+          docker run --rm --entrypoint /bin/bash cloudseed:release -euo pipefail -c '
+            export CLOUDSEED_HOME="$(mktemp -d)"
+            python3 -m unittest tests.test_cli_e2e tests.test_architecture_cli tests.test_operations_interfaces.OperationCLITests
+            bash tests/scenarios/14-ai-agents-and-mcp.sh
+            bash tests/scenarios/15-web-console-and-finops.sh
+            bash tests/scenarios/run.sh 16 17 18 19
+          '
+          mkdir -p release-image
+      - name: Inventory the exact local container image
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: python3 scripts/generate-sbom.py --image cloudseed:release --output "release-image/container-$ARCH.sbom.spdx.json"
+      - name: Preserve the exact tested image
+        run: docker save cloudseed:release -o release-image/container.tar
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: image-${{ matrix.arch }}
+          path: release-image/*
+          compression-level: 0
+          retention-days: 2
+          if-no-files-found: error
+
+  publish-images:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [checks, binary, container]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: image-${{ matrix.arch }}
+          path: release-image
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish exact tested bytes
+        id: image
+        env:
+          VERSION: ${{ github.ref_name }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          docker load -i release-image/container.tar
+          ref="ghcr.io/nimeshbuilds/cloudseed:$VERSION-$ARCH"
+          docker tag cloudseed:release "$ref"
+          docker push "$ref"
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$ref")"
+          echo "digest=${digest#*@}" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ghcr.io/nimeshbuilds/cloudseed
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ghcr.io/nimeshbuilds/cloudseed
+          subject-digest: ${{ steps.image.outputs.digest }}
+          sbom-path: release-image/container-${{ matrix.arch }}.sbom.spdx.json
+          push-to-registry: true
+          create-storage-record: false
+
+  publish:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [checks, binary, container, publish-images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - name: Publish versioned multi-architecture image and release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          docker buildx imagetools create -t "ghcr.io/nimeshbuilds/cloudseed:$VERSION" \
+            "ghcr.io/nimeshbuilds/cloudseed:$VERSION-amd64" "ghcr.io/nimeshbuilds/cloudseed:$VERSION-arm64"
+          gh release create "$VERSION" release/* --repo nimeshbuilds/cloudseed --verify-tag \
+            --title "Cloudseed $VERSION" --generate-notes

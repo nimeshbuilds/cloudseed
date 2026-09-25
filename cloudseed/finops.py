@@ -110,9 +110,9 @@ def _unset(v) -> bool:
     return v is None or str(v).strip().lower() in ("", "null")
 
 
-def estimate(cloud, env, cfg: dict) -> dict:
+def estimate(cloud, env, cfg: dict, *, use_inventory: bool = True) -> dict:
     """Monthly estimate from the inventory + config (list prices, no discounts, no traffic). Deterministic and offline."""
-    inv = audit.load(env)
+    inv = audit.load(env) if use_inventory else {}
     resources = (inv.get("current") or {}).get("resources", [])
     v = effective_vars(cloud.key, cfg)
     lines: list[tuple[str, float]] = []
@@ -135,6 +135,9 @@ def estimate(cloud, env, cfg: dict) -> dict:
     k8s = _on(v.get("enable_kubernetes"))
     vpn = _on(v.get("enable_vpn"))
     nodes = _int(v.get("kubernetes_node_count"), 2) if k8s else 0
+    if cloud.key == "gcp" and k8s:
+        zones = v.get("kubernetes_node_locations") or []
+        nodes *= max(len(zones), 1)
     if cloud.key == "aws":
         inst("bastion", v.get("bastion_instance_type", "t3.micro"))
         nats = count("aws_nat_gateway", 1 if _on(v.get("single_nat_gateway", True)) else _int(v.get("az_count"), 2))
@@ -190,8 +193,12 @@ def estimate(cloud, env, cfg: dict) -> dict:
         if nodes:
             lines.append(("Cloud NAT IP x1", FIXED["google_compute_address"] * hours))
         if k8s:
-            lines.append(("GKE cluster fee (zonal)", FIXED["google_container_cluster"] * hours))
-            notes.append("The GKE free tier credits one zonal cluster per billing account ($74.40/month).")
+            regional = _on(v.get("kubernetes_regional"))
+            lines.append((f"GKE cluster fee ({'regional' if regional else 'zonal'})", FIXED["google_container_cluster"] * hours))
+            if not regional:
+                notes.append("The GKE free tier credits one zonal cluster per billing account ($74.40/month).")
+            if len(v.get("kubernetes_node_locations") or []) > 1:
+                notes.append("GKE count/min/max are per zone; this estimate multiplies initial nodes by the explicit node zone count.")
             inst("GKE node", v.get("kubernetes_node_size", "e2-standard-2"), nodes)
         if vpn:
             inst("vpn host", v.get("vpn_machine_type", "e2-micro"))
@@ -206,6 +213,8 @@ def estimate(cloud, env, cfg: dict) -> dict:
         lines.append(("NAT gateway", FIXED["azurerm_nat_gateway"] * hours))
         if k8s:
             inst("AKS node", v.get("kubernetes_node_size", "Standard_B2s"), nodes)
+            if v.get("kubernetes_sku_tier", "Free") != "Free":
+                unpriced.append("AKS " + str(v["kubernetes_sku_tier"]) + " control-plane tier")
         if vpn:
             inst("vpn host", v.get("vpn_vm_size", "Standard_B1s"))
         ips = count("azurerm_public_ip", 2 + (1 if vpn else 0))     # bastion + NAT (+ VPN)

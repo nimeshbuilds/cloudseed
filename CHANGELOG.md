@@ -9,6 +9,16 @@ commands or defaults; such changes are called out under **Changed**.
 
 ### Added
 
+- Shared `cs ops` contract across CLI, generated MCP tools, typed console forms and agent skills: health/network
+  evidence, real deployment profiles, portable specifications, budget/plan guards, explicit expiry cleanup, drift,
+  reviewed upgrades, selected-application recovery and isolated cloud acceptance previews/runs.
+- Regional GKE with explicit node locations and AKS Free/Standard tier plus node zones. Cost previews account for
+  GKE node-zone multiplication and mark unsupported pricing incomplete. Profile/import saves never auto-apply.
+- Native OS-keychain credential storage, bounded MCP job/output handling, release integrity/provenance verification
+  and a tested release publication workflow. No cloud account is required for previews; live acceptance is separate.
+- Scenarios 16–19 plus concrete agent/MCP/UI routes on every earlier scenario, a checked command/catalog coverage
+  manifest, and expanded Terraform provider-schema tests for production topology.
+
 - Local Well-Architected assessments with `cs scan architecture` across AWS, GCP, Azure and VMware, available through
   the CLI, MCP, console and bundled skills. Production/lab policies, evidence age limits, provider pillar mappings,
   findings and remediation share saved JSON/Markdown reports. Missing, stale and manual-review evidence yields

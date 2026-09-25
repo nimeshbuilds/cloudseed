@@ -37,6 +37,8 @@ CORE COMMANDS
                      groups (basek8s scaling data ai agentic finops devsecops security resilience chaos) or single items
   kubectl|helm|k9s   run the tool against the current cluster (per-env kubeconfig, bastion tunnel; a missing tool is
                      installed after asking)
+  ops                health, network, deployment profiles/specs, policy/expiry, drift, upgrades, recovery and acceptance
+                     cs ops list --json shows every shared CLI/MCP/UI operation and its parameters
   finops             estimate | cloud | k8s | report: cloudseed estimate, provider bill, OpenCost allocation
   dr                 status | backups | backup | restore | schedule | test | describe | logs: disaster recovery with
                      Velero (bucket + identity created for you); `test` is an automated drill
@@ -427,6 +429,11 @@ Scales the cluster of the current environment.
                        or the count when larger). config.json follows the live pool, so a later apply keeps it -
                        except on GKE, where an apply raises a --min below the count back to the count (the GKE
                        autoscaler never goes below kubernetes_node_count).
+  GKE counts           --count, --min, --max and add's increment are PER ZONE. A three-zone pool scaled to --count 2
+                       has six total nodes; the preview shows the verified zones and total, and readiness waits for
+                       all six. Missing/partial topology, unequal live zone counts and total autoscaler bounds stop
+                       before changes. Named remove is supported only for a single-zone pool; use scale for a
+                       multi-zone pool so its saved per-zone configuration remains consistent.
   vmware               add creates the VM(s) with Terraform, then Ansible joins them to the cluster automatically
                        (RKE2 agent/server or kubeadm join, depending on the distro). remove drains the node,
                        deletes it from the cluster and, when it is the highest-numbered node, deletes its VM.
@@ -797,7 +804,7 @@ cloudseed mcp logs [--lines N | -n N] | token [--rotate] | uninstall [--auto-app
 cloudseed status mcp · cloudseed destroy mcp   (aliases of mcp status / mcp uninstall)
 
 cloudseed as a Model Context Protocol server: every feature is a tool any MCP client can call - Claude Code, Claude
-Desktop, Codex, Cursor, Windsurf, Gemini CLI, VS Code, LangGraph, ... (30 tools; `cs mcp tools` lists them):
+Desktop, Codex, Cursor, Windsurf, Gemini CLI, VS Code, LangGraph, ... (48 tools; `cs mcp tools` lists them):
   discover          list, doctor, status, output, inventory, env
   build & change    setup (plan / apply / dry run), plan, apply, update-ip, provision, install
   kubernetes        k8s, node, platform, kubectl, helm
@@ -806,6 +813,13 @@ Desktop, Codex, Cursor, Windsurf, Gemini CLI, VS Code, LangGraph, ... (30 tools;
   resilience        dr (backup / restore / drill), chaos (experiments with verdicts), scan (CIS / STIG / CVEs /
                     cloud / FIPS / local Well-Architected assessments)
   undo & teardown   undo (revert the last environment action), destroy
+Shared operational tools (replace the shown hyphens with underscores after cloudseed_ in the tool name):
+  ops-credentials-backend, ops-acceptance, ops-release-verify
+  ops-expiry-plan, ops-expiry-cleanup, ops-health
+  ops-network, ops-profile, ops-spec-export
+  ops-spec-validate, ops-spec-diff, ops-spec-import
+  ops-policy-check, ops-drift, ops-upgrade-plan
+  ops-upgrade-apply, ops-recovery-plan, ops-recovery-test
 plus resources (cloudseed://environments, cloudseed://skills/<name>), the resource template cloudseed://explain/{query}
 (how anything works, as JSON - the same data as cloudseed_explain with format=json and `cs explain --json`) and prompts
 (create-environment, review-environment, troubleshoot, teardown).
@@ -1357,7 +1371,7 @@ cloudseed explain ... --json                   (the same page as data; exit 1 wh
 Deterministic explanation of anything cloudseed does - for you and for the agent:
   <feature>   how it is implemented: files, resources, security controls, where state/logs live, commands
               (overview network bastion security-baseline state kubernetes platform vpn vmware provisioning finops
-              managed-data agentic reconcile mcp prereqs fips chaos dr scan architecture undo ui audit dependencies)
+              managed-data agentic reconcile mcp prereqs fips chaos dr scan architecture operations undo ui audit dependencies)
   <target>    aws | gcp | azure | vmware: what is built there, every variable and output (= cs help aws|gcp|azure|vmware-skill)
   <command>   the full help page of that command (same as cs help <command>)
   <topic>     quickstart deps agents envs services destroy troubleshooting examples ... (same as cs help <topic>)
@@ -1400,6 +1414,59 @@ EXAMPLES
   cloudseed help variables aws
 """,
 }
+
+COMMANDS["ops"] = """\
+cloudseed ops list --json
+cloudseed ops ACTION [aws|gcp|azure|vmware] --env NAME [--params '{...}'] [--approve] [--json]
+cloudseed ops spec-export aws --env prod --output cloudseed.yaml --approve --json
+cloudseed ops spec-validate --input cloudseed.yaml --json
+
+A shared operation contract drives CLI, MCP (cloudseed_ops_ACTION with underscores), web-console All actions >
+Operations & readiness, and bundled agent skills. List actions and accepted parameters with ops list --json.
+
+ACTIONS
+  health / network       local evidence by default; --live queries deployed resources. network --active --live
+                         --approve creates and cleans a temporary diagnostic workload. Unknown evidence is not healthy.
+  profile                --profile lab|team|production previews real topology and partial cost estimates; --approve
+                         saves configuration only. Terraform apply and backup/platform installation remain separate.
+  spec-export            portable schema_version=1 document, excluding credentials, keys, state and local paths
+  spec-validate/diff      --input cloudseed.yaml validates or compares a portable document; no cloud calls
+  spec-import            preview the validated change; --approve saves under the environment lock, never applies
+  policy-check           budget/coverage, supplied Terraform JSON plan and destructive-change policy preview
+  expiry-plan            preview expiry cleanup eligibility
+  expiry-cleanup         cleanup requires saved elapsed expiry, saved opt-in and --approve; no timer; no state purge
+  drift                  read provider/state/config drift without applying changes
+  upgrade-plan           --target-version VERSION --backup NAME; review compatibility and backup gates
+  upgrade-apply          --plan PATH takes the fresh reviewed plan; --approve executes it
+  recovery-plan          --namespace NAME inspects the selected application restore prerequisites
+  recovery-test          restore into a separate restricted namespace; --namespace NAME and --approve required
+  acceptance             preview without credentials, or explicitly authorize an isolated sandbox lifecycle
+  credentials-backend    inspect/preview/approve file or native OS-keychain credential storage
+  release-verify         check an artifact's trusted digest and optional GitHub provenance; never executes the file
+
+NOTES
+Production topology means AWS per-AZ NAT, regional GKE with explicit node zones and AKS Standard tier/zones.
+GKE node count/min/max are per zone. Provider availability/quota requires live validation. VMware profiles remain
+one physical host. Backup/platform sections express desired intent; use dr/platform commands to make them live.
+Offline costs omit traffic, regional/contract pricing and usage; they cannot guarantee a billing cap. Saved budgets
+block apply on incomplete coverage by default. Explicit deletion-only cleanup may proceed without trapping resources
+behind a creation budget. Normal applies/replacements still obey destructive and budget gates.
+
+JSON/YAML specs accept simple mappings/scalar lists and JSON flow values. No tags, aliases, anchors, duplicate keys,
+block strings or multiple documents; 512 KiB maximum. Exported JSON is valid YAML 1.2.
+Reports: <workdir>/operations, shown in console Reports. Exit 0=pass/preview, 1=fail/blocked, 3=incomplete, 2=invalid.
+Live acceptance needs a sandbox identity, region, cost estimate/time limit and public SSH source; local tests do not
+claim live cloud acceptance. Follow scenarios 16-19 in the documentation.
+EXAMPLES
+  cs ops health aws --env prod --live --json
+  cs ops network aws --env prod --live --active --approve --json
+  cs ops profile gcp --env prod --profile production --json
+  cs ops spec-diff aws --env prod --input cloudseed.yaml --json
+  cs ops policy-check aws --env prod --params '{"budget_max_monthly":500}' --json
+  cs ops acceptance aws --json
+
+"""
+
 
 TOPICS: dict[str, str] = {
     "fips": """\

@@ -9,6 +9,14 @@ The full, detailed history is in [CHANGELOG.md](https://github.com/nimeshbuilds/
 GitHub. cloudseed follows [Semantic Versioning](https://semver.org/); while it is 0.x, a minor release may change
 commands or defaults, and such changes are called out.
 
+## Unreleased operational readiness
+
+Shared operations now cover health/network evidence, real topology profiles, portable specifications, budget/plan
+policy, explicit expiry cleanup, drift, guarded upgrades, application recovery, sandbox acceptance, native keychain
+storage and release verification across CLI/MCP/UI/skills. [Scenarios 16–19](../scenarios/index.md#operational-readiness-walkthroughs)
+and the [coverage guide](../scenarios/interfaces-and-coverage.md) describe what is locally tested and what still
+requires live cloud evidence. See the full changelog for implementation and compatibility details.
+
 ## v0.1.0 - 2026-09-24
 
 The first public release.

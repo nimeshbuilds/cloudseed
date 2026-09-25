@@ -73,6 +73,11 @@ size and autoscaler limits:
 cs node scale aws --env prod --count 3 --max 6
 ```
 
+GKE uses **per-zone** counts for `add`, `scale`, `--min` and `--max`: `--count 2` across three verified zones means six
+nodes in total. The preview and readiness check include that total. Incomplete topology or unequal live zone sizes
+stop before mutations. Use `scale` for multi-zone GKE; named `remove` is limited to a single-zone pool so removing
+one machine cannot leave the saved per-zone count inconsistent. The same rules apply through agents, MCP and UI.
+
 ## Step 3: Change a setting, then undo it
 
 ```bash
@@ -156,6 +161,30 @@ cs creds clear --forget
   and the MCP server, masked in `list`, and stripped from AI agents. A variable exported in your shell always wins.
 - Names that change how programs start or where they connect (`PATH`, `LD_*`, `*_ENDPOINT*`, proxies, ...) are refused.
 - `undo --global` reverts credential, agent, MCP and console changes (you only; agents cannot).
+
+## Use an agent, MCP or the UI
+
+Follow the same numbered steps and verification/cleanup conditions through your chosen interface. Start with the
+[interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
+placeholders before any live request.
+
+**Agent prompt:** “Follow day-2 operations on vmware-lab. Inspect status and inventory, show the requested node change and its undo point, then execute only approved changes. Use audit and troubleshoot for failures; never reveal saved credentials.”
+
+**MCP starter:** `cloudseed_node` with:
+
+```json
+{
+  "cloud": "vmware",
+  "env": "lab",
+  "action": "list"
+}
+```
+
+Use the matching tool for each remaining step in this page; the [command-to-tool map](interfaces-and-coverage.md#command-to-interface-map)
+lists the tool family. Keep `vmware-lab` selected. Preview first; add `confirm:true` only to the specific change
+you have authorized. Host bootstrap, provider login and interactive applications retain their documented human steps.
+
+**UI:** Select vmware-lab → Environments → Nodes for add/remove/scale. All actions contains plan, provision, inventory, troubleshoot and undo; Activity records each job. Use Credentials to enter secrets directly, then inspect only masked status through agents/MCP.
 
 ## Verify it worked
 

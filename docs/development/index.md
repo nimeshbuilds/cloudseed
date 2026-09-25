@@ -5,7 +5,10 @@ description: A source-grounded map of cloudseed, the September 2026 reliability 
 
 # End-to-end engineering review
 
-Reviewed on **2026-09-24**, starting from `a6c6e7c`. cloudseed already has broad functionality. The next release should make its existing capabilities easier to verify, safer to operate, and easier to understand before adding more infrastructure targets.
+The initial review on **2026-09-24** started from `a6c6e7c`. The follow-up implementation adds operational readiness
+features for the next release; the table below separates completed implementation from remaining acceptance work.
+The focus remains making existing capabilities easier to verify, safer to operate, and easier to understand before
+adding more infrastructure targets.
 
 This is a source and test review, not a new certification of live AWS, GCP, Azure or VMware deployments. The detailed reports record both implemented behavior and the limits of the evidence.
 
@@ -17,6 +20,8 @@ This is a source and test review, not a new certification of live AWS, GCP, Azur
 | [Infrastructure audit](infrastructure-audit.md) | All four targets and seven Terraform roots, ten Ansible roles, Go VMware provider, local/container/bundle runtimes, availability defaults, state backends and lifecycle risks |
 | [CI diagnosis and repairs](ci-repair.md) | Failed run evidence, root causes, regression fixes and verification results |
 | [Runtime acceptance coverage](acceptance.md) | Dependency review, source/container/binary checks, and the remaining live infrastructure acceptance requirements |
+| [Operations verification](operations-verification.md) | Current operational feature and scenario checks, tested runtimes, and outstanding live cloud evidence |
+| [Operational readiness guide](../guides/operations.md) | Shared health, network, profile, specification, guardrail, upgrade, recovery and acceptance workflows |
 | [Command reference](../reference/commands.md) | Generated CLI command surface |
 | [Platform catalog](../reference/platform-catalog.md) | Every catalog entry, group and dependency |
 | [MCP reference](../reference/mcp-tools.md) | Tool schemas, resources and prompts |
@@ -51,21 +56,25 @@ The Pages overhaul adds a white-and-blue documentation theme, an interactive fou
 
 The follow-up dependency review adds real container/binary acceptance checks and repairs issues they exposed: detached binary services losing assets, framework-dependent NIC planning, VMware cleanup/capacity reporting, unavailable environment locking, and slow console readers retaining unbounded output. See [acceptance coverage](acceptance.md) for the evidence and live-test boundaries.
 
-## What to add next
+## Original proposals and current status
 
-| Priority | Work | Concrete completion criteria |
+| Priority | Work | Implementation and remaining evidence |
 |---|---|---|
 | **1 — Lifecycle acceptance** | Live validation of the repaired VMware lifecycle; honest undo semantics | Verify the failure-path regressions against real Fusion/Workstation guests; restore/recreate limitations remain explicit and tested. |
-| **1 — Agent and server boundaries** | Separate built-in agent guarantees from external adapters; bound MCP subprocess output while streaming | Each adapter documents its effective permissions; MCP capture cannot grow indefinitely. Console subscriber backlog is now bounded; MCP subprocess capture remains separate follow-up work. |
-| **2 — Environment health report** | A shared `health --json` contract for CLI, console and MCP | One report shows configuration drift, reachability, cluster/node readiness, platform health, backup age, last scan and validation timestamp; missing evidence is shown as unknown. |
-| **2 — Live release evidence** | Opt-in cloud acceptance runs and a dedicated VMware runner | Apply, access, platform install, backup/restore and destroy are exercised with cleanup checks; reports identify commit, versions, target and cost; dry runs remain clearly labeled. |
-| **2 — Reproducible releases** | Signed bundles, checksums, SBOMs and a tested tool compatibility manifest | A release can be rebuilt from pinned inputs; downloaded tools and images have integrity checks; supported host combinations pass smoke tests. |
-| **3 — Reliability presets** | Explicit lab/team/production topology choices | Setup shows availability and cost differences: regional GKE, AKS tier/zone options, AWS per-AZ NAT, local API failover, and backend retention. |
-| **3 — Drift and change review** | Saved plan summaries with policy and cost context | Operators see what changed, what it costs, and which policy checks apply before approval; apply uses the reviewed plan. Build on the existing plan safeguards. |
-| **3 — Baseline completion** | Azure VNet flow logs, GCP organization policies, ownership/adoption checks | Shared account/project/subscription settings have clear owners; opting into controls produces verifiable evidence and avoids conflicts with existing environments. |
-| **4 — Maintenance and upgrades** | Guided Kubernetes/platform upgrades and smaller command modules | Compatibility and recovery are checked before upgrades; the large CLI dispatcher is split by domain while preserving command contracts. |
+| **1 — Agent and server boundaries** | Separate built-in agent guarantees from external adapters; bound MCP subprocess output while streaming | Implemented bounded MCP output, requests, batches and resource reads, plus a configurable finite call deadline. Console backlog is bounded. External agents still retain their own execution permissions; cloudseed cannot extend its built-in approval guarantees to arbitrary adapter actions. |
+| **2 — Environment health report** | A shared report for CLI, console, MCP and skills | Implemented `cs ops health` and `network`, with local evidence, opt-in live checks and explicit unknown results. `drift` is a separate shared operation. Provider and cluster fixture tests do not establish a deployed environment's health. |
+| **2 — Live release evidence** | Opt-in cloud acceptance runs and a dedicated VMware runner | Implemented an isolated acceptance harness with preflight, lifecycle stages and cleanup reporting. Recorded AWS/GCP/Azure runs still require sandbox accounts; a dedicated VMware CI runner remains future work. |
+| **2 — Reproducible releases** | Release integrity, dependency inventory and provenance | Implemented checksums, SBOMs, manifest, native build checks and GitHub attestations in the version-tag workflow, plus artifact verification. Publishing and verifying an actual tagged release remains separate; the workflow alone proves neither publication nor byte-for-byte reproducibility. |
+| **3 — Reliability presets** | Explicit lab/team/production topology choices | Implemented regional GKE, AKS tier/zones, AWS per-AZ NAT and multi-control-plane VMware settings, with cost omissions disclosed. Profiles require separate apply; saved backup retention is intent until scheduled. Local host failure tolerance and provider availability still require separate validation. |
+| **3 — Drift and change review** | Saved plan summaries with policy and cost context | Implemented drift reports, portable spec validation/diff/import, reviewed upgrade plans, saved Terraform apply gates and explicit expiry cleanup. Unknown cost coverage is not a budget guarantee; no expiry scheduler is installed. |
+| **3 — Baseline completion** | Azure VNet flow logs, GCP organization policies, ownership/adoption checks | Remaining work: add the optional controls, verify shared-setting ownership and adoption, and test conflicts with existing account/project/subscription configuration. |
+| **4 — Maintenance and upgrades** | Guided upgrades and application recovery; smaller command modules | Implemented pinned Kubernetes upgrade plans with repeatable gates, selected-application restore tests, and measured recovery evidence. New operations use separate modules; splitting the entire existing CLI and proving workload-specific compatibility remain future work. |
 
-These are proposals, not shipped features. The existing [roadmap](https://github.com/nimeshbuilds/cloudseed/blob/main/ROADMAP.md) already includes several of them. New clouds, hypervisors and additional catalog items should follow stronger evidence and lifecycle guarantees for the current support matrix.
+The implemented workflows are documented in the [operations guide](../guides/operations.md) and
+[scenarios 16–19](../scenarios/index.md#operational-readiness-walkthroughs), with concrete CLI, agent, MCP and console
+routes. See [operations verification](operations-verification.md) for recorded checks and the
+[roadmap](https://github.com/nimeshbuilds/cloudseed/blob/main/ROADMAP.md) for remaining work. New clouds, hypervisors
+and additional catalog items should follow stronger evidence and lifecycle guarantees for the current support matrix.
 
 ## Verification boundaries
 

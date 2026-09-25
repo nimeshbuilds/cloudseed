@@ -28,3 +28,33 @@ description: Cost analysis and savings with the cloudseed CLI - `cloudseed finop
    Label such a saving "not managed by cloudseed", with no cloudseed command and no cloudseed estimate.
 5. Always show the user the concrete command for each saving and its estimated monthly impact; never destroy anything
    yourself. When a saving has no cloudseed command, say so - never invent a `--var`.
+
+## Operational workflows across interfaces
+
+Use `cloudseed ops list --json` for the installed contract before selecting parameters. The CLI form is
+`cloudseed ops ACTION <cloud> --env <name> --params '{...}' --json`; MCP exposes `cloudseed_ops_ACTION` with
+hyphens replaced by underscores and individual JSON fields. The console uses All actions → Operations & readiness.
+Preview changes before `--approve` / MCP `confirm:true`, honoring explicit authorization already given by the user.
+
+- `health`/`network` use local evidence by default; `live:true` queries deployed resources. An active network probe
+  additionally needs `active:true` and approval, creates a temporary workload and reports its cleanup.
+- `profile` previews lab/team/production topology and incomplete costs. `spec-export`, `spec-validate`, `spec-diff`
+  and `spec-import` handle a versioned document without credentials/keys/state/runtime paths. Import/profile approval
+  saves configuration only; Terraform apply, platform installs and backup schedules are separate approved actions.
+- `policy-check` shows budget coverage and destructive plan actions. Never invent a complete estimate or suppress
+  an unknown cost to satisfy a budget. `expiry-cleanup` requires saved elapsed expiry, saved opt-in and explicit
+  approval for the exact environment; it never schedules future destruction or purges recovery state.
+- `drift` is read-only. `upgrade-plan` needs an exact supported version, recent completed backup and operator
+  compatibility review; `upgrade-apply` takes the fresh saved plan and repeats identity/readiness gates. It has no
+  automatic downgrade guarantee.
+- `recovery-plan`/`recovery-test` use a separate restricted namespace; review network isolation and external effects.
+  Inspect object/data/volume coverage, measured RTO/RPO and asynchronous cleanup. Do not equate an object restore
+  with proven application/database recovery.
+- `acceptance` is preview-only without explicitly supplied sandbox identity, region, estimate, deadline and SSH
+  source. Live execution additionally needs live + allow_cloud_changes + approval; retain cleanup evidence.
+- `release-verify` checks a trusted digest and optional GitHub attestation without executing the artifact. A local
+  digest match without verified provenance stays incomplete. `credentials-backend` can migrate storage to an
+  available native keychain; never read or print credential values.
+
+Follow scenarios 16–19 and the interface/coverage guide for complete workflows. Reports may remain INCOMPLETE when
+live accounts/tools or manual reviews are absent. State the checks actually run and the limits of their evidence.

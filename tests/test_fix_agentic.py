@@ -747,7 +747,7 @@ class BuiltinAgentPolicyTests(unittest.TestCase):
                     "inventory": ["inventory", "aws"], "output": ["output", "aws"], "update-ip": ["update-ip", "aws"],
                     "deps": ["deps", "status"], "skill": ["skill", "list"], "node": ["node", "list"],
                     "platform": ["platform", "list"], "finops": ["finops", "estimate"], "chaos": ["chaos", "list"],
-                    "dr": ["dr", "status"], "scan": ["scan", "reports"]}.get(cmd, [cmd])
+                    "dr": ["dr", "status"], "scan": ["scan", "reports"], "ops": ["ops", "list"]}.get(cmd, [cmd])
             with self.subTest(cmd=cmd):
                 ns, final = builtin_agent._parse(argv + ["-y"])
                 self.assertEqual(final[0], "-y")
