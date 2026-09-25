@@ -51,8 +51,8 @@ or is cancelled, inspect cluster/provider status and operation artifacts before 
 or restore can continue after the local process is interrupted, and cleanup may need manual review.
 
 MCP also bounds inputs and resources: HTTP/stdio requests are limited to 16 MiB, batches to 32 entries and 16 MiB
-of replies, individual regular resource files to 256 KiB, and environment listings to 200 entries/2 MiB. Oversized
-or unsupported resource reads fail clearly; split broad requests into smaller reads when a limit is reached.
+of replies, individual regular resource files to 256 KiB, and environment listings to 200 entries/2 MiB
+with at most 64 nested JSON levels. Oversized or unsupported resource reads fail clearly; split broad requests into smaller reads when a limit is reached.
 
 In the console, select the environment, open **All actions → Operations & readiness**, choose the action and fill
 its named fields. Object inputs such as spec or Terraform plan accept JSON. Environment and cloud are separate fields. Actions that change resources or save configuration

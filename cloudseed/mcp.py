@@ -112,6 +112,7 @@ MAX_BATCH = 32
 MAX_RESOURCE = 2 * 1024 * 1024
 MAX_RESOURCE_FILE = 256 * 1024
 MAX_RESOURCE_ENVS = 200
+MAX_RESOURCE_DEPTH = 64
 MAX_SESSIONS = 256             # HTTP sessions kept (least recently used are evicted)
 SESSION_TTL = 24 * 3600        # idle HTTP sessions older than this are dropped
 KEEP_BACKUPS = 5               # client-config backups kept per client (plus the first one, which is never pruned)
@@ -1199,6 +1200,20 @@ def _resource_text(path: Path) -> str:
     return data.decode("utf-8")
 
 
+def _resource_json(path: Path):
+    data = json.loads(_resource_text(path))
+    pending = [(data, 0)]
+    while pending:
+        value, depth = pending.pop()
+        if depth > MAX_RESOURCE_DEPTH:
+            raise ValueError("Resource JSON exceeds 64 nested levels")
+        if isinstance(value, dict):
+            pending.extend((child, depth + 1) for child in value.values())
+        elif isinstance(value, list):
+            pending.extend((child, depth + 1) for child in value)
+    return data
+
+
 def _environments() -> list[dict]:
     envs = []
     size = 0
@@ -1207,7 +1222,7 @@ def _environments() -> list[dict]:
             raise ValueError("Environment resource exceeds 200 entries; use cloudseed_list and targeted inventory calls")
         item: dict = {"id": e.id, "cloud": e.cloud, "env": e.name, "workdir": str(e.dir)}
         try:
-            cfg = json.loads(_resource_text(e.config_path))
+            cfg = _resource_json(e.config_path)
             if not isinstance(cfg, dict):
                 raise ValueError("not a JSON object")
         except (OSError, ValueError, RecursionError, ui.Abort) as err:   # one broken env must not hide the others
@@ -1218,7 +1233,7 @@ def _environments() -> list[dict]:
             envs.append(item)
             continue
         try:
-            outputs = json.loads(_resource_text(e.dir / "outputs.json"))
+            outputs = _resource_json(e.dir / "outputs.json")
         except (OSError, ValueError, RecursionError):
             outputs = {}
             item["outputs_note"] = "Saved outputs are unavailable, invalid or exceed the resource size limit"
@@ -1696,7 +1711,12 @@ class _Ordered:
 
 def _is_tool_call(payload) -> bool:
     if isinstance(payload, list):
-        return any(_is_tool_call(m) for m in payload)
+        # JSON-RPC permits one batch level; an entry which is itself an array is
+        # an invalid request, never a recursively nested batch. Newer Python JSON
+        # decoders accept deeper arrays than Python function recursion permits.
+        return len(payload) <= MAX_BATCH and any(
+            isinstance(m, dict) and m.get("method") == "tools/call" and m.get("id") is not None
+            for m in payload)
     return isinstance(payload, dict) and payload.get("method") == "tools/call" and payload.get("id") is not None
 
 

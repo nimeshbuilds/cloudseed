@@ -72,11 +72,11 @@ class ResourceBounds(unittest.TestCase):
                 e.config_path.write_text('{"region":"us-east-1"}')
                 (e.dir / 'outputs.json').write_text('{}')
             deep = '[' * 1100 + ']' * 1100
-            envs[0].config_path.write_text(deep)
+            envs[0].config_path.write_text('{"nested":' + '[' * 100 + '0' + ']' * 100 + '}')
             (envs[1].dir / 'outputs.json').write_text(deep)
             with mock.patch.object(paths.Env, 'list_all', return_value=envs):
                 resources = mcp._environments()
-            self.assertIn('RecursionError', resources[0]['error'])
+            self.assertIn('ValueError', resources[0]['error'])
             self.assertEqual(resources[1]['outputs'], {})
             self.assertIn('outputs_note', resources[1])
             self.assertEqual(resources[2]['config']['region'], 'us-east-1')
@@ -116,7 +116,7 @@ class ResourceBounds(unittest.TestCase):
         self.assertEqual(messages[-1]['id'], 5)
         self.assertIn('result', messages[-1])
 
-    def test_deep_json_is_parse_error_followed_by_usable_transport(self):
+    def test_deep_json_is_rejected_and_transport_answers_next_ping(self):
         deep = b'[' * 1100 + b']' * 1100 + b'\n'
         ping = b'{"jsonrpc":"2.0","id":7,"method":"ping"}\n'
         output = io.BytesIO()
@@ -126,8 +126,26 @@ class ResourceBounds(unittest.TestCase):
              mock.patch.object(mcp.sys, 'stdout', SimpleNamespace(buffer=output)):
             self.assertEqual(mcp.serve(), 0)
         messages = [json.loads(line) for line in output.getvalue().splitlines()]
-        self.assertEqual(messages[0]['error']['code'], -32700)
+        # Decoder recursion limits differ across supported Python versions. A
+        # decoded nested array is an invalid batch entry; either rejection must
+        # leave the stdio transport running for the following valid request.
+        rejected = messages[0][0] if isinstance(messages[0], list) else messages[0]
+        self.assertIn(rejected['error']['code'], (-32700, -32600))
         self.assertEqual(messages[-1]['id'], 7)
+
+    def test_tool_detection_checks_only_one_legal_batch_level(self):
+        tool = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call'}
+        self.assertTrue(mcp._is_tool_call(tool))
+        self.assertTrue(mcp._is_tool_call([{'id': 2, 'method': 'ping'}, tool]))
+        self.assertFalse(mcp._is_tool_call([[tool]]))
+        nested = tool
+        for _ in range(5000):
+            nested = [nested]
+        self.assertFalse(mcp._is_tool_call(nested))
+        with mock.patch.object(mcp, 'call_tool') as call:
+            result = mcp.dispatch([nested], mcp.Session({}))
+        self.assertEqual(result[0]['error']['code'], -32600)
+        call.assert_not_called()
 
 
 if __name__ == '__main__':

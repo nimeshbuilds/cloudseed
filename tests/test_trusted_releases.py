@@ -1,10 +1,12 @@
 """Release integrity/provenance are distinct; publishing is restricted to tested version tags."""
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import re
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -128,8 +130,73 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertIn("--verify-tag", publish)
         self.assertIn("subject-checksums:", workflow)
         self.assertIn("sbom-path:", workflow)
+        self.assertEqual(workflow.count("python3 scripts/generate-sbom.py"), 2)
+        self.assertNotIn("anchore/sbom-action", workflow)
         for platform in ("linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64"):
             self.assertIn(platform, workflow)
+
+
+class PinnedSBOMTests(unittest.TestCase):
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location("generate_sbom", ROOT / "scripts" / "generate-sbom.py")
+        self.sbom = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.sbom)
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.folder = Path(self.temp.name)
+
+    def test_download_checksum_mismatch_prevents_extraction_and_execution(self):
+        def download(argv, **kwargs):
+            self.assertEqual(argv[0], "curl")
+            self.assertIn("https://github.com/anchore/syft/releases/download/v1.52.0/syft_1.52.0_linux_amd64.tar.gz", argv)
+            Path(argv[-1]).write_bytes(b"corrupted or substituted release bytes")
+        with mock.patch.object(self.sbom.platform, "system", return_value="Linux"), \
+                mock.patch.object(self.sbom.platform, "machine", return_value="x86_64"), \
+                mock.patch.object(self.sbom.subprocess, "run", side_effect=download) as run, \
+                mock.patch.object(self.sbom.tarfile, "open") as extract:
+            with self.assertRaisesRegex(ValueError, "checksum mismatch"):
+                self.sbom.install_syft(self.folder)
+        extract.assert_not_called()
+        self.assertEqual(run.call_count, 1)
+        self.assertFalse((self.folder / "syft").exists())
+
+    def test_verified_archive_extracts_only_the_named_regular_binary(self):
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+            for name, data in (("syft", b"fixture executable"), ("../outside", b"do not extract")):
+                member = tarfile.TarInfo(name)
+                member.size = len(data)
+                archive.addfile(member, io.BytesIO(data))
+        payload = buffer.getvalue()
+        def download(argv, **kwargs):
+            Path(argv[-1]).write_bytes(payload)
+        with mock.patch.object(self.sbom.platform, "system", return_value="Darwin"), \
+                mock.patch.object(self.sbom.platform, "machine", return_value="arm64"), \
+                mock.patch.dict(self.sbom.SHA256, {("darwin", "arm64"): hashlib.sha256(payload).hexdigest()}), \
+                mock.patch.object(self.sbom.subprocess, "run", side_effect=download):
+            binary = self.sbom.install_syft(self.folder)
+        self.assertEqual(binary.read_bytes(), b"fixture executable")
+        self.assertEqual(binary.stat().st_mode & 0o777, 0o755)
+        self.assertEqual(sorted(p.name for p in self.folder.iterdir()), ["syft", "syft.tar.gz"])
+
+    def test_output_requires_valid_complete_spdx_and_local_image_source(self):
+        output = self.folder / "image.sbom.json"
+        valid = json.dumps({"spdxVersion": "SPDX-2.3", "packages": []}).encode()
+        def scan(argv, **kwargs):
+            self.assertEqual(argv[1:3], ["scan", "docker:cloudseed:release"])
+            self.assertEqual(kwargs["env"]["SYFT_CHECK_FOR_APP_UPDATE"], "false")
+            Path(argv[-1].split("=", 1)[1]).write_bytes(valid)
+        with mock.patch.object(self.sbom, "install_syft", return_value=self.folder / "verified-syft"), \
+                mock.patch.object(self.sbom.subprocess, "run", side_effect=scan):
+            self.assertEqual(self.sbom.main(["--image", "cloudseed:release", "--output", str(output)]), 0)
+        self.assertEqual(output.read_bytes(), valid)
+        output.write_bytes(b"prior complete report")
+        with mock.patch.object(self.sbom, "install_syft", return_value=self.folder / "verified-syft"), \
+                mock.patch.object(self.sbom.subprocess, "run", side_effect=scan), \
+                mock.patch.object(self.sbom, "MAX_SBOM_BYTES", 10):
+            with self.assertRaisesRegex(ValueError, "do not truncate"):
+                self.sbom.main(["--image", "cloudseed:release", "--output", str(output)])
+        self.assertEqual(output.read_bytes(), b"prior complete report")
 
 
 if __name__ == "__main__":
