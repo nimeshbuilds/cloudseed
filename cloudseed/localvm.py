@@ -1209,14 +1209,35 @@ def env_vm_bundle(bundle_name: str, prefix: str) -> bool:
     return bool(prefix) and re.fullmatch(re.escape(prefix) + _BUNDLE_SUFFIX, bundle_name) is not None
 
 
-def vmrun_list(host: dict) -> list[str]:
-    """The .vmx paths of the running VMs."""
+def vmrun_list(host: dict, *, strict: bool = False) -> list[str]:
+    """The .vmx paths of running VMs; destructive callers require a verified list."""
     try:
-        out = subprocess.run([str(host["vmrun"]), "-T", "fusion" if host["product"] == "fusion" else "ws", "list"],
-                             capture_output=True, text=True, timeout=60).stdout
-    except (OSError, subprocess.SubprocessError):
+        result = subprocess.run([str(host["vmrun"]), "-T", "fusion" if host["product"] == "fusion" else "ws", "list"],
+                                capture_output=True, text=True, timeout=60)
+        if result.returncode != 0:
+            raise RuntimeError((result.stderr or result.stdout or f"exit {result.returncode}").strip())
+        lines = (result.stdout or "").strip().splitlines()
+        count = re.fullmatch(r"Total running VMs:\s*(\d+)", lines[0].strip()) if lines else None
+        running = [line.strip() for line in lines[1:] if line.strip()]
+        if count is None or int(count.group(1)) != len(running):
+            raise RuntimeError("vmrun returned an incomplete or unrecognized running-VM list")
+        return running
+    except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+        if strict:
+            raise ui.Abort(f"Cannot establish which VMware VMs are running: {exc}. "
+                           "No further VM files were removed. Restore vmrun access and retry destroy.") from exc
         return []
-    return [line.strip() for line in (out or "").splitlines()[1:] if line.strip()]
+
+
+def _cleanup_vmrun(host: dict, operation: str, vmx: Path, *args: str) -> None:
+    cmd = [str(host["vmrun"]), "-T", "fusion" if host["product"] == "fusion" else "ws", operation, str(vmx), *args]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if result.returncode != 0:
+            raise RuntimeError((result.stderr or result.stdout or f"exit {result.returncode}").strip())
+    except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+        raise ui.Abort(f"VMware {operation} failed for {vmx}: {exc}. No direct file cleanup was attempted for this bundle. "
+                       "Resolve the VMware error and retry destroy; keep the environment's state and configuration.") from exc
 
 
 def recorded_vmx_path(path, workdir=None) -> str:
@@ -1236,22 +1257,47 @@ def sweep_vms(host: dict, vm_dir: Path, prefix: str | None = None, known_vmx=(),
     Only bundles named like that environment's VMs (see env_vm_bundle) or holding a .vmx Terraform recorded for it
     (known_vmx; relative ones are taken from the environment's <workdir>/stack, see recorded_vmx_path) are touched.
     Everything else in vm_dir - the user's own VMs, other environments', other files - is left alone, and vm_dir itself
-    is only removed when remove_dir is set (cloudseed's own <workdir>/vms) and it is empty."""
+    is only removed when remove_dir is set (cloudseed's own <workdir>/vms) and it is empty.
+    Any uncertain stop/delete or failed filesystem cleanup aborts destroy so its configuration can be kept for a retry."""
     removed: list[str] = []
     vm_dir = Path(vm_dir)
-    if not vm_dir.is_dir():
+    try:
+        bundles = sorted(p for p in vm_dir.iterdir() if p.name.endswith(".vmwarevm"))
+    except FileNotFoundError:
         return removed
+    except OSError as exc:
+        raise ui.Abort(f"Cannot inspect VM directory {vm_dir}: {exc}. Check folder access and retry destroy.") from exc
     known = {recorded_vmx_path(p, workdir) for p in known_vmx if p}
-    running = {os.path.realpath(p) for p in vmrun_list(host)}
-    for bundle in sorted(vm_dir.glob("*.vmwarevm")):
-        vmxs = sorted(bundle.glob("*.vmx"))
-        if not (env_vm_bundle(bundle.name, prefix or "") or any(os.path.realpath(str(v)) in known for v in vmxs)):
+    for bundle in bundles:
+        known_bundle = any(os.path.dirname(p) == os.path.realpath(bundle) for p in known)
+        if not (env_vm_bundle(bundle.name, prefix or "") or known_bundle):
             continue
+        if bundle.is_symlink():
+            raise ui.Abort(f"Refusing to remove VM bundle symlink {bundle}. Check its target and retry destroy.")
+        try:
+            vmxs = sorted(p for p in bundle.iterdir() if p.suffix == ".vmx")
+        except OSError as exc:
+            raise ui.Abort(f"Cannot inspect VM bundle {bundle}: {exc}. Check folder access and retry destroy.") from exc
+        running = {os.path.realpath(p) for p in vmrun_list(host, strict=True)}
+        # Include a running VM whose VMX was removed or renamed after the scan.
+        in_bundle = {p for p in running if os.path.dirname(p) == os.path.realpath(bundle)}
+        for vmx in sorted(in_bundle):
+            _cleanup_vmrun(host, "stop", Path(vmx), "hard")
+        still_running = {os.path.realpath(p) for p in vmrun_list(host, strict=True)} if in_bundle else running
+        if any(os.path.dirname(p) == os.path.realpath(bundle) for p in still_running):
+            raise ui.Abort(f"VMware still reports a VM running in {bundle}. Its files were not removed. Stop it and retry destroy.")
         for vmx in vmxs:
-            if os.path.realpath(str(vmx)) in running:
-                subprocess.run([str(host["vmrun"]), "stop", str(vmx), "hard"], capture_output=True)
-            subprocess.run([str(host["vmrun"]), "deleteVM", str(vmx)], capture_output=True)
-        shutil.rmtree(bundle, ignore_errors=True)
+            _cleanup_vmrun(host, "deleteVM", vmx)
+        try:
+            try:
+                bundle.stat()
+            except FileNotFoundError:
+                pass   # deleteVM may already have removed the entire bundle
+            else:
+                shutil.rmtree(bundle)
+        except OSError as exc:
+            raise ui.Abort(f"Could not finish removing {bundle}: {exc}. Check folder permissions and retry destroy. "
+                           "Keep this environment's configuration until its remaining VM files are removed.") from exc
         removed.append(bundle.name)
     if remove_dir:
         try:

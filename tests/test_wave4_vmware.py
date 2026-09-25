@@ -472,7 +472,8 @@ class RecordedPathTests(unittest.TestCase):
         cwd = os.getcwd()
         os.chdir(self.elsewhere)
         self.addCleanup(os.chdir, cwd)
-        with mock.patch.object(localvm, "vmrun_list", return_value=[]), mock.patch.object(localvm.subprocess, "run"):
+        with mock.patch.object(localvm, "vmrun_list", return_value=[]), \
+                mock.patch.object(localvm.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "", "")):
             self.assertEqual(localvm.sweep_vms(host, self.vm_dir, prefix="cloudseed-lab", known_vmx=rel), [])
             self.assertTrue(self.bundle.exists())                      # without the working directory: not found
             self.assertEqual(localvm.sweep_vms(host, self.vm_dir, prefix="cloudseed-lab", known_vmx=rel,

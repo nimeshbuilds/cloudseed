@@ -153,11 +153,15 @@ In the reviewed `providers/vmdesktop/internal/provider/vm_resource.go`, `Delete`
 
 Required outcome: refuse deletion when running state cannot be established; abort if a running VM cannot be stopped; check filesystem cleanup errors and retain state on failure. Test fake stop failure, status failure, permission-denied removal, absent bundles, and a successful retry.
 
+**Remediation:** provider deletion now returns errors on status, stop, deleteVM, or filesystem failure. A successful stop is verified before files are removed, and failed-create cleanup follows the same rule. Cleanup uses the recorded VMX directory and refuses a renamed/additional running VM in that bundle. A partial deletion whose VMX is already gone stays in state through refresh so destroy can finish removing its remaining files. The Python leftover sweep also checks the running list, stop/delete results, and filesystem cleanup; failure aborts the CLI before it reports success or purges configuration. Fake-tool lifecycle tests cover each failure, an ineffective stop, missing storage, inaccessible files, and successful retries. These tests do not execute real VMware VMs.
+
 ### P1 — Record actual disk capacity after a failed initial expansion
 
 In the same file, `Create` warns if `vmware-vdiskmanager -x` fails and continues with the base size, but keeps the requested `DiskGB` in Terraform state. `Read` refreshes CPU and memory from VMX, not disk capacity. A VM requested with a larger disk can therefore be recorded as already having that capacity, preventing a subsequent unchanged plan from retrying the expansion. `Update` already does better by retaining old disk size on grow failure.
 
 Required outcome: determine actual VMDK capacity, record it honestly, and return an actionable error while preserving the created resource's identity. Add a failed-initial-grow test and a retry test.
+
+**Provider remediation:** create, read, and disk updates now read the monolithic sparse VMDK header written by `vmware-vdiskmanager -t 0`, recording whole GiB without rounding upward. An initial grow failure records the VM identity and actual capacity, returns an error, and leaves the new VM stopped. A start failure also retains identity. Terraform taints a failed create; a later apply safely replaces it after the underlying error is fixed. Existing-VM expansion failures can retry in place. An unreadable disk during refresh warns and preserves the last known capacity so normal destroy/replacement can still clean it up. Tests exercise both retry paths, capacity drift, invalid headers, and failure to establish that a VM is stopped before hardware changes.
 
 ### P1 — Add live cloud lifecycle evidence
 

@@ -138,7 +138,7 @@ class RecordedVmxTests(_Envs):
         host = {"found": True, "vmrun": "/nonexistent/vmrun", "product": "fusion"}
         with mock.patch.object(localvm, "detect_host", return_value=host), \
                 mock.patch.object(localvm, "vmrun_list", return_value=[]), \
-                mock.patch.object(localvm.subprocess, "run") as run:
+                mock.patch.object(localvm.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout="", stderr="")) as run:
             _capture(cli._destroy_local_leftovers, self.e, cfg, purge=False, known_vmx=known)
         self.assertFalse(self.bundle.exists())
         self.assertTrue(any("deleteVM" in c.args[0] for c in run.call_args_list))

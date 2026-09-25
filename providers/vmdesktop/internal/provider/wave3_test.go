@@ -34,7 +34,7 @@ func createVM(t *testing.T, h *harness) *resource.CreateResponse {
 	r := &vmResource{client: h.client}
 	empty := schemaOf(t, r)
 	base := filepath.Join(h.dir, "base.vmdk")
-	os.WriteFile(base, []byte("base"), 0o644)
+	writeDisk(t, base, 3)
 	resp := &resource.CreateResponse{State: empty}
 	r.Create(context.Background(), resource.CreateRequest{Plan: planFrom(t, empty, vmPlan(h, base))}, resp)
 	return resp
