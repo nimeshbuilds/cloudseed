@@ -23,6 +23,8 @@ commands or defaults; such changes are called out under **Changed**.
 - Preserve packaged assets when detached MCP/console services and console jobs outlive their launching process.
 - Keep generated NIC MAC addresses unknown until creation with the updated Terraform framework.
 - Refuse environment mutations when their lock cannot be acquired or recorded, including unsupported native Windows locking.
+- Preserve recoverable VMware state on disk/cleanup failures, verify a VM is stopped before removing its bundle, and report actual disk capacity.
+- Bound console event-stream memory for slow readers while preserving replay, gap markers and job completion.
 
 ## [0.1.0] - 2026-09-24
 

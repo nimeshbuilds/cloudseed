@@ -16,6 +16,15 @@ Cloudseed has three execution runtimes: the Python checkout, an all-in-one Linux
 
 The framework review used the [upstream changelog](https://github.com/hashicorp/terraform-plugin-framework/blob/v1.19.0/CHANGELOG.md). The provider passed race tests and vet using both Go 1.27.1 and its exact minimum Go 1.25.0, plus builds for macOS arm64/amd64, Linux arm64/amd64 and Windows amd64. A Windows cross-build verifies compilation, not a working Windows control plane.
 
+## Defects exposed by the additional checks
+
+- **Standalone service lifetime:** a detached MCP/console process or console job could reuse its parent's PyInstaller extraction directory and lose assets when the parent exited. Detached copies now request independent extraction directories. The binary tests exercise HTTP resources and a job that survives console shutdown and is recovered on restart.
+- **VMware lifecycle:** failure to grow a disk or remove a VM could leave reported state inconsistent with the filesystem or power state. Regression coverage includes actual capacity, failed creation and retry, stop/delete errors, renamed running VM configurations, and partial cleanup. An independent test uses the real Terraform CLI with simulated VMware tools to verify failed creation produces tracked, tainted state that can be replaced, and a corrupt disk still permits normal destroy.
+- **Environment locking:** missing lock support, filesystem errors and unexpected locking failures could silently continue. Environment-changing commands now stop before entering their mutation body; read-only discovery still works.
+- **Slow console readers:** each SSE connection could accumulate an unlimited queue of job lines. Streams now use coalesced notifications and replay the job's bounded history, including omission markers and stable event IDs. A blocked-reader regression proves output production and completion remain nonblocking without retaining an unlimited backlog.
+
+Local Python 3.14.6 validation passed **3,431 source tests** (21 optional skips). The actual macOS arm64 executable passed all **10 CLI end-to-end tests**, **91 agent/MCP scenario checks**, **66 console/FinOps scenario checks**, and the detached-job regression. Native container checks passed on Linux amd64 and arm64. These counts describe the dependency-review runs before the subsequent lock and cleanup regressions were added; use the latest workflow logs for the final integrated count.
+
 ## Coverage by boundary
 
 | Boundary | Automated checks | What still needs a live target |
