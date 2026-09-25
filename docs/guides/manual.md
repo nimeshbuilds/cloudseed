@@ -403,7 +403,8 @@ terraform/<cloud>-bootstrap/  remote state storage (aws, gcp, azure)
 providers/vmdesktop/       cloudseed's own Terraform provider for VMware Fusion / Workstation (Go)
 templates/gitlab-ci/       CI pipeline template (cs platform template gitlab-ci)
 skills/                    agent skills (SKILL.md)
-scripts/                   install.sh, build-bundle.sh, container-entrypoint.sh, gen-docs.py (docs/reference/ pages)
+scripts/                   install.sh, build-bundle.sh, container-entrypoint.sh, gen-docs.py (docs/reference/ pages),
+                           build-brand-assets.py (SVG artwork and optional PNG exports)
 Makefile                   install, uninstall, fmt, validate, tftest, provider, test, image, bundle, clean
 Dockerfile                 all-in-one runtime image
 docs/ + mkdocs.yml         documentation site (MkDocs Material, theme overrides in overrides/): getting started,

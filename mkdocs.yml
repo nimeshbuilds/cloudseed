@@ -4,7 +4,7 @@
 site_name: cloudseed
 site_url: https://nimeshbuilds.github.io/cloudseed/
 site_description: >-
-  Secure multi-cloud landing zones and a production Kubernetes platform on AWS, GCP, Azure and local VMware
+  Secure multi-cloud landing zones and a Kubernetes platform on AWS, GCP, Azure and local VMware
   from one command. Terraform + Ansible, a web console, an MCP server and AI-agent mode. Open source.
 site_author: Nimesh
 repo_name: nimeshbuilds/cloudseed
@@ -26,24 +26,18 @@ theme:
     edit: material/pencil-outline
     view: material/eye-outline
   palette:
-    - media: "(prefers-color-scheme)"
-      toggle:
-        icon: material/brightness-auto
-        name: Switch to light mode
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
+    - scheme: default
       primary: custom
       accent: custom
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
+    - scheme: slate
       primary: custom
       accent: custom
       toggle:
-        icon: material/brightness-auto
-        name: Switch to system preference
+        icon: material/weather-sunny
+        name: Switch to light mode
   features:
     - announce.dismiss
     - content.action.edit
@@ -200,6 +194,11 @@ nav:
       - Agent skills: reference/skills.md
   - About:
       - Architecture: about/architecture.md
+      - Engineering review:
+          - Overview: development/index.md
+          - Application runtime audit: development/runtime-audit.md
+          - Infrastructure audit: development/infrastructure-audit.md
+          - CI diagnosis and repairs: development/ci-repair.md
       - FAQ: about/faq.md
       - Changelog: about/changelog.md
       - Roadmap: https://github.com/nimeshbuilds/cloudseed/blob/main/ROADMAP.md

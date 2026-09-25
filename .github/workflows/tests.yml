@@ -36,6 +36,10 @@ jobs:
           python-version: ${{ matrix.python }}
           # no `cache: pip`: the CLI and its tests use the standard library only, nothing is pip-installed
 
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: "24"
+
       # tests/test_cli_e2e.py renders and `terraform validate`s every target, and its vmware dry-run builds the
       # VMware provider from providers/vmdesktop, so the suite needs Terraform and Go (no cloud access, no VMs)
       - uses: hashicorp/setup-terraform@v4.0.1
@@ -63,7 +67,15 @@ jobs:
           CLOUDSEED_HOME="$(mktemp -d)"
           export CLOUDSEED_HOME
           python --version
-          python -m unittest discover -s tests
+          set -o pipefail
+          python -m unittest discover -s tests 2>&1 | tee "$RUNNER_TEMP/unit-tests.log"
+
+      - uses: actions/upload-artifact@v7.0.1
+        if: failure()
+        with:
+          name: unit-logs-${{ matrix.os }}-python-${{ matrix.python }}
+          path: ${{ runner.temp }}/unit-tests.log
+          retention-days: 7
 
   terraform:
     name: terraform (fmt, validate, test)
@@ -184,6 +196,9 @@ jobs:
       # Cloud scenarios run with --dry-run (Terraform render + validate, no credentials); scenarios that need
       # VMware VMs are skipped unless their opt-in variable is set, which it never is here.
       - name: tests/scenarios/run.sh
+        env:
+          TMPDIR: ${{ runner.temp }}
+          SCN_KEEP_LOGS: "1"
         run: |
           if [ ! -f tests/scenarios/run.sh ]; then
             echo "::notice title=scenarios::tests/scenarios/run.sh not found, nothing to run"
@@ -191,3 +206,10 @@ jobs:
           fi
           export CLOUDSEED_HOME="$RUNNER_TEMP/cloudseed-scenarios"
           bash tests/scenarios/run.sh
+
+      - uses: actions/upload-artifact@v7.0.1
+        if: failure()
+        with:
+          name: scenario-logs
+          path: ${{ runner.temp }}/cs-scenarios-run-*/logs
+          retention-days: 7

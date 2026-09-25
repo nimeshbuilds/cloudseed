@@ -1,8 +1,8 @@
 ---
 template: home.html
-title: Multi-cloud landing zones and a Kubernetes platform from one command
+title: Your cloud. A stronger foundation.
 description: >-
-  Secure landing zones on AWS, Google Cloud, Azure and local VMware plus a production Kubernetes platform, from one command. Web console, MCP server, open source.
+  Build private landing zones and a Kubernetes platform on AWS, Google Cloud, Azure and local VMware. Terraform and Ansible you own, with a CLI, web console and MCP server.
 hide:
   - navigation
   - toc
@@ -13,7 +13,7 @@ hide:
 
 <!-- The landing page is overrides/home.html; this text is what the site search indexes for the home page. -->
 
-Secure, multi-cloud landing zones and a production Kubernetes platform - AWS, Google Cloud, Azure and local VMware -
+Secure, multi-cloud landing zones and a Kubernetes platform - AWS, Google Cloud, Azure and local VMware -
 from one command. Terraform and Ansible underneath; a web console, an MCP server and AI-agent mode on top.
 
 - **Landing zones on four targets**: VPC / VNet, public and private subnets, NAT, flow logs, a hardened bastion reachable

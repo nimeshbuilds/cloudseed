@@ -1152,8 +1152,17 @@ def _azure_auth(env_: dict) -> list[str]:
         return ["--sp-env-auth"]
     if str(env_.get("ARM_USE_MSI", "")).strip().lower() in ("1", "true", "yes"):
         return ["--managed-identity-auth"]
-    if deps.find("az"):
-        return ["--az-cli-auth"]
+    az = deps.find("az")
+    if az:
+        # Merely having Azure CLI installed does not mean it has a login. Refuse
+        # before downloading Prowler or starting a scan against an empty profile.
+        try:
+            account = subprocess.run([az, "account", "show", "-o", "json"], env=env_,
+                                     capture_output=True, text=True, timeout=15)
+            if account.returncode == 0 and json.loads(account.stdout or "{}").get("id"):
+                return ["--az-cli-auth"]
+        except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
+            pass
     raise ui.Abort("prowler needs Azure credentials: az login (cloudseed install az), or a service principal in ARM_CLIENT_ID / "
                    "ARM_CLIENT_SECRET / ARM_TENANT_ID (certificate or OIDC logins need az here).", code=2)
 

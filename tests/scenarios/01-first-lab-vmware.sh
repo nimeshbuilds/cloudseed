@@ -8,7 +8,8 @@ need python3 terraform go
 step "1. Check your machine"
 ok cs --version
 has "^ *cloudseed [0-9]+\.[0-9]+"
-ok cs doctor vmware
+# A dry-run host may lack VMware; doctor reports that with exit 1.
+if [[ "$SCN_LIVE" == "1" ]]; then ok cs doctor vmware; else any cs doctor vmware; fi
 has "VMware Fusion / Workstation"
 ok cs help
 has "CORE COMMANDS"
