@@ -6,6 +6,7 @@ import contextlib
 import io
 import json
 import os
+import shlex
 import shutil
 import signal
 import stat
@@ -689,11 +690,6 @@ def _interactive_sigint(test: unittest.TestCase) -> None:
 
 FAKE_TF = """#!/bin/sh
 case "$2" in
-  apply)
-    trap 'echo "Interrupt received."; sleep 1; echo "Gracefully shut down."; exit 1' INT
-    echo "Creating..."
-    i=0; while [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done
-    echo "never interrupted"; exit 0 ;;
   keys)
     echo "Outputs:"
     printf -- '-----BEGIN ''OPENSSH PRIVATE KEY-----\\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmU\\nAAAAC3NzaC1lZDI1NTE5AAAAIB\\n-----END OPENSSH PRIVATE KEY-----\\n'
@@ -702,12 +698,43 @@ esac
 exit 0
 """
 
+FAKE_TF_APPLY = """import signal
+import time
+
+interrupts = 0
+
+def interrupt(signum, frame):
+    global interrupts
+    interrupts += 1
+    print("Interrupt received.", flush=True)
+    if interrupts != 1:
+        raise SystemExit("Unexpected repeated interrupt")
+    time.sleep(0.25)
+    print("Gracefully shut down.", flush=True)
+    print(f"Interrupt count: {interrupts}", flush=True)
+    raise SystemExit(1)
+
+signal.signal(signal.SIGINT, interrupt)
+print("Creating...", flush=True)
+time.sleep(30)
+print("never interrupted", flush=True)
+"""
+
 
 class TerraformRunTests(unittest.TestCase):
-    def fake(self):
-        d = Path(tempfile.mkdtemp())
+    def fake(self, applying=False):
+        temporary = tempfile.TemporaryDirectory(prefix="cs-fake-tf-")
+        self.addCleanup(temporary.cleanup)
+        d = Path(temporary.name)
         exe = d / "terraform"
-        exe.write_text(FAKE_TF)
+        if applying:
+            # Terraform handles SIGINT in its own process. A shell trap around a loop of external sleep commands
+            # also tests the host shell's signal/fork behaviour, which has been intermittent on macOS runners.
+            script = d / "apply.py"
+            script.write_text(FAKE_TF_APPLY)
+            exe.write_text(f'#!/bin/sh\nexec {shlex.quote(sys.executable)} {shlex.quote(str(script))} "$@"\n')
+        else:
+            exe.write_text(FAKE_TF)
         exe.chmod(0o755)
         t = tf.Terraform.__new__(tf.Terraform)
         t.workdir, t.binary = d, str(exe)
@@ -716,31 +743,42 @@ class TerraformRunTests(unittest.TestCase):
     @unittest.skipIf(sys.platform == "win32", "POSIX signals")
     def test_interrupt_waits_for_terraform_to_stop(self):
         _interactive_sigint(self)
-        t = self.fake()
+        t = self.fake(applying=True)
         seen = []
-        real_print = print
+        ready, stopped = threading.Event(), threading.Event()
+        sender_lock = threading.Lock()
 
         def ctrl_c_once_applying():
-            # the fake terraform prints "Creating..." once its INT trap is set: press Ctrl-C then, however slow the machine
-            end = time.time() + 15
-            while time.time() < end and not any("Creating..." in line for line in seen):
-                time.sleep(0.05)
-            os.kill(os.getpid(), signal.SIGINT)
+            # Readiness is emitted after the child's handler is installed; no timing-based guess or late signal.
+            if ready.wait(15):
+                with sender_lock:
+                    if not stopped.is_set():
+                        os.kill(os.getpid(), signal.SIGINT)
         timer = threading.Thread(target=ctrl_c_once_applying, daemon=True)
 
         def capture(*a, **k):
-            seen.append(" ".join(str(x) for x in a))
+            text = " ".join(str(x) for x in a)
+            seen.append(text)
+            if "Creating..." in text:
+                ready.set()
         with mock.patch("builtins.print", capture), quiet():
             timer.start()
-            started = time.time()
-            with self.assertRaises(KeyboardInterrupt):
-                t.run("apply", "-input=false")
-        real_print  # noqa: B018
+            started = time.monotonic()
+            try:
+                with self.assertRaises(KeyboardInterrupt):
+                    t.run("apply", "-input=false")
+            finally:
+                with sender_lock:
+                    stopped.set()
+                ready.set()
+                timer.join(2)
+        self.assertFalse(timer.is_alive(), "interrupt sender outlived its test")
         out = "".join(seen)
-        self.assertIn("Interrupt received.", out)        # terraform got exactly one SIGINT ...
+        self.assertEqual(out.count("Interrupt received."), 1)   # terraform got exactly one SIGINT ...
+        self.assertIn("Interrupt count: 1", out)
         self.assertIn("Gracefully shut down.", out)      # ... and its shutdown output was still read (no SIGPIPE)
         self.assertNotIn("never interrupted", out)
-        self.assertLess(time.time() - started, 20)
+        self.assertLess(time.monotonic() - started, 20)
 
     def test_multiline_private_keys_never_reach_the_log_or_an_agent(self):
         t = self.fake()
