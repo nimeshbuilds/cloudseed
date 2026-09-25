@@ -407,7 +407,10 @@ def _tunnel_file(env) -> Path:
 
 def _cmdline(pid: int) -> str:
     try:
-        return subprocess.run(["ps", "-p", str(pid), "-o", "command="], capture_output=True, text=True).stdout.strip()
+        # -ww: the whole line. procps cuts it at the terminal width ($COLUMNS, a terminal on stdin, else 80) even into a
+        # pipe, and what identifies our processes sits far to the right: the SSH tunnel's -L spec after the key and
+        # ssh options, the OpenVPN client's pid file path. A cut line reads as "PID reused by something else"
+        return subprocess.run(["ps", "-ww", "-p", str(pid), "-o", "command="], capture_output=True, text=True).stdout.strip()
     except OSError:
         return ""
 
