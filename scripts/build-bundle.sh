@@ -20,7 +20,8 @@ esac
 NAME="cloudseed-${OS}-${ARCH}"
 BIN="$ROOT/dist/$NAME"
 
-TF_VERSION="${TF_VERSION:-$(curl -fsSL https://checkpoint-api.hashicorp.com/v1/check/terraform | python3 -c 'import json,sys; print(json.load(sys.stdin)["current_version"])')}"
+TF_VERSION="${TF_VERSION:-1.16.4}"
+[[ "$TF_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "TF_VERSION must be X.Y.Z" >&2; exit 2; }
 echo "▸ Terraform ${TF_VERSION} for ${OS}/${ARCH}"
 
 mkdir -p "$BUILD/tfbin"
@@ -52,13 +53,16 @@ PY
 
 echo "▸ Preparing PyInstaller"
 python3 -m venv "$BUILD/venv"
-"$BUILD/venv/bin/pip" install --quiet --upgrade pip pyinstaller
+"$BUILD/venv/bin/pip" install --quiet "pyinstaller==6.22.3" "keyring==25.7.0"
 
 echo "▸ Building"
-"$BUILD/venv/bin/pyinstaller" --onefile --clean --noconfirm \
+PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" "$BUILD/venv/bin/pyinstaller" --onefile --clean --noconfirm \
   --name "$NAME" \
   --distpath "$ROOT/dist" --workpath "$BUILD/pyi" --specpath "$BUILD" \
   --paths "$ROOT" \
+  --collect-submodules cloudseed \
+  --collect-submodules keyring.backends \
+  --copy-metadata keyring \
   --add-data "$STAGE/terraform:terraform" \
   --add-data "$STAGE/skills:skills" \
   --add-data "$STAGE/ansible:ansible" \
@@ -74,6 +78,26 @@ SMOKE="$(mktemp -d)"
 trap 'rm -rf "$SMOKE"' EXIT
 export CLOUDSEED_HOME="$SMOKE/home"
 "$BIN" --version
+"$BIN" ops list --json > "$SMOKE/operations.json"
+python3 - "$SMOKE/operations.json" "$BIN" <<'PY'
+import hashlib, json, os, subprocess, sys
+from pathlib import Path
+rows = json.load(open(sys.argv[1]))
+assert isinstance(rows, list) and any(x["name"] == "health" for x in rows), "operational registry missing from binary"
+home = Path(os.environ["CLOUDSEED_HOME"])
+env = home / "envs" / "aws-bundle"
+env.mkdir(parents=True)
+(env / "config.json").write_text(json.dumps({"cloud": "aws", "env": "bundle", "vars": {"enable_kubernetes": True}}))
+artifact = home / "integrity-fixture"
+artifact.write_bytes(b"bundle-integrity-test")
+for args in (
+    ["health", "aws", "--env", "bundle"], ["network", "aws", "--env", "bundle"], ["acceptance", "aws"],
+    ["release-verify", "--params", json.dumps({"artifact": str(artifact), "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest()})],
+):
+    proc = subprocess.run([sys.argv[2], "ops", *args, "--json"], capture_output=True, text=True, timeout=30)
+    assert proc.returncode == 3, (args[0], proc.returncode, proc.stdout, proc.stderr)
+    assert json.loads(proc.stdout)["verdict"] == "INCOMPLETE", args[0]
+PY
 (cd "$SMOKE" && "$BIN" -y platform template gitlab-ci >/dev/null) && test -f "$SMOKE/.gitlab-ci.yml" \
   || { echo "smoke test failed: platform template (templates/ not bundled?)" >&2; exit 1; }
 LISTING="$("$BUILD/venv/bin/pyi-archive_viewer" -l "$BIN" 2>/dev/null || true)"

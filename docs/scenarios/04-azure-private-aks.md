@@ -162,6 +162,37 @@ cs node remove aks-default-30114873-vmss000002 azure --env prod
 
 Every node change is an undo point: `cs undo azure --env prod` scales the pool back.
 
+## Use an agent, MCP or the UI
+
+Follow the same numbered steps and verification/cleanup conditions through your chosen interface. Start with the
+[interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
+placeholders before any live request.
+
+**Agent prompt:** “Follow the private AKS walkthrough for azure-prod in my subscription. Preview the cost and subscription-wide Defender setting, then verify the private API, node egress and identity before platform installation.”
+
+**MCP starter:** `cloudseed_setup` with:
+
+```json
+{
+  "cloud": "azure",
+  "env": "prod",
+  "subscription_id": "00000000-0000-0000-0000-000000000000",
+  "region": "westeurope",
+  "allow_ip": "203.0.113.7/32",
+  "vars": {
+    "enable_kubernetes": true,
+    "enable_defender": true
+  },
+  "dry_run": true
+}
+```
+
+Use the matching tool for each remaining step in this page; the [command-to-tool map](interfaces-and-coverage.md#command-to-interface-map)
+lists the tool family. Keep `azure-prod` selected. Preview first; add `confirm:true` only to the specific change
+you have authorized. Host bootstrap, provider login and interactive applications retain their documented human steps.
+
+**UI:** Create → Azure: replace the subscription placeholder, select prod and westeurope, and review Defender/Kubernetes settings. Dry run first; after approved apply use Environments → prod → Kubernetes. All actions exposes node, platform and FinOps tools. Host Azure login remains required.
+
 ## Verify it worked
 
 ```bash

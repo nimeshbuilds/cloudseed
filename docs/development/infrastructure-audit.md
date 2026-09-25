@@ -72,7 +72,9 @@ The stack enables required APIs without disabling them on destroy, creates a cus
 
 The bastion defaults to Debian 12 and `e2-micro`, has a static external IP, dedicated service account, Shielded VM settings, and either an explicit metadata SSH key or optional OS Login IAM. The names module handles service-account, cluster, firewall, and storage naming constraints.
 
-GKE is a **zonal** cluster and node pool. It uses private nodes and a private API by default, VPC-native networking, Dataplane V2, Workload Identity, shielded COS/containerd nodes, control-plane/system/workload logs, managed Prometheus, and the REGULAR release channel. The configured Kubernetes version is a minimum; the release channel can advance it. Nodes auto-repair and auto-upgrade. Requested node count also contributes to the autoscaling floor.
+GKE defaults to a **zonal** cluster and node pool. The operations update adds `kubernetes_regional` and explicit
+`kubernetes_node_locations`; production profiles request regional control-plane topology and three node zones,
+with node counts expressed per zone. Provider zone/quota availability still needs live validation. It uses private nodes and a private API by default, VPC-native networking, Dataplane V2, Workload Identity, shielded COS/containerd nodes, control-plane/system/workload logs, managed Prometheus, and the REGULAR release channel. The configured Kubernetes version is a minimum; the release channel can advance it. Nodes auto-repair and auto-upgrade. Requested node count also contributes to the autoscaling floor.
 
 The project baseline sets `_Default` log retention and optionally authoritative `allServices` Data Access audit configuration. The CLI has keep-on-destroy handling for shared project settings. External secrets receives project-level `roles/secretmanager.secretAccessor`; external DNS receives DNS privileges, and Velero receives a dedicated bucket/identity when requested. The external-secrets scope is broader than AWS's default prefix policy.
 
@@ -86,7 +88,8 @@ The stack creates an environment resource group, VNet, public/private subnets wi
 
 The bastion defaults to an Ubuntu 24.04 VM with Standard public IP, SSH-key-only authentication, Secure Boot, vTPM, a system-assigned identity, and Standard SSD storage. FIPS mode selects the Ubuntu Pro FIPS marketplace image and manages subscription-level marketplace terms.
 
-AKS uses the Free tier, a private API by default, a public DNS name resolving to the private API address for VPN/tunnel reachability, Azure CNI Overlay, Azure network policy, NAT-gateway egress, OIDC/workload identity, Azure Policy, a managed identity, and an autoscaling AzureLinux system pool. Pool rotation uses a temporary pool name. The NSG allows pod-to-pod overlay addresses and bastion ingress-service access. Logs go to the environment's Log Analytics workspace. Node count is ignored after creation while min/max govern the autoscaler.
+AKS defaults to the Free tier; `kubernetes_sku_tier=Standard` and `kubernetes_zones` are now supported and used by
+production profiles. Regional VM/zone availability remains a provider check. AKS has a private API by default, a public DNS name resolving to the private API address for VPN/tunnel reachability, Azure CNI Overlay, Azure network policy, NAT-gateway egress, OIDC/workload identity, Azure Policy, a managed identity, and an autoscaling AzureLinux system pool. Pool rotation uses a temporary pool name. The NSG allows pod-to-pod overlay addresses and bastion ingress-service access. Logs go to the environment's Log Analytics workspace. Node count is ignored after creation while min/max govern the autoscaler.
 
 External secrets gets a federated identity, but users must grant it the relevant Key Vault permissions. External DNS and Velero have cloud prerequisites; Velero adds storage and scoped role assignments. The optional VPN has its own VM and public IP.
 

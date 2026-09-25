@@ -184,3 +184,23 @@ variable "fips_mode" {
   type        = bool
   default     = false
 }
+
+variable "kubernetes_sku_tier" {
+  description = "AKS control-plane tier: Free or Standard (paid uptime SLA)."
+  type        = string
+  default     = "Free"
+  validation {
+    condition     = contains(["Free", "Standard"], var.kubernetes_sku_tier)
+    error_message = "kubernetes_sku_tier must be Free or Standard."
+  }
+}
+
+variable "kubernetes_zones" {
+  description = "AKS system-pool availability zones. Confirm support in the selected region and VM size; changing zones rotates nodes."
+  type        = list(string)
+  default     = []
+  validation {
+    condition     = alltrue([for z in var.kubernetes_zones : contains(["1", "2", "3"], z)]) && length(distinct(var.kubernetes_zones)) == length(var.kubernetes_zones)
+    error_message = "kubernetes_zones must contain distinct Azure availability zone strings: 1, 2, 3."
+  }
+}

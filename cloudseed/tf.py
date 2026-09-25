@@ -688,7 +688,26 @@ class Terraform:
                 self.plan(out, targets=targets)
             return
 
+    def _guardrails(self, planfile):
+        config_path = self.workdir.parent / "config.json"
+        if not config_path.exists():
+            return
+        cfg = json.loads(config_path.read_text())
+        if not cfg.get("operations"):
+            return
+        from . import clouds, guardrails
+        if not planfile:
+            raise ui.Abort("This environment has deployment guardrails; create and review a saved plan before apply.", code=2)
+        cloud = clouds.get(cfg["cloud"])
+        env = paths.Env(cloud.key, cfg["env"], workdir=self.workdir.parent)
+        proc = self.run("show", "-json", str(planfile), capture=True, check=False)
+        if proc.returncode:
+            raise ui.Abort("Cannot inspect the exact Terraform plan for deployment guardrails; nothing was applied.", code=2)
+        plan = json.loads(proc.stdout)
+        guardrails.enforce(cloud, env, cfg, plan=plan)
+
     def apply(self, planfile: str | None = None, auto_approve: bool = False, targets: tuple[str, ...] = ()) -> None:
+        self._guardrails(planfile)
         args = ["apply", "-input=false"]
         if planfile:
             args.append(planfile)

@@ -88,18 +88,18 @@ class Links(unittest.TestCase):
 class Scenarios(unittest.TestCase):
     # the words each page's verification banner uses -> the README's label
     LABELS = {"Verified live on VMware": "live", "Verified live on macOS (local": "live (local)",
-              "Verified with --dry-run": "dry-run"}
+              "Verified with --dry-run": "dry-run", "Locally verified; cloud deployment pending": "local/fixtures; cloud pending"}
 
     def test_every_scenario_is_listed_with_its_page_label(self):
         found = re.findall(r"^\| (\d\d) \| \[[^\]]+\]\(" + re.escape(SITE) + r"scenarios/(\d\d-[a-z0-9-]+)/\) \|[^|]+\| ([^|]+?) \|$",
                            TEXT, re.M)
         pages = sorted(p.stem for p in (ROOT / "docs" / "scenarios").glob("[0-9][0-9]-*.md"))
-        self.assertEqual(len(pages), 15)
+        self.assertEqual(len(pages), 19)
         self.assertEqual(sorted(slug for _, slug, _ in found), pages)
         for num, slug, label in found:
             self.assertTrue(slug.startswith(num), slug)
             page = (ROOT / "docs" / "scenarios" / f"{slug}.md").read_text(encoding="utf-8")
-            banner = re.search(r'^!!! \w+ "(Verified[^"]*)"', page, re.M)
+            banner = re.search(r'^!!! \w+ "((?:Verified|Locally verified)[^"]*)"', page, re.M)
             self.assertTrue(banner, slug)
             want = next((v for k, v in self.LABELS.items() if banner.group(1).startswith(k)), None)
             self.assertEqual(label.strip(), want, f"{slug}: the page says '{banner.group(1)}'")
@@ -116,7 +116,7 @@ class SiteLabels(unittest.TestCase):
 
     def _banner(self, slug: str) -> str:
         page = (ROOT / "docs" / "scenarios" / f"{slug}.md").read_text(encoding="utf-8")
-        return re.search(r'^!!! \w+ "(Verified[^"]*)"', page, re.M).group(1)
+        return re.search(r'^!!! \w+ "((?:Verified|Locally verified)[^"]*)"', page, re.M).group(1)
 
     def test_landing_page_scenario_links(self):
         links = re.findall(r"['\"]scenarios/(\d\d-[a-z0-9-]+)/['\"]", self.HOME)

@@ -23,4 +23,4 @@ from one command. Terraform and Ansible underneath; a web console, an MCP server
 - **Resilience**: Velero DR drills, Chaos Mesh experiments, CIS / STIG / vulnerability scans and FIPS 140 mode.
 - **Web console, MCP server and AI-agent mode**, with undo, an audit trail and `cs explain` for every feature.
 
-Start with the [quickstart](getting-started/quickstart.md) or browse the [15 scenarios](scenarios/index.md).
+Start with the [quickstart](getting-started/quickstart.md) or browse the [19 scenarios](scenarios/index.md).

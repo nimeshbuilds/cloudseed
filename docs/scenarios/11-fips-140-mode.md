@@ -141,6 +141,37 @@ cs scan fips vmware --env fipslab
 `fips-updates` and reboots into the FIPS kernel, so the SSH check prints `1`. Add
 `--var enable_kubernetes=true` for an RKE2 cluster in FIPS mode.
 
+## Use an agent, MCP or the UI
+
+Follow the same numbered steps and verification/cleanup conditions through your chosen interface. Start with the
+[interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
+placeholders before any live request.
+
+**Agent prompt:** “Follow the FIPS walkthrough for aws-fips. Preview the exact target changes and paid image requirements, explain unsupported combinations, then verify the resulting host/node evidence after approved deployment. Do not call an unverified deployment certified.”
+
+**MCP starter:** `cloudseed_setup` with:
+
+```json
+{
+  "cloud": "aws",
+  "env": "fips",
+  "region": "us-east-1",
+  "allow_ip": "203.0.113.7/32",
+  "vars": {
+    "fips_mode": true,
+    "enable_kubernetes": true,
+    "enable_vpn": true
+  },
+  "dry_run": true
+}
+```
+
+Use the matching tool for each remaining step in this page; the [command-to-tool map](interfaces-and-coverage.md#command-to-interface-map)
+lists the tool family. Keep `aws-fips` selected. Preview first; add `confirm:true` only to the specific change
+you have authorized. Host bootstrap, provider login and interactive applications retain their documented human steps.
+
+**UI:** Create → AWS: select fips and set fips_mode plus the Kubernetes/VPN options from the chosen branch of this page. Preview and inspect cost before apply. Use Resilience → Scans → fips and host checks for verification; enter paid subscription credentials only through Credentials or provider login.
+
 ## Verify it worked
 
 ```bash

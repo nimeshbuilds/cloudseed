@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="https://nimeshbuilds.github.io/cloudseed/getting-started/quickstart/"><b>Quick start</b></a> ·
-  <a href="https://nimeshbuilds.github.io/cloudseed/scenarios/"><b>15 scenarios</b></a> ·
+  <a href="https://nimeshbuilds.github.io/cloudseed/scenarios/"><b>19 scenarios</b></a> ·
   <a href="https://nimeshbuilds.github.io/cloudseed/"><b>Docs</b></a> ·
   <a href="https://nimeshbuilds.github.io/cloudseed/guides/mcp/"><b>MCP server</b></a> ·
   <a href="https://github.com/nimeshbuilds/cloudseed/discussions"><b>Discussions</b></a>
@@ -161,7 +161,7 @@ the same `cloudseed` command.
 </td>
 <td valign="top">
 
-**MCP server (30 tools)**<br>
+**MCP server (48 tools)**<br>
 `cs setup mcp` exposes every feature to Claude Code, Claude Desktop, Codex, Cursor, Windsurf, Gemini CLI and VS Code.
 Anything destructive refuses to run without `confirm=true`.
 
@@ -199,13 +199,31 @@ trail with redacted logs; `cs troubleshoot` recognises known failure signatures 
 </tr>
 </table>
 
-## 15 step-by-step scenarios
+## Operational readiness across every interface
 
-Every scenario is a page you can follow command by command, and a script in
+`cs ops list --json` exposes one contract for CLI, generated MCP tools, console forms and bundled skills:
+health/network diagnostics, lab/team/production deployment profiles, portable specs, budget/plan guardrails, explicit
+expiry cleanup, drift, pinned upgrade plans, application recovery, sandbox acceptance and release verification.
+Configuration saves and assessments never silently apply infrastructure. Missing live evidence stays incomplete.
+
+```bash
+cs ops health aws --env prod --json
+cs ops profile aws --env prod --profile production --json
+cs ops spec-export aws --env prod --output cloudseed.yaml --json
+cs ops acceptance aws --json
+```
+
+Production profiles wire per-AZ AWS NAT, regional GKE with explicit node zones, and AKS Standard tier/zones into
+Terraform. Provider availability and cost coverage still need review. [Read the operations guide](https://nimeshbuilds.github.io/cloudseed/guides/operations/).
+
+## 19 step-by-step scenarios
+
+Every scenario has CLI steps plus concrete agent, MCP and UI routes, and a script in
 [`tests/scenarios/`](https://github.com/nimeshbuilds/cloudseed/tree/main/tests/scenarios) that runs exactly those
 commands. VMware scenarios are verified live on VMware Fusion, the agent and console scenarios live on a local machine;
 cloud scenarios are verified with `--dry-run` (Terraform rendered and validated, no account needed) and run for real
-with your cloud credentials.
+with your cloud credentials. New operational scenarios use local checks and deterministic fixtures; their live cloud
+steps remain unverified until a sandbox run is supplied.
 
 | # | Scenario | You end up with | Verified |
 |---|---|---|---|
@@ -224,6 +242,10 @@ with your cloud credentials.
 | 13 | [Day-2 operations](https://nimeshbuilds.github.io/cloudseed/scenarios/13-day-2-operations/) | nodes added and removed, settings changed, `cs undo`, audit trail, troubleshooting, credentials vault | live |
 | 14 | [AI agents and MCP](https://nimeshbuilds.github.io/cloudseed/scenarios/14-ai-agents-and-mcp/) | agentic mode, skills and redaction; the MCP server connected to your AI client | live (local) |
 | 15 | [Web console and FinOps](https://nimeshbuilds.github.io/cloudseed/scenarios/15-web-console-and-finops/) | the console wizard, environment actions, explain panel, activity and cost estimates | live (local) |
+| 16 | [Health and private networking](https://nimeshbuilds.github.io/cloudseed/scenarios/16-health-and-network/) | current observations and an approved in-cluster egress probe | local/fixtures; cloud pending |
+| 17 | [Profiles, specs and guardrails](https://nimeshbuilds.github.io/cloudseed/scenarios/17-profiles-specs-and-guardrails/) | real topology profiles, portable intent, cost/plan gates and explicit expiry | local/fixtures; cloud pending |
+| 18 | [Drift, upgrades and recovery](https://nimeshbuilds.github.io/cloudseed/scenarios/18-upgrades-and-recovery/) | identity-bound upgrade plans and isolated application recovery checks | local/fixtures; cloud pending |
+| 19 | [Acceptance and trusted releases](https://nimeshbuilds.github.io/cloudseed/scenarios/19-acceptance-and-releases/) | no-account previews, sandbox lifecycle, keychain and artifact evidence | local/fixtures; cloud pending |
 
 **[Browse all scenarios and the feature coverage matrix](https://nimeshbuilds.github.io/cloudseed/scenarios/)**
 

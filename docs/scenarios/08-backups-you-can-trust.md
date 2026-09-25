@@ -163,6 +163,30 @@ cs dr status
 
 The cron expression is evaluated by Velero in UTC (02:00 UTC here); each backup is kept for 30 days.
 
+## Use an agent, MCP or the UI
+
+Follow the same numbered steps and verification/cleanup conditions through your chosen interface. Start with the
+[interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
+placeholders before any live request.
+
+**Agent prompt:** “On vmware-lab, inspect Velero, plan the resilience group and follow this backup walkthrough. Verify backup storage and a Completed backup, then run a restore drill only after I approve its workload changes. Show volume and cleanup evidence.”
+
+**MCP starter:** `cloudseed_dr` with:
+
+```json
+{
+  "cloud": "vmware",
+  "env": "lab",
+  "action": "status"
+}
+```
+
+Use the matching tool for each remaining step in this page; the [command-to-tool map](interfaces-and-coverage.md#command-to-interface-map)
+lists the tool family. Keep `vmware-lab` selected. Preview first; add `confirm:true` only to the specific change
+you have authorized. Host bootstrap, provider login and interactive applications retain their documented human steps.
+
+**UI:** Select vmware-lab → Resilience → Disaster recovery. Install prerequisites through Platform, then choose backup, schedule, restore or test and enter the names/namespace/TTL from each step. Confirm changes and inspect report/cleanup results in Activity and Reports.
+
 ## Verify it worked
 
 ```bash

@@ -30,7 +30,7 @@ flowchart TB
     prompt --> agent["Agent: builtin / claude / codex /<br/>gemini / grok + cloudseed skills"]
   end
   subgraph mcp["cs setup mcp"]
-    clients["Claude Code · Claude Desktop · Cursor<br/>VS Code · Codex · Gemini CLI · Windsurf"] -- "HTTP :7433 + bearer token<br/>or stdio" --> server["cloudseed MCP server<br/>30 tools · resources · prompts"]
+    clients["Claude Code · Claude Desktop · Cursor<br/>VS Code · Codex · Gemini CLI · Windsurf"] -- "HTTP :7433 + bearer token<br/>or stdio" --> server["cloudseed MCP server<br/>48 tools · resources · prompts"]
   end
   agent -- "cloudseed ... only<br/>destructive steps wait for you" --> cli["cloudseed CLI"]
   server --> cli
@@ -170,7 +170,7 @@ changes and restores first run as a preview. `-i` opens the interactive session 
     ```text
       ◆ 1/3  Server   how the MCP server runs: one shared local HTTP service, or stdio launched by each client
       ● Starting the MCP server on http://127.0.0.1:7433/mcp...
-      ✔ MCP server up: http://127.0.0.1:7433/mcp   (launchd, protocol 2025-06-18, 30 tools, 11 resources, 4 prompts)
+      ✔ MCP server up: http://127.0.0.1:7433/mcp   (launchd, protocol 2025-06-18, 48 tools, 11 resources, 4 prompts)
 
       ◆ 2/3  Clients   register the server with the MCP clients on this machine
       ◆ 3/3  How to use it   the guide below is also saved to ~/.cloudseed/mcp/CONNECT.md
@@ -201,7 +201,7 @@ cs mcp guide
 
 ??? example "Expected output of `cs mcp test --http`"
     ```text
-      ✔ MCP round-trip over http://127.0.0.1:7433/mcp: initialize, tools/list (30 tools), resources/read skill,
+      ✔ MCP round-trip over http://127.0.0.1:7433/mcp: initialize, tools/list (48 tools), resources/read skill,
         tools/call cloudseed_list
     ```
 
@@ -227,6 +227,28 @@ cs mcp disconnect claude-desktop
 ```bash
 cs mcp serve
 ```
+
+## Use an agent, MCP or the UI
+
+Follow the same numbered steps and verification/cleanup conditions through your chosen interface. Start with the
+[interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
+placeholders before any live request.
+
+**Agent prompt:** “Inspect my cloudseed agent and MCP setup, list the available tools and load the architecture/platform skills. Demonstrate read-only environment discovery and explain the permissions for changes. Ask me to complete host login or service bootstrap steps that cannot run inside an agent.”
+
+**MCP starter:** `cloudseed_skill` with:
+
+```json
+{
+  "name": "architecture"
+}
+```
+
+Use the matching tool for each remaining step in this page; the [command-to-tool map](interfaces-and-coverage.md#command-to-interface-map)
+lists the tool family. Keep `vmware-lab` selected. Preview first; add `confirm:true` only to the specific change
+you have authorized. Host bootstrap, provider login and interactive applications retain their documented human steps.
+
+**UI:** Open Agents & MCP to select the agent/model, inspect MCP status and connect clients; use its task box for the page’s agent prompt. Host authentication/service installation is performed by the human. After connection, use All actions for equivalent deterministic tools and inspect Activity.
 
 ## Verify it worked
 

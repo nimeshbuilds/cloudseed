@@ -59,6 +59,8 @@ Override any of these with `--var name=value` on `cloudseed setup gcp` (JSON for
 | `vpn_machine_type` | `"e2-micro"` | Machine type of the VPN host (a name such as e2-micro). |
 | `vpn_port` | `1194` | UDP port the OpenVPN server listens on (unused with vpn\_type = tailscale: a Tailscale VPN host uses 41641). |
 | `fips_mode` | `false` | FIPS 140 mode for the whole environment: Ubuntu Pro FIPS bastion (unless bastion\_image is set) and VPN images, COS nodes on GKE (FIPS-validated kernel crypto), FIPS-only SSH algorithms, ECDSA SSH keys. |
+| `kubernetes_regional` | `false` | Create a regional GKE control plane instead of a zonal one. Changing this replaces the cluster; review the plan and backups first. |
+| `kubernetes_node_locations` | `[]` | Explicit GKE node zones. Empty preserves the zonal default; regional clusters require explicit zones so node counts and costs are predictable. Node count/min/max are per zone. |
 
 ## Set by cloudseed
 
@@ -97,7 +99,7 @@ Read them with `cloudseed output gcp --env <env>` (add `--json` for scripts).
 | `ssh_user` | Login user on the bastion and VPN host (the OS Login POSIX username when enable\_os\_login is on). |
 | `kubernetes_cluster_name` | GKE cluster name (null when Kubernetes is disabled). |
 | `kubernetes_endpoint` | GKE control-plane endpoint (private unless kubernetes\_public\_endpoint = true; null when Kubernetes is disabled). |
-| `kubernetes_location` | Zone of the cluster, for gcloud container clusters get-credentials (null when Kubernetes is disabled). |
+| `kubernetes_location` | Zone or region of the cluster, for gcloud container clusters get-credentials (null when Kubernetes is disabled). |
 | `kubernetes_node_pool` | Name of the GKE node pool, for gcloud container clusters resize / node-pools describe (null when Kubernetes is disabled). |
 | `kubernetes_master_version` | GKE control-plane version as of the last apply: the REGULAR release channel upgrades it past kubernetes\_version, which is only a minimum; the bastion's kubectl follows it (null when Kubernetes is disabled). |
 | `vpn_public_ip` | Public IP of the VPN host (null when disabled). |

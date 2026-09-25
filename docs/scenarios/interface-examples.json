@@ -1,0 +1,214 @@
+{
+  "01": {
+    "cloud": "vmware",
+    "env": "first",
+    "tool": "cloudseed_setup",
+    "arguments": {
+      "cloud": "vmware",
+      "env": "first",
+      "dry_run": true
+    }
+  },
+  "02": {
+    "cloud": "aws",
+    "env": "prod",
+    "tool": "cloudseed_setup",
+    "arguments": {
+      "cloud": "aws",
+      "env": "prod",
+      "region": "us-west-2",
+      "allow_ip": "203.0.113.7/32",
+      "dry_run": true
+    }
+  },
+  "03": {
+    "cloud": "gcp",
+    "env": "prod",
+    "tool": "cloudseed_setup",
+    "arguments": {
+      "cloud": "gcp",
+      "env": "prod",
+      "project_id": "my-gcp-project",
+      "region": "europe-west1",
+      "allow_ip": "203.0.113.7/32",
+      "vars": {
+        "enable_os_login": true,
+        "enable_kubernetes": true
+      },
+      "dry_run": true
+    }
+  },
+  "04": {
+    "cloud": "azure",
+    "env": "prod",
+    "tool": "cloudseed_setup",
+    "arguments": {
+      "cloud": "azure",
+      "env": "prod",
+      "subscription_id": "00000000-0000-0000-0000-000000000000",
+      "region": "westeurope",
+      "allow_ip": "203.0.113.7/32",
+      "vars": {
+        "enable_kubernetes": true,
+        "enable_defender": true
+      },
+      "dry_run": true
+    }
+  },
+  "05": {
+    "cloud": "vmware",
+    "env": "lab",
+    "tool": "cloudseed_k8s",
+    "arguments": {
+      "cloud": "vmware",
+      "env": "lab",
+      "action": "info"
+    }
+  },
+  "06": {
+    "cloud": "vmware",
+    "env": "lab",
+    "tool": "cloudseed_platform",
+    "arguments": {
+      "cloud": "vmware",
+      "env": "lab",
+      "action": "plan",
+      "items": [
+        "basek8s"
+      ]
+    }
+  },
+  "07": {
+    "cloud": "vmware",
+    "env": "lab",
+    "tool": "cloudseed_platform",
+    "arguments": {
+      "cloud": "vmware",
+      "env": "lab",
+      "action": "plan",
+      "items": [
+        "minio",
+        "cloudnative-pg",
+        "ollama",
+        "open-webui"
+      ]
+    }
+  },
+  "08": {
+    "cloud": "vmware",
+    "env": "lab",
+    "tool": "cloudseed_dr",
+    "arguments": {
+      "cloud": "vmware",
+      "env": "lab",
+      "action": "status"
+    }
+  },
+  "09": {
+    "cloud": "vmware",
+    "env": "lab",
+    "tool": "cloudseed_chaos",
+    "arguments": {
+      "cloud": "vmware",
+      "env": "lab",
+      "action": "list"
+    }
+  },
+  "10": {
+    "cloud": "vmware",
+    "env": "lab",
+    "tool": "cloudseed_scan",
+    "arguments": {
+      "cloud": "vmware",
+      "env": "lab",
+      "kind": "architecture",
+      "profile": "lab",
+      "json": true
+    }
+  },
+  "11": {
+    "cloud": "aws",
+    "env": "fips",
+    "tool": "cloudseed_setup",
+    "arguments": {
+      "cloud": "aws",
+      "env": "fips",
+      "region": "us-east-1",
+      "allow_ip": "203.0.113.7/32",
+      "vars": {
+        "fips_mode": true,
+        "enable_kubernetes": true,
+        "enable_vpn": true
+      },
+      "dry_run": true
+    }
+  },
+  "12": {
+    "cloud": "aws",
+    "env": "vpn",
+    "tool": "cloudseed_vpn",
+    "arguments": {
+      "cloud": "aws",
+      "env": "vpn",
+      "action": "status"
+    }
+  },
+  "13": {
+    "cloud": "vmware",
+    "env": "lab",
+    "tool": "cloudseed_node",
+    "arguments": {
+      "cloud": "vmware",
+      "env": "lab",
+      "action": "list"
+    }
+  },
+  "14": {
+    "cloud": "vmware",
+    "env": "lab",
+    "tool": "cloudseed_skill",
+    "arguments": {
+      "name": "architecture"
+    }
+  },
+  "15": {
+    "cloud": "aws",
+    "env": "web",
+    "tool": "cloudseed_finops",
+    "arguments": {
+      "cloud": "aws",
+      "env": "web",
+      "action": "estimate",
+      "save": true
+    }
+  },
+  "16": {
+    "tool": "cloudseed_ops_health",
+    "arguments": {
+      "cloud": "aws",
+      "env": "prod",
+      "live": true
+    }
+  },
+  "17": {
+    "tool": "cloudseed_ops_profile",
+    "arguments": {
+      "cloud": "aws",
+      "env": "prod",
+      "profile": "production"
+    }
+  },
+  "18": {
+    "tool": "cloudseed_ops_drift",
+    "arguments": {
+      "cloud": "aws",
+      "env": "prod"
+    }
+  },
+  "19": {
+    "tool": "cloudseed_ops_acceptance",
+    "arguments": {
+      "cloud": "aws"
+    }
+  }
+}

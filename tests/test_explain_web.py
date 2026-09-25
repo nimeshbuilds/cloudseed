@@ -119,7 +119,8 @@ def table_values() -> dict[str, list[str]]:
 def action_queries() -> list[str]:
     """What actionXq() gives every action of the registry: XQ_ACTION's exception, else 'command <name, _ as ->'."""
     table = dict(re.findall(r"(cloudseed_\w+): '([^']*)'", JS[JS.index("const XQ_ACTION"):JS.index("\n", JS.index("const XQ_ACTION"))]))
-    return [table.get(a["name"]) or "command " + a["name"].replace("cloudseed_", "").replace("_", "-") for a in webui.actions_catalog()]
+    return ["command ops" if a["name"].startswith("cloudseed_ops_") else table.get(a["name"]) or
+            "command " + a["name"].replace("cloudseed_", "").replace("_", "-") for a in webui.actions_catalog()]
 
 
 class QueriesResolve(unittest.TestCase):

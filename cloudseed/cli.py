@@ -3182,7 +3182,9 @@ def _destroy_targets(cloud, env, cfg, t, resources: list[str], targets: list[str
         if deletes and _needs_cluster_drain(cloud, outputs_before) and any(c["type"] in _CLUSTER_TYPES for c in deletes):
             _drain_cluster_for_destroy(cloud, env, cfg, outputs_before)
         try:
-            t.apply("tfplan")
+            from . import guardrails
+            with guardrails.allow_destroy_for(env.id):
+                t.apply("tfplan")
         except TerraformError:
             audit.refresh(env, t, "destroy-targets-failed", {"targets": targets})
             raise
@@ -3294,7 +3296,9 @@ def _destroy_everything(cloud, env, cfg, t, resources: list[str], args, settings
             if _needs_cluster_drain(cloud, outputs_before):
                 _drain_cluster_for_destroy(cloud, env, cfg, outputs_before)
             try:
-                t.apply("tfplan")
+                from . import guardrails
+                with guardrails.allow_destroy_for(env.id):
+                    t.apply("tfplan")
             except TerraformError:
                 audit.refresh(env, t, "destroy-failed")
                 raise
@@ -3449,7 +3453,9 @@ def _handle_state_storage(cloud, env: paths.Env, cfg: dict, args) -> str | None:
     bt.init()
     bt.plan("tfplan", destroy=True)
     try:
-        bt.apply("tfplan")
+        from . import guardrails
+        with guardrails.allow_destroy_for(env.id):
+            bt.apply("tfplan")
     finally:
         (env.bootstrap_dir / "tfplan").unlink(missing_ok=True)
     if (cfg.get("state") or {}).get("type") == "remote":
@@ -5967,6 +5973,45 @@ def _scan_architecture(args, settings) -> int:
                 undo.record(env.id, f"scan architecture on {env.id}", "delete-paths", {"paths": produced}, minor=True)
     verdict = _report_verdict(made[0])
     return {"PASS": 0, "FAIL": 1}.get(verdict, 3)
+
+
+def cmd_ops(args, settings) -> int:
+    from . import operations
+    if args.ops_cmd == "list":
+        data = operations.contract()
+        if args.json:
+            print(json.dumps(data, indent=2))
+        else:
+            ui.panel("Operational workflows", [(x["name"], x["description"]) for x in data])
+            ui.info("Use cs ops ACTION [cloud] --env NAME --params '{...}' --json. Changes require --approve.")
+        return 0
+    try:
+        params = operations.parameters(args)
+        op = operations.OPERATIONS[args.ops_cmd]
+        with _json_stdout(args):
+            if op.requires_env:
+                _resolve_plain_env(args, settings, f"ops {args.ops_cmd}")
+                cloud = clouds.get(args.cloud)
+                env = paths.Env(cloud.key, args.env or _pick_env_name(args, cloud))
+                if not env.exists():
+                    raise _missing_env(args, cloud, env.name)
+                cfg = env.load()
+                _check_owner(env, cfg)
+                audit.attach(env)
+            else:
+                cloud = clouds.get(args.cloud) if args.cloud else None
+                env, cfg = None, {}
+            if op.changing(params) and not params.get("approve"):
+                raise ValueError("This operation needs explicit --approve after its effects are reviewed.")
+            result = operations.execute(args.ops_cmd, cloud, env, cfg, params)
+        if args.json:
+            print(json.dumps(result, indent=2, allow_nan=False))
+        else:
+            ui.panel(f"{args.ops_cmd}: {result.get('verdict', result.get('status', 'report'))}",
+                     [("Report", json.dumps(result, indent=2))])
+        return operations.exit_code(result)
+    except (ValueError, KeyError) as exc:
+        raise ui.Abort(str(exc), code=2) from exc
 
 
 def cmd_scan(args, settings) -> int:
@@ -10679,6 +10724,8 @@ def build_parser() -> argparse.ArgumentParser:
         return _add_parser(name, **kw)
 
     sub.add_parser = add_parser
+    from . import operations
+    operations.parser(sub)
 
     def add_sub(subs, parent: str, name: str, description: str, **kw):   # deps install, skill show ...
         kw.setdefault("formatter_class", _HelpFormatter)
@@ -11039,7 +11086,7 @@ HANDLERS = {
     "troubleshoot": cmd_troubleshoot, "inventory": cmd_inventory, "env": cmd_env, "node": cmd_node,
     "platform": cmd_platform, "kubectl": cmd_ktool, "helm": cmd_ktool, "k9s": cmd_ktool,
     "databricks": cmd_managed, "snowflake": cmd_managed, "finops": cmd_finops, "explain": cmd_explain, "mcp": cmd_mcp,
-    "chaos": cmd_chaos, "dr": cmd_dr, "scan": cmd_scan, "ui": cmd_ui, "creds": cmd_creds, "undo": cmd_undo,
+    "ops": cmd_ops, "chaos": cmd_chaos, "dr": cmd_dr, "scan": cmd_scan, "ui": cmd_ui, "creds": cmd_creds, "undo": cmd_undo,
 }
 
 # ---------------------------------------------------------------- human-only commands
@@ -11127,6 +11174,11 @@ def _changes_nothing(args) -> bool:
     """A command line that only shows something (help, list, status, a read-only subcommand ...): cutting its output
     short loses nothing but output."""
     cmd = getattr(args, "cmd", None)
+    if cmd == "ops":
+        from . import operations
+        if args.ops_cmd == "list":
+            return True
+        return not operations.OPERATIONS[args.ops_cmd].changing(operations.parameters(args))
     if cmd in ("help", "explain", "list", "status", "output", "inventory", "troubleshoot", "doctor", "agents", "plan"):
         return True
     sub = {"mcp": ("mcp_cmd", ("status", "guide", "tools", "config", "logs", "test")), "ui": ("ui_cmd", ("status", "logs")),
@@ -11160,6 +11212,10 @@ def _silence_stdout() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    capture_args = list(sys.argv[1:] if argv is None else argv)
+    if capture_args[:1] == ["__capture"]:
+        from . import capture
+        return capture.main(capture_args[1:])
     argv = list(sys.argv[1:] if argv is None else argv)
     audit.begin(argv)
     rc = 0
@@ -11242,7 +11298,7 @@ def _dispatch(argv: list[str]) -> int:
         want = args.runtime or settings.get("runtime") or "auto"
         # troubleshoot / inventory / undo --list only read local files (troubleshoot reports missing tools itself), and
         # undo --drop only edits the undo journal: none of them needs Terraform or the hypervisor
-        reads_only = args.cmd in ("troubleshoot", "inventory") or \
+        reads_only = args.cmd in ("ops", "troubleshoot", "inventory") or \
             (args.cmd == "undo" and (getattr(args, "list", False) or getattr(args, "drop", False))) or \
             (args.cmd == "scan" and args.scan_cmd in ("architecture", "reports"))
         if args.cmd == "finops":

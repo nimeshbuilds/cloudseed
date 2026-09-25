@@ -77,7 +77,7 @@ step "6. Deploy the MCP server"
 # Exercise a real server without creating a login service from a throw-away home.
 ok cs setup mcp -y --no-service --client none --port "$PORT"
 has "MCP server up: http://127.0.0.1:$PORT/mcp"
-has "30 tools"
+has "48 tools"
 
 step "7. Check it and connect clients"
 ok cs mcp status
@@ -101,6 +101,11 @@ ok cs mcp config
 has "claude mcp add"
 ok cs mcp guide
 has "Your cloudseed MCP server"
+ok curl -s -X POST "http://127.0.0.1:$PORT/mcp" -H "Authorization: Bearer $(cat "$CLOUDSEED_HOME/mcp/token")" \
+  -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":19,"method":"tools/call","params":{"name":"cloudseed_ops_acceptance","arguments":{"cloud":"aws"}}}'
+has '"structuredContent"'
+has '"INCOMPLETE"'
+has '"live": false'
 
 step "8. Operate the server"
 ok cs mcp logs -n 20

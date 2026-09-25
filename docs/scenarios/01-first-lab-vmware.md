@@ -205,6 +205,30 @@ cs ssh vmware --env first -- sudo sshd -T | grep -E '^(passwordauthentication|pe
     passwordauthentication no
     ```
 
+## Use an agent, MCP or the UI
+
+Follow the same numbered steps and verification/cleanup conditions through your chosen interface. Start with the
+[interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
+placeholders before any live request.
+
+**Agent prompt:** “Create and inspect the VMware first lab from this walkthrough. Preview setup, show the planned resources, then use only the changes I authorize. Verify SSH access and inventory; keep destruction separate.”
+
+**MCP starter:** `cloudseed_setup` with:
+
+```json
+{
+  "cloud": "vmware",
+  "env": "first",
+  "dry_run": true
+}
+```
+
+Use the matching tool for each remaining step in this page; the [command-to-tool map](interfaces-and-coverage.md#command-to-interface-map)
+lists the tool family. Keep `vmware-first` selected. Preview first; add `confirm:true` only to the specific change
+you have authorized. Host bootstrap, provider login and interactive applications retain their documented human steps.
+
+**UI:** Create → VMware: use environment first and choose Dry run. Follow the numbered steps with Environments → first → status, output and inventory. Use All actions → SSH for noninteractive commands; an interactive login needs your terminal. Review Destroy separately.
+
 ## Verify it worked
 
 ```bash

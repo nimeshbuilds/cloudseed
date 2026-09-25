@@ -1,8 +1,12 @@
 # Private, VPC-native GKE cluster (Dataplane V2, Workload Identity, shielded nodes).
 variable "project_id" { type = string }
 variable "location" {
-  description = "Zone (zonal cluster) of the control plane and node pool."
+  description = "Zone or region of the control plane and node pool."
   type        = string
+}
+variable "node_locations" {
+  type    = list(string)
+  default = []
 }
 variable "region" {
   description = "Region for regional resources (the Velero GCS bucket): GCS rejects zones as bucket locations."
@@ -84,9 +88,10 @@ resource "google_project_iam_member" "nodes" {
 }
 
 resource "google_container_cluster" "this" {
-  project  = var.project_id
-  name     = local.name
-  location = var.location
+  project        = var.project_id
+  name           = local.name
+  location       = var.location
+  node_locations = length(var.node_locations) > 0 ? var.node_locations : null
 
   network    = var.network_id
   subnetwork = var.subnetwork_id
@@ -165,10 +170,11 @@ resource "google_container_cluster" "this" {
 }
 
 resource "google_container_node_pool" "default" {
-  project  = var.project_id
-  name     = var.node_pool_name
-  location = var.location
-  cluster  = google_container_cluster.this.name
+  project        = var.project_id
+  name           = var.node_pool_name
+  location       = var.location
+  node_locations = length(var.node_locations) > 0 ? var.node_locations : null
+  cluster        = google_container_cluster.this.name
 
   initial_node_count = var.node_count
 

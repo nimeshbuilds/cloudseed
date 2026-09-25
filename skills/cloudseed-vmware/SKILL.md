@@ -123,3 +123,11 @@ selects assessment policy, not deployment settings. Reports distinguish definite
 or manual-review evidence: PASS exits 0, FAIL 1, INCOMPLETE 3; invalid arguments exit 2. Read the
 cloudseed-architecture skill for evidence limits and next steps. `scan all` excludes this assessment.
 VMware checks are local infrastructure best practices, not an official cloud framework or certification.
+
+## Deployment profiles and operational readiness
+
+Preview `cloudseed ops profile vmware --env NAME --profile production --json` before saving. Profiles change actual
+settings only after approval and a separate apply. Use `cloudseed ops health vmware --env NAME --live --json` for
+current observations, `ops network` for egress diagnosis, and `ops list --json` for specs, guardrails, drift,
+upgrades, recovery and acceptance. Missing live evidence is incomplete. GKE node counts are per zone; AKS tier/zone
+availability needs provider validation; VMware remains a single physical host. See scenarios 16–19.

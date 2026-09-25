@@ -28,6 +28,7 @@ cloudseed platform list|status|info|plan|install|uninstall [group|item ...] [clo
     " ".join(platformmod.GROUPS) + """
 cloudseed platform ui · cloudseed platform template gitlab-ci      # expose installed UIs · write a CI template into the current dir
 cloudseed kubectl|helm|k9s [cloud --env NAME] <args>                              # tools on the current cluster
+cloudseed ops list --json · cloudseed ops ACTION [cloud --env NAME] --params '{...}' [--approve] --json  # health/network, profiles/specs, policy/expiry, drift/upgrades, recovery, acceptance; previews first
 cloudseed finops estimate|cloud|k8s|report [cloud --env NAME]                      # costs
 cloudseed chaos list|run|status|stop|report · cloudseed dr status|backups|backup|restore|schedule|test|describe|logs
 cloudseed scan cis|kube|images|host|stig|cloud|fips|architecture|all|reports [cloud --env NAME]

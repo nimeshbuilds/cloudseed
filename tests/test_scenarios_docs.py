@@ -57,6 +57,7 @@ AREAS = [
     ("Kubernetes", ["k8s", "env", "node", "kubectl", "helm", "k9s"]),
     ("Platform catalog", ["platform"]),
     ("Resilience and security", ["dr", "chaos", "scan"]),
+    ("Operational readiness", ["ops"]),
     ("Cost and data", ["finops", "databricks", "snowflake"]),
     ("AI agents and MCP", ["enable", "disable", "agents", "use", "model", "agentic", "do", "skill", "mcp"]),
     ("Console, safety and help", ["ui", "undo", "creds", "explain", "help"]),
@@ -66,7 +67,7 @@ AREAS = [
 SUB_DEST = {"k8s": "k8s_cmd", "vpn": "vpn_cmd", "env": "env_cmd", "node": "node_cmd", "platform": "platform_cmd",
             "dr": "dr_cmd", "chaos": "chaos_cmd", "scan": "scan_cmd", "finops": "finops_cmd", "mcp": "mcp_cmd",
             "ui": "ui_cmd", "creds": "creds_cmd", "enable": "feature", "disable": "feature", "deps": "deps_cmd",
-            "skill": "skill_cmd"}
+            "skill": "skill_cmd", "ops": "ops_cmd"}
 MANAGED_SUBS = ["connect", "test", "status", "CLI passthrough"]
 UNDO_SUBS = ["newest", "--list", "--global", "--id", "--drop"]
 SETUP_TARGETS = ["aws", "gcp", "azure", "vmware"]
@@ -327,7 +328,7 @@ def write_matrix() -> None:
 
 class ScenarioCommandsParse(unittest.TestCase):
     def test_pages_exist(self):
-        self.assertEqual(len(scenario_pages()), 15, "there are 15 scenario pages")
+        self.assertEqual(len(scenario_pages()), 19, "there are 19 scenario pages")
 
     def test_every_command_parses(self):
         problems, total = [], 0
@@ -366,7 +367,7 @@ class ScenarioPages(unittest.TestCase):
                 self.assertRegex(text, r"\A---\ntitle: .+\ndescription: .{60,}\n---\n", "front matter: title + description")
                 self.assertRegex(text, r"\n# \d\d · .+\n", "H1 with the scenario number")
                 self.assertIn("**Outcome:**", text)
-                self.assertRegex(text, r'!!! (success|info) "Verified (live on VMware Fusion 13\.6|with --dry-run|live)',
+                self.assertRegex(text, r'!!! (success|info) "(Verified (live on VMware Fusion 13\.6|with --dry-run|live)|Locally verified; cloud deployment pending)',
                                  "verification label")
                 self.assertIn("```mermaid", text)
                 self.assertRegex(text, r"\| :material-clock-outline: Time \|", "time / cost table")

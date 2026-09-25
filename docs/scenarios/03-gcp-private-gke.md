@@ -170,6 +170,37 @@ cs node scale gcp --env prod --count 3 --max 5
 `node scale` resizes the managed node pool through the GKE API and sets the autoscaler limits; `config.json` follows
 the live pool, so a later `setup` keeps it.
 
+## Use an agent, MCP or the UI
+
+Follow the same numbered steps and verification/cleanup conditions through your chosen interface. Start with the
+[interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
+placeholders before any live request.
+
+**Agent prompt:** “Follow the private GKE walkthrough for gcp-prod using my project and europe-west1. Preview OS Login and Kubernetes settings, then connect through the bastion, verify nodes and show the scaling change before applying it.”
+
+**MCP starter:** `cloudseed_setup` with:
+
+```json
+{
+  "cloud": "gcp",
+  "env": "prod",
+  "project_id": "my-gcp-project",
+  "region": "europe-west1",
+  "allow_ip": "203.0.113.7/32",
+  "vars": {
+    "enable_os_login": true,
+    "enable_kubernetes": true
+  },
+  "dry_run": true
+}
+```
+
+Use the matching tool for each remaining step in this page; the [command-to-tool map](interfaces-and-coverage.md#command-to-interface-map)
+lists the tool family. Keep `gcp-prod` selected. Preview first; add `confirm:true` only to the specific change
+you have authorized. Host bootstrap, provider login and interactive applications retain their documented human steps.
+
+**UI:** Create → GCP: provide the project, prod, europe-west1, OS Login and Kubernetes settings. Preview before apply. Environments → prod → Kubernetes exposes kubeconfig/tunnel; All actions → Nodes performs the reviewed scale. Authenticate with gcloud on the host first.
+
 ## Verify it worked
 
 ```bash

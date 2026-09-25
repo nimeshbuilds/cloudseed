@@ -160,6 +160,32 @@ evidence gives `INCOMPLETE` / exit 3 when there are no definite failures. An ass
 It is excluded from `scan all`. The earlier scenario script exercises security scans; architecture has its own
 automated tests. See the [Well-Architected guide](../guides/well-architected.md) for MCP, console and skill access.
 
+## Use an agent, MCP or the UI
+
+Follow the same numbered steps and verification/cleanup conditions through your chosen interface. Start with the
+[interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
+placeholders before any live request.
+
+**Agent prompt:** “Run the compliance walkthrough on vmware-lab after listing scanner prerequisites. Separate CIS, Kubernetes, image, host, STIG, FIPS and Well-Architected evidence. Explain missing tools and incomplete reports; do not silently modify infrastructure to make checks pass.”
+
+**MCP starter:** `cloudseed_scan` with:
+
+```json
+{
+  "cloud": "vmware",
+  "env": "lab",
+  "kind": "architecture",
+  "profile": "lab",
+  "json": true
+}
+```
+
+Use the matching tool for each remaining step in this page; the [command-to-tool map](interfaces-and-coverage.md#command-to-interface-map)
+lists the tool family. Keep `vmware-lab` selected. Preview first; add `confirm:true` only to the specific change
+you have authorized. Host bootstrap, provider login and interactive applications retain their documented human steps.
+
+**UI:** Select vmware-lab → Resilience → Scans. Run each scanner kind with the framework/host selections from the steps. Architecture uses its own lab/production profile and evidence age; Reports lists saved findings. Tool installation requires the host’s normal authorization.
+
 ## Verify it worked
 
 ```bash

@@ -9,6 +9,13 @@ import re
 from . import paths, secrets, ui
 
 FEATURES: dict[str, dict] = {
+    "operations": {
+        "what": "Shared operational workflows: health/network evidence, real deployment profiles, portable specs, cost/destructive guards, explicit expiry cleanup, drift, pinned upgrades, application recovery, sandbox acceptance and release verification.",
+        "files": ["cloudseed/operations.py shared contract and transports", "cloudseed/health.py diagnostics", "cloudseed/blueprints.py profiles/specs", "cloudseed/guardrails.py budget/plan/expiry", "cloudseed/lifecycle.py drift/upgrades", "cloudseed/recovery.py application restore", "cloudseed/acceptance.py isolated cloud tests", "cloudseed/credential_store.py native keychain"],
+        "controls": ["health/network default to local evidence; live checks are explicit and active probes require approval", "profile/import save intent only; plan/apply and platform/backup changes are separate", "incomplete price coverage cannot pass a configured complete-cost budget", "upgrade plans bind configuration/state/cluster identity and repeat readiness gates", "expiry cleanup requires saved opt-in and elapsed expiry; no scheduler or state purge", "real cloud acceptance remains unverified without sandbox credentials"],
+        "state": ["<workdir>/config.json operations policy and desired configuration", "<workdir>/operations JSON/Markdown reports and reviewed upgrade plans", "isolated acceptance home with retained cleanup manifest/state"],
+        "commands": ["cs ops list --json", "cs ops health aws --env prod --json", "cs ops profile aws --env prod --profile production --json", "cs ops spec-export aws --env prod --output cloudseed.yaml --json", "cs ops acceptance aws --json"],
+    },
     "overview": {
         "what": "cloudseed = stdlib Python CLI (cloudseed/) + generic Terraform stacks (terraform/<target>) rendered per environment as "
                 "main.tf.json + Ansible for everything inside hosts (ansible/) + a Helm/kustomize catalog (cloudseed/platform.py) + skills for agents (skills/).",
@@ -397,6 +404,8 @@ TITLES: dict[str, str] = {
 
 # one plain sentence per page for tooltips and the index (lookup()["summary"]); pages without one use their first sentence
 SUMMARIES: dict[str, str] = {
+    "feature operations": "Shared health, deployment, policy, upgrade and recovery workflows with explicit evidence and approval gates.",
+    "command ops": "Inspect operational readiness, preview configuration and run explicitly approved lifecycle changes.",
     "feature overview": "How cloudseed is built: a stdlib Python CLI, Terraform stacks per target, Ansible for hosts, a Helm catalog and agent skills.",
     "feature network": "One non-overlapping address space per environment: public and private subnets, NAT egress, flow logs, deny-by-default firewalls.",
     "feature bastion": "A single hardened SSH jump host, reachable only from your IP, with key-only auth, an encrypted disk and Ansible hardening.",

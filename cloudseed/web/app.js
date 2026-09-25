@@ -294,7 +294,7 @@
       else if (argv[i] === '--runtime' || argv[i] === '--engine') i += 2;
       else break;
     }
-    return j.rc === 3 && argv[i] === 'scan' && argv[i + 1] === 'architecture' ? 'incomplete' : 'bad';
+    return j.rc === 3 && ((argv[i] === 'scan' && argv[i + 1] === 'architecture') || argv[i] === 'ops') ? 'incomplete' : 'bad';
   };
   function renderTabs() {
     const tabs = $('#job-tabs'); tabs.innerHTML = '';
@@ -509,6 +509,7 @@
     else if (prop.type === 'array' && (prop.lines || prop['x-lines'])) input = el('textarea', { name, rows: 3, placeholder: placeholder || 'one entry per line', 'data-kind': 'lines' }, Array.isArray(value) ? value.join('\n') : value || '');
     else if (prop.type === 'array') input = el('input', { name, placeholder: placeholder || 'comma-separated', 'data-kind': 'list', value: Array.isArray(value) ? value.join(',') : value || '' });
     // whole numbers only, within the schema's bounds (the browser marks 2.5 or 0 nodes as invalid before anything is sent)
+    else if (prop.type === 'number') input = el('input', { name, type: 'number', step: 'any', min: prop.minimum, max: prop.maximum, placeholder, value: value ?? '' });
     else if (prop.type === 'integer') input = el('input', { name, type: 'number', step: '1', inputmode: 'numeric', min: prop.minimum, max: prop.maximum, placeholder, value: value ?? '' });
     else if (prop.multiline) input = el('textarea', { name, rows: 3, placeholder }, value ?? '');
     // a secret is typed blind, and never offered to (or saved by) the browser's password manager
@@ -585,7 +586,7 @@
     const ruled = [];   // [name, label element, its rules]: fields shown / required depending on another field
     for (const [name, prop] of Object.entries(a.schema.properties || {})) {
       if (name === 'confirm') continue;
-      let value = presets[name];
+      let value = presets[name] === undefined ? prop.default : presets[name];
       if (value === undefined && (name === 'cloud' || name === 'env') && currentEnv()) value = envArgs()[name];
       const f = field(name, { ...prop, ...(ui[name] || {}), label: fieldLabel(a, name) }, required.includes(name), value, placeholders[name]);
       if (ui[name] && (ui[name].when || ui[name].need)) ruled.push([name, f, ui[name]]);
@@ -720,7 +721,7 @@
   const XQ_POPULAR = ['overview', 'network', 'bastion', 'kubernetes', 'vpn', 'state', 'platform', 'dr', 'chaos', 'scan', 'fips', 'mcp'];
   // an action's page is its command's (cloudseed_update_ip -> command update-ip); the exceptions are listed
   const XQ_ACTION = { cloudseed_vpn_connect: 'command vpn' };
-  const actionXq = (name) => XQ_ACTION[name] || 'command ' + String(name).replace(/^cloudseed_/, '').replace(/_/g, '-');
+  const actionXq = (name) => name.startsWith('cloudseed_ops_') ? 'command ops' : XQ_ACTION[name] || 'command ' + String(name).replace(/^cloudseed_/, '').replace(/_/g, '-');
   // what each scan button runs, for its tooltip (cs help scan)
   const SCAN_WHAT = { all: 'Every security scan that applies, one report each, then a summary', architecture: 'Well-Architected assessment of saved configuration and evidence; no live cloud checks', cis: 'CIS Kubernetes Benchmark with kube-bench (the profile of the distribution)',
     kube: 'kubescape posture scan: the NSA and MITRE ATT&CK frameworks', images: 'Vulnerabilities in the running workloads (trivy)',
@@ -1963,6 +1964,9 @@
         // (every disabled scan says why, in words: a local environment without hosts has both reasons)
         local ? el('p', { class: 'muted small', style: 'margin:10px 0 0' }, 'Cloud CIS does not apply to a local VMware environment: there is no cloud account to scan.') : null,
         e && !hasHosts ? el('p', { class: 'muted small', style: 'margin:10px 0 0' }, `Host CIS and STIG need a host reachable over SSH: ${e.id} has none yet.`) : null),
+      card('Environment operations', null, 'Inspect health and connectivity, review deployment profiles, drift and upgrades, or verify an application restore. Preview first; active probes and changes require confirmation.',
+        el('div', { class: 'row' }, ...['health', 'network', 'profile', 'drift', 'upgrade_plan', 'recovery_plan', 'policy_check', 'spec_export'].map((name) =>
+          el('button', { class: 'btn ghost', ...needEnv, onclick: () => openAction('cloudseed_ops_' + name, ea) }, name.replace(/_/g, ' '))))),
       card(['Well-Architected assessment', explainBtn('scan', 'architecture assessments')], vd.architecture, 'Screen AWS, Azure or GCP configuration and saved evidence against provider pillars; VMware uses common architectural guidance. Missing or stale evidence stays unknown. This saves a report without contacting cloud services or changing infrastructure.',
         el('div', { class: 'row' }, el('button', { class: 'btn primary', 'data-fk': fkr('architecture'), ...needEnv, title: SCAN_WHAT.architecture, onclick: () => run('cloudseed_scan', { kind: 'architecture', profile: 'production', max_age_days: 30, ...ea }, 'Well-Architected assessment') }, '▶ Assess production'),
           el('button', { class: 'btn ghost', ...needEnv, onclick: () => openAction('cloudseed_scan', { kind: 'architecture', profile: 'production', max_age_days: 30, ...ea }) }, 'Profile & evidence…'),
@@ -2063,6 +2067,7 @@
     v.append(el('div', { class: 'grid' },
       section('Chaos runs', r.chaos || [], (it) => el('div', { class: 'row' }, reportChip(it), bar(it.summary.PASS || 0, it.summary.FAIL || 0), el('span', { class: 'small' }, `${it.summary.PASS || 0} pass / ${it.summary.FAIL || 0} fail`)), explainBtn('chaos', 'chaos runs')),
       section('DR drills', r.dr || [], (it) => reportChip(it), explainBtn('dr', 'DR drills')),
+      section('Operations & readiness', r.operations || [], (it) => reportChip(it), explainBtn('command ops', 'operational workflows')),
       section('Scans', scans, (it) => { const c = scanChip(it); return el('div', { class: 'row' }, bar(c.p, c.f || 0, c.w), reportChip(it)); }, explainBtn('scan', 'scans')),
       el('div', { class: 'card' }, el('h3', {}, 'Logs', explainBtn('audit', 'logs and the audit trail'), el('span', { class: 'chip' }, (r.logs || []).length)), (r.logs || []).length ? null : el('p', { class: 'muted small' }, 'None yet. Every setup, apply and destroy writes one.'),
         el('div', { class: 'row' }, ...(r.logs || []).slice(0, 20).map((p) => el('button', { class: 'btn small ghost', title: p.split('/').pop(), onclick: async () => { try { const f = await api(`/api/file?path=${encodeURIComponent(p)}`); modal(`Log · ${logLabel(p)}`, [el('p', { class: 'muted small mono', style: 'margin:0 0 10px' }, p), el('pre', { class: 'help' }, f.text)], { explain: 'audit' }); } catch (err) { fail(err); } } }, logLabel(p)))))));
@@ -2072,8 +2077,8 @@
   const runLabel = (name) => { const m = /(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/.exec(name || ''); const d = m ? new Date(Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6])) : null; return d && !isNaN(d) ? d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : String(name || ''); };
   const REPORT_KIND = { report: 'Chaos run', drill: 'DR drill' };
   // the scans the CLI saves, in words (the list chip uses the short name, the report dialog the full one)
-  const SCAN_TITLES = { architecture: 'Well-Architected assessment', cis: 'CIS Kubernetes benchmark', 'stig-k8s': 'Kubernetes STIG', kube: 'Kubernetes posture (NSA/MITRE)', images: 'Vulnerability scan', 'stig-host': 'Host STIG (OpenSCAP)', cloud: 'Cloud CIS (prowler)', fips: 'FIPS verification' };
-  const SCAN_SHORT = { architecture: 'Architecture', cis: 'CIS', 'stig-k8s': 'K8s STIG', kube: 'NSA/MITRE', images: 'Vulnerabilities', 'stig-host': 'Host STIG', cloud: 'Cloud CIS', fips: 'FIPS' };
+  const SCAN_TITLES = { health: 'Environment health', network: 'Private network diagnostics', architecture: 'Well-Architected assessment', cis: 'CIS Kubernetes benchmark', 'stig-k8s': 'Kubernetes STIG', kube: 'Kubernetes posture (NSA/MITRE)', images: 'Vulnerability scan', 'stig-host': 'Host STIG (OpenSCAP)', cloud: 'Cloud CIS (prowler)', fips: 'FIPS verification' };
+  const SCAN_SHORT = { health: 'Health', network: 'Network', architecture: 'Architecture', cis: 'CIS', 'stig-k8s': 'K8s STIG', kube: 'NSA/MITRE', images: 'Vulnerabilities', 'stig-host': 'Host STIG', cloud: 'Cloud CIS', fips: 'FIPS' };
   const scanTitle = (kind) => SCAN_TITLES[kind] || (/^host-(.+)$/.test(kind) ? `Host ${kind.slice(5).toUpperCase()} (OpenSCAP)` : kind ? kind + ' scan' : 'Report');
   // one wording for a report's verdict, in the list and in its dialog: lower-case words, counts for scans
   const reportChip = (it) => {
@@ -2107,6 +2112,7 @@
       body.append(el('p', { class: 'muted small' }, `Profile: ${it.profile || 'unspecified'}. Assesses saved configuration and evidence; it does not verify live infrastructure. Missing evidence stays unknown.${it.max_age_days ? ` Evidence freshness: ${it.max_age_days} days.` : ''}`));
       if ((it.coverage_limits || []).length) body.append(el('details', {}, el('summary', {}, 'Assessment coverage and limits'), el('ul', {}, ...it.coverage_limits.map((limit) => el('li', { class: 'small' }, limit)))));
     }
+    if (kind !== 'architecture' && (it.coverage_limits || []).length) body.append(el('details', {}, el('summary', {}, 'Coverage and limits'), el('ul', {}, ...it.coverage_limits.map((limit) => el('li', { class: 'small' }, limit)))));
     if (Object.keys(sm).length) body.append(kv(...Object.entries(sm).map(([k, val]) => [colLabel(k), String(val)])));
     // columns: the union over all rows, the meaningful ones first (verdict and reason are never cut off); description as a row tooltip
     const table = (rows) => {
@@ -2116,8 +2122,11 @@
       for (const r of rows) t.append(el('tr', { title: r.desc || null }, ...cols.map((c) => el('td', { class: 'small' }, reportCell(c, r[c])))));
       return el('div', { class: 'table-wrap' }, t);
     };
+    if ((it.changes || []).length) body.append(el('h4', {}, 'Proposed configuration changes'), table(it.changes));
+    if ((it.notes || []).length) body.append(el('ul', {}, ...it.notes.map((note) => el('li', { class: 'small' }, note))));
+    for (const key of ['spec', 'cost']) if (it[key]) body.append(el('details', {}, el('summary', {}, key === 'spec' ? 'Portable specification' : 'Cost estimate and coverage'), el('pre', {}, JSON.stringify(it[key], null, 2))));
     if ((it.results || []).length) body.append(el('h4', {}, kind === 'drill' ? 'Steps' : 'Results'), table(it.results));
-    if (kind === 'architecture' && (it.findings || []).length) {
+    if (['architecture', 'health', 'network'].includes(kind) && (it.findings || []).length) {
       body.append(el('h4', {}, `Checks (${it.findings.length})`));
       const t = el('table', {}, el('tr', {}, ...['status', 'pillar / check', 'evidence', 'remediation'].map((title) => el('th', {}, title))));
       const evidenceText = (value) => {
@@ -2135,13 +2144,13 @@
       for (const f of it.findings) {
         const evidence = Array.isArray(f.evidence) ? f.evidence : f.evidence ? [f.evidence] : [];
         const refs = Array.isArray(f.references) ? f.references : [];
-        t.append(el('tr', {}, el('td', {}, cellChip(f.status || 'UNKNOWN')), el('td', { class: 'small' }, el('b', {}, f.title), el('p', { class: 'muted small' }, colLabel(f.pillar))),
+        t.append(el('tr', {}, el('td', {}, cellChip(f.status || 'UNKNOWN')), el('td', { class: 'small' }, el('b', {}, f.title), el('p', { class: 'muted small' }, colLabel(f.pillar || f.id || 'check'))),
           el('td', { class: 'small' }, f.detail, ...evidence.map((item) => el('p', { class: 'muted small' }, evidenceText(item)))),
           el('td', { class: 'small' }, f.remediation || '—', ...refs.map(guidance))));
       }
       body.append(el('div', { class: 'table-wrap' }, t));
     } else if (it.findings && it.findings.length && !(it.checks && it.checks.length)) { body.append(el('h4', {}, `Findings (${it.findings.length})`)); const t = el('table', {}, el('tr', {}, el('th', {}, 'severity'), el('th', {}, 'finding'), el('th', {}, 'detail'))); for (const f of it.findings) t.append(el('tr', {}, el('td', {}, el('span', { class: 'chip ' + ({ CRITICAL: 'rose', HIGH: 'rose', MEDIUM: 'seed', LOW: '', INFO: '' }[f.severity] || '') }, f.severity || f.status)), el('td', { class: 'small' }, f.title), el('td', { class: 'small muted' }, f.detail))); body.append(el('div', { class: 'table-wrap' }, t)); }
-    if (it.checks && it.checks.length) { body.append(el('h4', {}, 'Checks')); const t = el('table', {}, el('tr', {}, el('th', {}, 'status'), el('th', {}, 'area'), el('th', {}, 'check'), el('th', {}, 'detail'))); for (const c of it.checks) t.append(el('tr', {}, el('td', {}, cellChip(c.status || 'INFO')), el('td', {}, c.area), el('td', { class: 'small' }, c.check), el('td', { class: 'small muted' }, c.detail))); body.append(el('div', { class: 'table-wrap' }, t)); }
+    if (it.checks && it.checks.length) { body.append(el('h4', {}, 'Checks')); const t = el('table', {}, el('tr', {}, el('th', {}, 'status'), el('th', {}, 'area'), el('th', {}, 'check'), el('th', {}, 'detail'))); for (const c of it.checks) t.append(el('tr', {}, el('td', {}, cellChip(c.status || 'INFO')), el('td', {}, c.area || it.operation || kind), el('td', { class: 'small' }, c.check || c.id), el('td', { class: 'small muted' }, c.detail))); body.append(el('div', { class: 'table-wrap' }, t)); }
     body.append(el('p', { class: 'muted small mono', style: 'margin-top:12px' }, it.path));
     const e = currentEnv();
     modal(`${REPORT_KIND[kind] || scanTitle(kind)} · ${runLabel(it.name)}${e ? ' · ' + e.id : ''}`, body, { explain: XQ_REPORT[REPORT_KIND[kind] ? kind : 'scan'] });

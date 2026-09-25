@@ -141,6 +141,30 @@ The host joins your tailnet and advertises the network CIDR; approve the route o
 OpenVPN-only. Tailscale's coordination plane is a SaaS; traffic stays end-to-end encrypted. In FIPS environments only
 OpenVPN is allowed ([11](11-fips-140-mode.md)).
 
+## Use an agent, MCP or the UI
+
+Follow the same numbered steps and verification/cleanup conditions through your chosen interface. Start with the
+[interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
+placeholders before any live request.
+
+**Agent prompt:** “Follow the private-access walkthrough for aws-vpn. Inspect the selected OpenVPN or Tailscale topology, then create only the approved user access. Verify routes and revocation while keeping client private keys out of chat and reports.”
+
+**MCP starter:** `cloudseed_vpn` with:
+
+```json
+{
+  "cloud": "aws",
+  "env": "vpn",
+  "action": "status"
+}
+```
+
+Use the matching tool for each remaining step in this page; the [command-to-tool map](interfaces-and-coverage.md#command-to-interface-map)
+lists the tool family. Keep `aws-vpn` selected. Preview first; add `confirm:true` only to the specific change
+you have authorized. Host bootstrap, provider login and interactive applications retain their documented human steps.
+
+**UI:** Select aws-vpn → Environments → VPN. Use status/users, then the add-user/revoke actions with the page’s user name. VPN connect/disconnect affects your host and may require native prompts; download/use the private client profile locally, never paste it into an agent conversation.
+
 ## Verify it worked
 
 ```bash

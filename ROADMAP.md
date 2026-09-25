@@ -15,14 +15,24 @@ to you in [Discussions](https://github.com/nimeshbuilds/cloudseed/discussions) o
 | Interfaces | CLI, local web console, MCP server (30 tools), agentic mode with the built-in agent, Claude Code, Codex, Gemini or Grok |
 | Verification | about 3,400 unit tests, mocked `terraform test` suites for every cloud stack, 15 documented scenarios with scripts; VMware scenarios verified live, cloud scenarios verified with `--dry-run` (render + `terraform validate`) |
 
+## Implemented on main / next release
+
+Operational readiness now has shared CLI/MCP/UI/skill routes: local and live health/network checks, deployment
+profiles, portable specs, cost/plan gates, explicit expiry cleanup, drift, guarded upgrades, application recovery,
+keychain storage and an opt-in acceptance harness. Scenarios 16–19 explain their evidence and limits. Release builds
+have integrity/provenance evidence and a verifier; a new workflow does not mean a release has already been published.
+
+These features have local, fixture and provider-schema tests. Real cloud acceptance remains pending dedicated
+sandbox accounts. Production profiles are starting configurations, not certification of the deployed workload.
+
 ## Next (0.2)
 
 The [September 2026 engineering review](docs/development/index.md) maps every runtime and proposes acceptance
-criteria for the next work. Prioritize VMware lifecycle integrity, clear agent permission boundaries, a shared
-environment health report, and reproducible release evidence alongside the items below.
+criteria for the next work. Prioritize VMware lifecycle integrity, clear agent permission boundaries, recorded
+cloud acceptance evidence and broader workload-specific validation alongside the items below.
 
-- **Release artifacts**: publish the single-binary bundle (`cloudseed deps bundle`) for macOS and Linux on GitHub
-  Releases with SHA-256 checksums, so trying cloudseed no longer needs a git clone.
+- **Release publication**: use the implemented version-tag workflow to publish verified binaries/containers and
+  retain checksums, dependency inventory and provenance. No release is implied solely by merging the workflow.
 - **Recorded cloud runs**: run the AWS, GCP and Azure scenarios against real accounts and publish the evidence next
   to each scenario page, alongside the existing dry-run verification.
 - **Azure flow logs**: manage VNet flow logs (the successor of NSG flow logs) so Azure matches the logging on AWS

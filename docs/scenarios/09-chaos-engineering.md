@@ -122,6 +122,30 @@ cs chaos stop
 experiment and the canary namespace (use it if you interrupt a run). The Chaos Mesh dashboard is one of the UIs
 `cs platform ui` exposes.
 
+## Use an agent, MCP or the UI
+
+Follow the same numbered steps and verification/cleanup conditions through your chosen interface. Start with the
+[interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
+placeholders before any live request.
+
+**Agent prompt:** “Follow the chaos walkthrough on vmware-lab. List experiments and plan the selected suite. Explain its target and steady-state checks before executing the approved experiment; report recovery and cleanup rather than only process success.”
+
+**MCP starter:** `cloudseed_chaos` with:
+
+```json
+{
+  "cloud": "vmware",
+  "env": "lab",
+  "action": "list"
+}
+```
+
+Use the matching tool for each remaining step in this page; the [command-to-tool map](interfaces-and-coverage.md#command-to-interface-map)
+lists the tool family. Keep `vmware-lab` selected. Preview first; add `confirm:true` only to the specific change
+you have authorized. Host bootstrap, provider login and interactive applications retain their documented human steps.
+
+**UI:** Select vmware-lab → Resilience → Chaos. Choose the suite or experiment and copy the target/duration from the numbered step. Confirm the experiment’s disruption, inspect the report and use Stop only for the intended run.
+
 ## Verify it worked
 
 ```bash

@@ -25,6 +25,7 @@ Complete list with defaults, generated from the Terraform: `cloudseed help varia
 - Core: `network_cidr` (via `--cidr`; default: first free `10.N.0.0/16`), `subnet_newbits` (4), `zone` (`--zone`, default `<region>-a`, or `<region>-b` in us-east1 / europe-west1; must be inside the region), `ssh_username` (`--ssh-username`), `enable_os_login` (false), `os_login_member` (set by cloudseed from your gcloud account; refused in `--var`), `labels` (use `--tag K=V`; refused in `--var`).
 - Bastion: `bastion_machine_type` (e2-micro), `bastion_image` (debian-cloud/debian-12), `bastion_disk_size` (10).
 - Baseline: `enable_apis` (true), `enable_project_baseline` (true; set false for a second environment in the same project), `enable_data_access_audit_logs` (false), `log_retention_days` (90, 1-3650).
+- Topology: `kubernetes_regional` (false; changing location replaces the cluster), `kubernetes_node_locations` ([]; regional clusters require explicit zones, node count/min/max are per zone). Validate region/zone availability and quota before applying.
 - GKE: `enable_kubernetes` (false), `kubernetes_version` (null = channel default), `kubernetes_node_size` (e2-standard-2), `kubernetes_node_count` (2, at least 1; also the autoscaler's floor), `kubernetes_node_min` (1; the effective minimum is never below `kubernetes_node_count`), `kubernetes_node_max` (4), `kubernetes_public_endpoint` (false), `kubernetes_master_cidr` (172.16.0.0/28).
 - VPN: `enable_vpn` (false), `vpn_type` (openvpn | tailscale, any case), `vpn_machine_type` (e2-micro), `vpn_port` (1194, OpenVPN UDP, 1-65535; Tailscale always uses 41641).
 - `fips_mode` (false).
@@ -59,3 +60,11 @@ selects assessment policy, not deployment settings. Reports distinguish definite
 or manual-review evidence: PASS exits 0, FAIL 1, INCOMPLETE 3; invalid arguments exit 2. Read the
 cloudseed-architecture skill for evidence limits and next steps. `scan all` excludes this assessment.
 GCP findings map to its six Well-Architected pillars; this scoped assessment is not provider certification.
+
+## Deployment profiles and operational readiness
+
+Preview `cloudseed ops profile gcp --env NAME --profile production --json` before saving. Profiles change actual
+settings only after approval and a separate apply. Use `cloudseed ops health gcp --env NAME --live --json` for
+current observations, `ops network` for egress diagnosis, and `ops list --json` for specs, guardrails, drift,
+upgrades, recovery and acceptance. Missing live evidence is incomplete. GKE node counts are per zone; AKS tier/zone
+availability needs provider validation; VMware remains a single physical host. See scenarios 16–19.

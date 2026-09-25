@@ -53,6 +53,8 @@ Override any of these with `--var name=value` on `cloudseed setup azure` (JSON f
 | `vpn_vm_size` | `"Standard_B1s"` | VM size of the VPN host. |
 | `vpn_port` | `1194` | UDP port the OpenVPN server listens on (a Tailscale VPN host uses 41641). |
 | `fips_mode` | `false` | FIPS 140 mode for the whole environment: Ubuntu Pro FIPS bastion/VPN images (marketplace terms accepted automatically), FIPS-enabled AKS node pool, FIPS-only SSH algorithms, ECDSA SSH keys. |
+| `kubernetes_sku_tier` | `"Free"` | AKS control-plane tier: Free or Standard (paid uptime SLA). |
+| `kubernetes_zones` | `[]` | AKS system-pool availability zones. Confirm support in the selected region and VM size; changing zones rotates nodes. |
 
 ## Setup inputs
 
