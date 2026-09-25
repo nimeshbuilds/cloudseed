@@ -55,7 +55,7 @@ cs doctor vmware
 
 ??? example "Expected output (abbreviated)"
     ```text
-    cloudseed 0.1.0
+    cloudseed 0.2.0
 
       ━━ VMware Fusion / Workstation (local) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         ✔ terraform    1.16.1                 /opt/homebrew/bin/terraform

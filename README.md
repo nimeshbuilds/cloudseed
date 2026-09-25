@@ -344,10 +344,11 @@ VMware Fusion Pro 13+ on macOS or Workstation Pro 17+ on Linux. Prefer not to in
 <details>
 <summary><b>Is it production ready?</b></summary>
 
-It is a 0.1 release. The stacks follow each cloud's security guidance, are covered by about 3,400 unit tests and
-mocked `terraform test` suites, and every change is shown as a Terraform plan first. It has not had an independent
-security audit, and the cloud scenarios in the docs are verified with `--dry-run` in CI, so start in a
-non-production account.
+It is a 0.2 release. The stacks follow each cloud's security guidance and are covered by more than 3,600 source
+tests, mocked `terraform test` suites, and packaged-runtime checks. Terraform changes are shown as a plan first.
+It has not had an independent security audit, and CI dry runs do not establish live cloud acceptance, so start in a
+non-production account. See [versioned releases](https://github.com/nimeshbuilds/cloudseed/releases) for downloads
+and [scenario 19](https://nimeshbuilds.github.io/cloudseed/scenarios/19-acceptance-and-releases/) for release verification.
 </details>
 
 <details>

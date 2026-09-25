@@ -4,35 +4,34 @@ This is where cloudseed is and where it is going next. It is a direction, not a 
 to you in [Discussions](https://github.com/nimeshbuilds/cloudseed/discussions) or with a
 [feature request](https://github.com/nimeshbuilds/cloudseed/issues/new/choose).
 
-## Where 0.1 stands
+## Where 0.2 stands
 
-| Area | Status in 0.1.0 |
+| Area | Status in 0.2.0 |
 |---|---|
 | Landing zones | AWS, GCP and Azure stacks (network, NAT, hardened bastion, security baseline, remote state) and the same shape on local VMware Fusion Pro / Workstation Pro VMs |
 | Kubernetes | private EKS, GKE and AKS; RKE2 or kubeadm on VMware; node add, remove and scale |
 | Platform | a catalog of 73 pinned Helm/kustomize items in 10 groups, installed with dependencies and per-target values |
 | Operations | Velero backups and restore drills, Chaos Mesh suites with verdicts, CIS/STIG/kubescape/trivy/prowler scans, FIPS 140 mode, OpenVPN and Tailscale access, FinOps estimates, fifteen-deep undo, audit trail and troubleshooting |
-| Interfaces | CLI, local web console, MCP server (30 tools), agentic mode with the built-in agent, Claude Code, Codex, Gemini or Grok |
-| Verification | about 3,400 unit tests, mocked `terraform test` suites for every cloud stack, 15 documented scenarios with scripts; VMware scenarios verified live, cloud scenarios verified with `--dry-run` (render + `terraform validate`) |
+| Interfaces | CLI, local web console, MCP server (48 tools), agentic mode with the built-in agent, Claude Code, Codex, Gemini or Grok; shared operational and architecture-assessment contracts |
+| Verification | more than 3,600 source tests, mocked `terraform test` suites for every cloud stack, 19 documented scenarios with scripts, and Linux/macOS amd64/arm64 binary and container checks; the current verification does not establish live cloud acceptance |
 
-## Implemented on main / next release
+## Operational readiness in 0.2
 
 Operational readiness now has shared CLI/MCP/UI/skill routes: local and live health/network checks, deployment
 profiles, portable specs, cost/plan gates, explicit expiry cleanup, drift, guarded upgrades, application recovery,
 keychain storage and an opt-in acceptance harness. Scenarios 16–19 explain their evidence and limits. Release builds
-have integrity/provenance evidence and a verifier; a new workflow does not mean a release has already been published.
+use a version-tag workflow for signed integrity/provenance evidence and include a verifier. Published artifacts
+are listed on [GitHub Releases](https://github.com/nimeshbuilds/cloudseed/releases).
 
 These features have local, fixture and provider-schema tests. Real cloud acceptance remains pending dedicated
 sandbox accounts. Production profiles are starting configurations, not certification of the deployed workload.
 
-## Next (0.2)
+## Next
 
 The [September 2026 engineering review](docs/development/index.md) maps every runtime and proposes acceptance
 criteria for the next work. Prioritize VMware lifecycle integrity, clear agent permission boundaries, recorded
 cloud acceptance evidence and broader workload-specific validation alongside the items below.
 
-- **Release publication**: use the implemented version-tag workflow to publish verified binaries/containers and
-  retain checksums, dependency inventory and provenance. No release is implied solely by merging the workflow.
 - **Recorded cloud runs**: run the AWS, GCP and Azure scenarios against real accounts and publish the evidence next
   to each scenario page, alongside the existing dry-run verification.
 - **Azure flow logs**: manage VNet flow logs (the successor of NSG flow logs) so Azure matches the logging on AWS
