@@ -9,7 +9,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-CS = str(ROOT / "bin" / "cloudseed")
+# Exercise a packaged executable with the same behavioral assertions as the checkout.
+CS = os.environ.get("CLOUDSEED_TEST_BINARY", str(ROOT / "bin" / "cloudseed"))
 _TEMP_DIRS: list = []
 
 
