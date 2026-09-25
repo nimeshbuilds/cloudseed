@@ -16,6 +16,7 @@ This is a source and test review, not a new certification of live AWS, GCP, Azur
 | [Application runtime audit](runtime-audit.md) | CLI dispatch, environment state, rendering, dependencies, credentials, local console, MCP, AI agents, Kubernetes access, platform installation, disaster recovery, chaos, scans, VPN, FinOps, undo and audit |
 | [Infrastructure audit](infrastructure-audit.md) | All four targets and seven Terraform roots, ten Ansible roles, Go VMware provider, local/container/bundle runtimes, availability defaults, state backends and lifecycle risks |
 | [CI diagnosis and repairs](ci-repair.md) | Failed run evidence, root causes, regression fixes and verification results |
+| [Runtime acceptance coverage](acceptance.md) | Dependency review, source/container/binary checks, and the remaining live infrastructure acceptance requirements |
 | [Command reference](../reference/commands.md) | Generated CLI command surface |
 | [Platform catalog](../reference/platform-catalog.md) | Every catalog entry, group and dependency |
 | [MCP reference](../reference/mcp-tools.md) | Tool schemas, resources and prompts |

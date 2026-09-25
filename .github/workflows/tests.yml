@@ -19,6 +19,34 @@ env:
   TF_INPUT: "0"
 
 jobs:
+  ansible:
+    name: ansible (python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install through cloudseed and check every playbook
+        env:
+          CLOUDSEED_HOME: ${{ runner.temp }}/cloudseed-ansible
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          from pathlib import Path
+          from cloudseed.deps import ensure_local_ansible
+
+          binary = str(ensure_local_ansible())
+          subprocess.run([binary, "--version"], check=True)
+          for playbook in sorted(Path("ansible").glob("*.yml")):
+              subprocess.run([binary, "--syntax-check", "-i", "localhost,", str(playbook)], check=True)
+          PY
+
   unit:
     name: unit (${{ matrix.os }}, python ${{ matrix.python }})
     runs-on: ${{ matrix.os }}

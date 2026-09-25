@@ -37,6 +37,10 @@ The Pages workflow builds documentation in strict mode on pull requests. Pull re
 
 ## Verification
 
+The final [pre-merge tests run](https://github.com/nimeshbuilds/cloudseed/actions/runs/36088389520) passed all seven jobs on commit `bb5a778`: four Python/OS combinations, Terraform, the Go provider, and all 15 scenario scripts. Each Python job ran **3,431 tests** with **19–23 skips**. The [strict documentation build](https://github.com/nimeshbuilds/cloudseed/actions/runs/36088389478) passed. PR #3 was merged, and the [Pages deployment](https://github.com/nimeshbuilds/cloudseed/actions/runs/36089299031) succeeded. The deployed white-and-blue site and interactive target tabs were checked in the browser with no console errors.
+
+The results below describe the earlier local investigation. See [runtime acceptance coverage](acceptance.md) for the subsequent dependency reviews and packaged-runtime testing.
+
 A complete local run executed **3,431 tests in 265.6 seconds**, with **23 skips**. It found two regressions from the accompanying branding changes: the new wordmarks lacked the existing explicit tagline-width geometry, and the repository-layout guide omitted the new asset generator. Both were corrected without removing assertions. A subsequent **38-test focused run passed**, covering web styling/asset geometry and the installation/layout guide. The complete run was not repeated after those two asset/documentation corrections; it is not reported as an entirely green full-suite run.
 
 All original runtime failures passed in that complete run, including MCP lifecycle, credential diagnostics, local server startup, manifest rendering, help reflow, OpenCost forwarding, Azure scan authentication, and terminal rendering. The new deterministic adopted-job persistence regression also passed. Skips cover unavailable optional libraries/tools, Python-version-specific checks, signal-handler constraints, and explicitly enabled browser/Terraform suites.
