@@ -241,7 +241,7 @@ class OldGoTests(unittest.TestCase):
                 mock.patch.object(localvm.subprocess, "run", side_effect=AssertionError("no build")):
             got, out = _capture(localvm.ensure_provider)
         self.assertEqual(got, self.binary)
-        self.assertIn("Go 1.22.5 is older than 1.24; using the existing build", out)
+        self.assertIn("Go 1.22.5 is older than 1.25; using the existing build", out)
         self.assertIn("cloudseed install go && cloudseed install vmware-provider --rebuild", out)
 
     def test_without_a_build_or_on_an_explicit_rebuild_go_is_offered(self):
@@ -260,7 +260,7 @@ class OldGoTests(unittest.TestCase):
                 mock.patch.object(deps, "install", side_effect=AssertionError("no consent")):
             rc, out = _capture(services.ensure_tool, "go", "to build the provider")
         self.assertEqual(rc, 2)
-        self.assertIn(f"the one at {self.go} is 1.22.5, older than 1.24", out)
+        self.assertIn(f"the one at {self.go} is 1.22.5, older than 1.25", out)
         self.assertIn("Update it first: cloudseed install go", out)
         new = str(self.go) + "-new"
         versions = iter(["1.22.5", "1.25.1"])
@@ -281,7 +281,7 @@ class OldGoTests(unittest.TestCase):
             with self.assertRaises(ui.Abort) as e:
                 localvm._ensure_tool("go", "to build the provider")
         self.assertEqual(e.exception.code, 2)
-        self.assertIn(f"the one at {self.go} is 1.22.5, older than 1.24", e.exception.msg)
+        self.assertIn(f"the one at {self.go} is 1.22.5, older than 1.25", e.exception.msg)
         self.assertIn("ask the user to run: cloudseed install go", e.exception.msg)
         self.assertNotIn("Missing", e.exception.msg)
 

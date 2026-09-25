@@ -69,7 +69,7 @@ Ansible has no native Windows control node; older releases are refused for new e
 architecture, downloads the matching official cloud image (Ubuntu 24.04/22.04, Debian 12 - Debian's `generic` image,
 since the `genericcloud` kernel has no AHCI driver for the seed ISO; qcow2 converted with qemu-img), and drives
 everything through **its own Terraform provider**
-(`providers/vmdesktop`, Go; built once into `~/.cloudseed/providers`, which needs Go >= 1.24: `cloudseed doctor`
+(`providers/vmdesktop`, Go; built once into `~/.cloudseed/providers`, which needs Go >= 1.25: `cloudseed doctor`
 shows an older Go as too old and `cloudseed install go` upgrades it). Resources: `vmdesktop_network`,
 `vmdesktop_vm`, data `vmdesktop_host`. The private network is VMware's built-in host-only vmnet, shared by every
 environment without `--cidr`, so only one of those can have VMs at a time; a second one needs its own network

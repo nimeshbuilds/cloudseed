@@ -104,7 +104,8 @@ func (r *vmResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *r
 					"type":  schema.StringAttribute{Required: true, Description: "nat | hostonly | bridged | custom"},
 					"vmnet": schema.StringAttribute{Optional: true, Description: "vmnetN for type=custom"},
 					"mac": schema.StringAttribute{Optional: true, Computed: true, Description: "static MAC (00:50:56:00-3f:xx:xx); generated when omitted",
-						PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
+						// A newly added NIC has null prior state; its MAC is generated during replacement.
+						PlanModifiers: []planmodifier.String{stringplanmodifier.UseNonNullStateForUnknown()}},
 					"ip": schema.StringAttribute{Computed: true, Description: "DHCP lease / tools-reported IP when known"},
 				}},
 			},
@@ -156,7 +157,7 @@ func nicListsDiffer(ctx context.Context, configList, planList, stateList types.L
 		if !p.Type.Equal(s.Type) || !p.Vmnet.Equal(s.Vmnet) {
 			return true, diags
 		}
-		// A MAC left out of the configuration keeps the generated one (UseStateForUnknown on the nested attribute runs
+		// A MAC left out of the configuration keeps the generated one (UseNonNullStateForUnknown on the nested attribute runs
 		// after this list-level check, so the plan still shows it unknown here); a configured one must match.
 		configured := types.StringNull()
 		if i < len(config) {

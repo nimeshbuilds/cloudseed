@@ -50,10 +50,10 @@ TOOLS: dict[str, dict] = {
            "desc": "Azure CLI (needed for `az login` auth; optional with ARM_* service-principal/MSI vars)"},
     "vmrun": {"required": True, "clouds": ("vmware",), "brew": None,
               "desc": "VMware Fusion Pro / Workstation Pro (vmrun)"},
-    # providers/vmdesktop/go.mod says `go 1.24`: an older Go builds it only by downloading a newer toolchain
+    # providers/vmdesktop/go.mod says `go 1.25`: an older Go builds it only by downloading a newer toolchain
     # (GOTOOLCHAIN=auto), which fails offline or with GOTOOLCHAIN=local
     "go": {"required": False, "clouds": ("vmware",), "brew": "go",
-           "desc": "Go >= 1.24 (builds the VMware Terraform provider once)", "min_version": "1.24"},
+           "desc": "Go >= 1.25 (builds the VMware Terraform provider once)", "min_version": "1.25"},
     "qemu-img": {"required": False, "clouds": ("vmware",), "brew": "qemu",
                  "desc": "qemu-img (converts qcow2 cloud images to VMDK on arm64 hosts / Debian)"},
     "kubectl": {"required": False, "clouds": (), "brew": "kubectl",
