@@ -8,7 +8,8 @@ scn_begin 05-local-kubernetes "Kubernetes on your laptop" vmware
 need python3 terraform go
 
 step "1. Install the Kubernetes tools"
-ok cs doctor vmware
+# A dry-run host may lack VMware; doctor reports that with exit 1.
+if [[ "$SCN_LIVE" == "1" ]]; then ok cs doctor vmware; else any cs doctor vmware; fi
 has "VMware Fusion / Workstation"
 skip "cs install kubernetes / cs install k9s (installs software)"
 

@@ -45,6 +45,7 @@ import shlex
 import shutil
 import signal
 import socket
+import socketserver
 import stat
 import subprocess
 import sys
@@ -1682,6 +1683,13 @@ class _HTTPServer(ThreadingHTTPServer):
     request_queue_size = 128   # listen backlog: the socketserver default (5) resets connections under parallel tool calls
     daemon_threads = True
 
+    def server_bind(self):
+        # HTTPServer resolves a reverse-DNS name here; an offline resolver can stall a loopback service startup.
+        # Our API never needs that name, and the literal also works for IPv6's four-part socket address.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = self.server_address[0]
+        self.server_port = self.server_address[1]
+
     def handle_error(self, request, client_address):
         """One line in our log instead of a traceback on stderr (= the service log) per misbehaving connection."""
         exc = sys.exc_info()[1]
@@ -2438,7 +2446,9 @@ def _pid_alive(pid: int) -> bool:
 
 def _cmdline(pid: int) -> str | None:
     try:
-        r = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, errors="replace", timeout=5)
+        # The launcher's path can fill the terminal width before `mcp serve --http`. A truncated command makes a
+        # live server look like an unrelated PID, so stop/restart would leave it listening with its old token.
+        r = subprocess.run(["ps", "-ww", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, errors="replace", timeout=5)
         return r.stdout.strip() if r.returncode == 0 else ""
     except (OSError, subprocess.SubprocessError):
         pass

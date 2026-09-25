@@ -49,7 +49,8 @@ def render(c, name):
         if "apply" in cmd and "-f" in cmd:
             seen["path"] = cmd[cmd.index("-f") + 1]
         return 0
-    with mock.patch.object(pl, "_run", fake_run):
+    with mock.patch.object(pl, "_run", fake_run), mock.patch.object(pl, "_warn_pool_move"):
+        # Cluster inspection is separate from rendering; never query a real kubectl here.
         pl._apply_manifest(c, "kubectl", name, "default", wait_ns=False)
     return Path(seen["path"]).read_text()
 

@@ -26,6 +26,7 @@ import shlex
 import shutil
 import signal
 import socket
+import socketserver
 import subprocess
 import sys
 import threading
@@ -673,7 +674,8 @@ class Job:
 
     @property
     def running(self) -> bool:
-        return self.rc is None
+        with self.lock:
+            return self.rc is None
 
     def save_meta(self) -> None:
         with self.meta_lock:
@@ -706,7 +708,9 @@ class Job:
             self.finished = self.finished or time.time()
             self.rc = rc
             subs = list(self.subscribers)
-        self.save_meta()
+            # Publish completion only after its durable record is written. Status readers (and pruning) must not
+            # observe a finished job while a restart would still restore rc=null, especially after an adopted kill.
+            self.save_meta()
         for q in subs:
             q.put(None)
 
@@ -2544,6 +2548,12 @@ def _use_env(env_id) -> dict:
 class _Server(ThreadingHTTPServer):
     daemon_threads = True
     request_queue_size = 128   # listen backlog: the socketserver default (5) resets connections when a page loads in parallel
+
+    def server_bind(self):
+        # HTTPServer performs reverse DNS here; a local console must start even
+        # when the host resolver is slow or unavailable. No handler needs a PTR name.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
     def handle_error(self, request, client_address):
         """One line in the console log instead of a traceback on stderr (= the service log) per broken connection."""

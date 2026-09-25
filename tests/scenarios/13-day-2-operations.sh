@@ -63,7 +63,8 @@ fi
 step "4. Diagnose, don't guess"
 ok cs troubleshoot vmware --env lab --log
 has "Troubleshooting vmware-lab"
-ok cs doctor vmware
+# A dry-run host may lack VMware; doctor reports that with exit 1.
+if [[ "$SCN_LIVE" == "1" ]]; then ok cs doctor vmware; else any cs doctor vmware; fi
 has "VMware Fusion / Workstation"
 
 step "5. Re-provision a host and handle a new IP"

@@ -1021,6 +1021,13 @@ def live_credential_check(cloud: str) -> tuple[bool, str] | None:
             # is all the gcloud check below can test: its verdict would be about credentials nothing uses (the
             # callers then check the variables themselves: GCP.credential_warnings)
             return None
+        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip():
+            # A malformed explicitly selected key cannot be repaired by an ADC login. Preserve the adapter's
+            # actionable file diagnosis even when gcloud is installed (and only offers a generic login failure).
+            from .clouds.gcp import GCP
+            warnings = GCP().credential_warnings({"vars": {}})
+            if warnings:
+                return False, "; ".join(warnings)
         rc, out = sh([find("gcloud"), "auth", "application-default", "print-access-token"], 30)
         if rc == 0:
             return True, "Google application-default credentials valid"

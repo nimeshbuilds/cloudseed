@@ -74,7 +74,8 @@ else
 fi
 
 step "6. Deploy the MCP server"
-ok cs setup mcp -y --client none --port "$PORT"
+# Exercise a real server without creating a login service from a throw-away home.
+ok cs setup mcp -y --no-service --client none --port "$PORT"
 has "MCP server up: http://127.0.0.1:$PORT/mcp"
 has "30 tools"
 

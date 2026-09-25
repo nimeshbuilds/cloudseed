@@ -11207,7 +11207,9 @@ def _dispatch(argv: list[str]) -> int:
                 run_argv = argv + ["--id", entry["id"]]   # the container must undo the entry picked here, without asking again
         if args.cmd in TF_COMMANDS and gate_cloud and not reads_only:
             # a dry run only renders and validates: no "Install az now?" before it (the cloud CLI is optional there)
-            mode = deps.ensure_runtime(gate_cloud, want, settings, needs_host=_touches_vms(args),
+            # Node and provision commands validate existing state first, and prepare
+            # VMware themselves only on a path that actually needs the hypervisor.
+            mode = deps.ensure_runtime(gate_cloud, want, settings, needs_host=_touches_vms(args) and args.cmd not in ("node", "provision"),
                                        nag_optional=args.cmd == "setup" and not getattr(args, "dry_run", False))
             if mode == "container" and not paths.IN_CONTAINER:
                 engine = container.choose_engine(settings, explicit=args.engine)

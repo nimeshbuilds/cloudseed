@@ -22,7 +22,8 @@ def render_post_manifest(ctx, name: str) -> str:
         if "apply" in cmd and "-f" in cmd:
             applied.append(cmd[cmd.index("-f") + 1])
         return 0
-    with mock.patch.object(pl, "_run", fake_run):
+    with mock.patch.object(pl, "_run", fake_run), mock.patch.object(pl, "_warn_pool_move"):
+        # Cluster inspection is separate from rendering; never query a real kubectl here.
         pl._apply_manifest(ctx, "kubectl", name, "ns", wait_ns=False)
     return Path(applied[-1]).read_text()
 
