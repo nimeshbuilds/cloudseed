@@ -32,6 +32,12 @@ commands or defaults; such changes are called out under **Changed**.
 - Refuse environment mutations when their lock cannot be acquired or recorded, including unsupported native Windows locking.
 - Preserve recoverable VMware state on disk/cleanup failures, verify a VM is stopped before removing its bundle, and report actual disk capacity.
 - Bound console event-stream memory for slow readers while preserving replay, gap markers and job completion.
+- Recognise live SSH tunnels (`cs kubectl` / `cs helm`) and OpenVPN clients behind long command lines on Linux (`ps -ww`),
+  as MCP stop/restart already does, instead of opening a second tunnel or leaving one running.
+- A stdio MCP server stopped right after it starts no longer leaves its parked-credentials session behind.
+- MCP client configs on Linux ignore an empty or relative `XDG_CONFIG_HOME` (`~/.config`, not the current directory).
+- The MetalLB pool pre-check of `cs platform install` only warns: a `kubectl` that cannot run or does not answer within
+  60 s no longer stops or hangs the install.
 
 ## [0.1.0] - 2026-09-24
 
