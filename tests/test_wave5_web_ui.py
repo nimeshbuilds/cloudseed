@@ -10,7 +10,7 @@
   * secrets: an auth scheme in a secret-named header is kept and the credential after it masked
   * audit: the console's own records go through audit.record (via=ui); an MCP server's tool calls are via=mcp even when
     the server was started from a console job
-  * docs: the audit record's `via`, Go >= 1.24, the new flags
+  * docs: the audit record's `via`, Go >= 1.25, the new flags
 
 Stdlib only; the JavaScript checks run under node (skipped without it). No network, no cloud, no listening sockets."""
 from __future__ import annotations
@@ -363,8 +363,8 @@ class DocsTests(unittest.TestCase):
         helptext = (ROOT / "cloudseed" / "help.py").read_text()
         self.assertIn("from where: `via` is `cli`, `ui` for the web console", readme)
         self.assertIn("and from where (via: cli, ui", helptext)
-        self.assertIn("Go >= 1.24", readme)
-        self.assertIn("Go >= 1.24", helptext)
+        self.assertIn("Go >= 1.25", readme)
+        self.assertIn("Go >= 1.25", helptext)
         self.assertIn("--preview", helptext)
         self.assertTrue(re.search(r"--plan-only \| --preview", readme))
 

@@ -180,7 +180,7 @@ Same shape as a cloud environment, on your own machine:
     version). Kubernetes nodes are hardened by the Kubernetes play and deliberately not auto-updated (node upgrades
     are yours to schedule).
   - Terraform all the way: cloudseed ships its own provider (providers/vmdesktop, Go) built once on first
-    use into ~/.cloudseed/providers and wired through ~/.cloudseed/terraform.rc; building it needs Go >= 1.24
+    use into ~/.cloudseed/providers and wired through ~/.cloudseed/terraform.rc; building it needs Go >= 1.25
     (`cs doctor` shows an older Go as too old; `cs install go` upgrades it). Resources:
     vmdesktop_network (adopts or creates a vmnet via vmrest), vmdesktop_vm (vmrun + vmware-vdiskmanager),
     data vmdesktop_host.

@@ -29,7 +29,7 @@ cs deps status        # this machine: version, Python, runtime, container engine
 | `ssh-keygen`, `ssh` | keys and the bastion |
 | `aws`, `gcloud`, `az` | optional: login convenience and the cluster commands (fetching credentials). Azure's `az login` needs `az` unless you use `ARM_*` service-principal variables |
 | kubectl, Helm | cluster commands and the platform catalog |
-| Go 1.24+, qemu-img | VMware: building cloudseed's provider once, converting cloud images |
+| Go 1.25+, qemu-img | VMware: building cloudseed's provider once, converting cloud images |
 | VMware Fusion Pro 13+ / Workstation Pro 17+ | the VMware target |
 
 cloudseed authenticates through Terraform's providers: environment variables, AWS profiles and SSO, Google application
