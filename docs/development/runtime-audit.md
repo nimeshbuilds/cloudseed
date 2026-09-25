@@ -170,7 +170,7 @@ Read APIs include state, action definitions, reports, platform status, bounded e
 
 The console uses a private token, constant-time comparison, loopback host checks, Origin checks, a CSP, no-store responses, request size limits, and resolved-path containment for static assets and allowed report files. Token rotation is recognized by a running server. Startup supports user launchd/systemd definitions and background fallback, scoped to the selected Cloudseed home.
 
-Jobs use their own process group and private metadata/log/exit-code files. Running jobs can survive the UI server restarting; restored jobs are correlated with live processes. Same-environment operations are prevented from overlapping. Displayed arguments and streamed output are redacted. The in-memory displayed log is bounded to head/tail lines, although subscriber queues need a separate bound, noted below.
+Jobs use their own process group and private metadata/log/exit-code files. Running jobs can survive the UI server restarting; restored jobs are correlated with live processes. Same-environment operations are prevented from overlapping. Displayed arguments and streamed output are redacted. The in-memory displayed log is bounded to head/tail lines; SSE subscribers replay that bounded history using coalesced notifications.
 
 ### MCP
 
@@ -249,9 +249,11 @@ Completion now holds the job lock through the metadata write, and `running` read
 
 ### Open: output and concurrency budgets are incomplete
 
-In `mcp._spawn`, every chunk of child output is appended to a list and joined/redacted after exit; `MAX_OUTPUT` only clips the final response. A long Terraform/kubectl command can consume much more memory than the advertised returned-output limit. MCP tool workers and HTTP request threads also need an explicit concurrency budget. In `webui.Job.push` / `_stream`, the displayed history is bounded but each SSE subscriber has an unbounded queue.
+In `mcp._spawn`, every chunk of child output is appended to a list and joined/redacted after exit; `MAX_OUTPUT` only clips the final response. A long Terraform/kubectl command can consume much more memory than the advertised returned-output limit. MCP tool workers and HTTP request threads also need an explicit concurrency budget.
 
-Recommended fix: reuse a bounded head/tail capture for MCP, spill durable logs with byte/retention limits, put bounded queues or resumable offsets behind SSE, and use a semaphore plus overload responses for expensive operations. Verify with a noisy synthetic child and a stalled subscriber; do not use real cloud operations for this test.
+The separate console subscriber issue is fixed: `webui.Job.push` / `_stream` use coalesced wakeups and the existing bounded history instead of unbounded per-client queues. A blocked-reader regression demonstrates bounded retained payloads, nonblocking producers/completion, stable replay IDs and an explicit omission marker. Disconnect cleanup is also covered.
+
+Remaining recommendation: reuse a bounded head/tail capture for MCP, spill durable logs with byte/retention limits, and use a semaphore plus overload responses for expensive operations. Verify MCP capture with a noisy synthetic child; do not use real cloud operations for this test.
 
 ### Fixed: environment locking silently fell back to no locking
 

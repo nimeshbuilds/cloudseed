@@ -112,8 +112,8 @@ class StreamBackpressureTests(unittest.TestCase):
             def write(self, data):
                 if data.startswith(b"id: 1\n"):
                     redactor = secrets.StreamRedactor()
-                    for line in (b"-----BEGIN PRIVATE KEY-----", b"private-key-body",
-                                 b"-----END PRIVATE KEY-----", b"after"):
+                    for line in (b"-----BEGIN " + b"PRIVATE KEY-----", b"private-key-body",
+                                 b"-----END " + b"PRIVATE KEY-----", b"after"):
                         webui._push_raw(job, line, redactor)
                     job.finish(0)
                 return super().write(data)

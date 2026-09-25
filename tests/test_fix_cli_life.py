@@ -424,7 +424,7 @@ class VmwareSweepTests(LifeBase):
                 mock.patch.object(localvm, "stop_vmrest") as stop, \
                 contextlib.redirect_stdout(self.out), contextlib.redirect_stderr(self.out):
             cli._destroy_local_leftovers(self.env, cfg, purge=True)
-        deleted = [c[2] for c in calls if len(c) > 2 and c[1] == "deleteVM"]
+        deleted = [c[c.index("deleteVM") + 1] for c in calls if "deleteVM" in c]
         self.assertEqual(sorted(Path(d).parent.name for d in deleted), sorted(b.name for b in mine))
         self.assertFalse(any("stop" in c for c in calls), "the user's running VM must not be stopped")
         for b in mine:
