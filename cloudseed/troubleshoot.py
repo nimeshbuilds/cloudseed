@@ -125,7 +125,7 @@ LOG_HINTS = [
     # warnings: the run went on with the provider it had (see _WARN_HINTS)
     (r"Rebuilding the VMware provider from the updated sources failed",
      "The VMware provider sources changed, but rebuilding the provider failed (usually Go could not reach its module "
-     "proxy, or Go is older than 1.24), so the existing build was used: new or changed VMs need the current one.",
+     "proxy, or Go is older than 1.25), so the existing build was used: new or changed VMs need the current one.",
      "once Go can reach its module proxy (network, GOPROXY): cloudseed install vmware-provider --rebuild   (an old Go: "
      "cloudseed install go first)"),
     (r"The VMware provider sources changed since it was built, but Go is not installed",
