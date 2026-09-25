@@ -1,0 +1,119 @@
+---
+- name: OpenVPN packages
+  ansible.builtin.apt:
+    name: [openvpn, easy-rsa]
+    state: present
+
+- name: Easy-RSA working dir
+  ansible.builtin.command: make-cadir /etc/openvpn/easy-rsa
+  args:
+    creates: /etc/openvpn/easy-rsa/easyrsa
+
+# No EASYRSA_REQ_CN here: easy-rsa 3.1.x refuses build-server-full / build-client-full ("does not support setting an
+# external commonName") whenever it is set; the CA's name is passed to build-ca alone (--req-cn).
+# The same settings also go into the environment of every easyrsa call (easyrsa_env): easy-rsa 3.0.8 (Ubuntu 22.04)
+# never reads this file through the make-cadir symlink, and would silently fall back to RSA keys and a 180-day CRL.
+- name: Easy-RSA vars (EC keys, long-lived CA)
+  ansible.builtin.copy:
+    dest: /etc/openvpn/easy-rsa/vars
+    mode: "0644"
+    content: |
+      {% for k, v in easyrsa_env.items() %}
+      set_var {{ k }} {{ v }}
+      {% endfor %}
+
+- name: Init PKI
+  ansible.builtin.command: ./easyrsa init-pki
+  args:
+    chdir: /etc/openvpn/easy-rsa
+    creates: /etc/openvpn/easy-rsa/pki
+
+- name: Build CA
+  ansible.builtin.command: ./easyrsa --batch --req-cn=cloudseed-vpn build-ca nopass
+  args:
+    chdir: /etc/openvpn/easy-rsa
+    creates: /etc/openvpn/easy-rsa/pki/ca.crt
+  environment: "{{ easyrsa_env }}"
+
+- name: Server certificate
+  ansible.builtin.command: ./easyrsa --batch build-server-full server nopass
+  args:
+    chdir: /etc/openvpn/easy-rsa
+    creates: /etc/openvpn/easy-rsa/pki/issued/server.crt
+  environment: "{{ easyrsa_env }}"
+
+# Certificates live EASYRSA_CERT_EXPIRE days: a server certificate that has expired, or will within 30 days, is replaced
+# on every provisioning run (revoke + build-server-full: `renew` differs between easy-rsa 3.0.8 on Ubuntu 22.04 and
+# 3.1.x on 24.04). The copy below installs it and restarts OpenVPN; client profiles stay valid (they trust the CA).
+- name: Server certificate valid for 30 more days?
+  ansible.builtin.command: openssl x509 -checkend 2592000 -noout -in /etc/openvpn/easy-rsa/pki/issued/server.crt
+  register: server_cert_check
+  changed_when: false
+  failed_when: server_cert_check.rc not in [0, 1]
+
+- name: Renew the server certificate
+  when: server_cert_check.rc == 1
+  environment: "{{ easyrsa_env }}"
+  block:
+    - name: Revoke the expiring server certificate
+      ansible.builtin.command: ./easyrsa --batch revoke server
+      args:
+        chdir: /etc/openvpn/easy-rsa
+
+    - name: New server certificate
+      ansible.builtin.command: ./easyrsa --batch build-server-full server nopass
+      args:
+        chdir: /etc/openvpn/easy-rsa
+
+    # the CRL task below only creates a missing CRL
+    - name: CRL listing the old server certificate
+      ansible.builtin.command: ./easyrsa --batch gen-crl
+      args:
+        chdir: /etc/openvpn/easy-rsa
+
+- name: CRL
+  ansible.builtin.command: ./easyrsa --batch gen-crl
+  args:
+    chdir: /etc/openvpn/easy-rsa
+    creates: /etc/openvpn/easy-rsa/pki/crl.pem
+  environment: "{{ easyrsa_env }}"
+
+- name: tls-crypt key
+  ansible.builtin.command: openvpn --genkey secret /etc/openvpn/server/tc.key
+  args:
+    creates: /etc/openvpn/server/tc.key
+
+# crl.pem is 0644 (the server reads it after dropping privileges), like `cloudseed-vpn-client revoke` installs it; a
+# fixed 0600 here plus a chmod afterwards flip-flopped on every run and restarted OpenVPN (dropping every client).
+- name: Copy PKI material into place
+  ansible.builtin.copy:
+    src: "/etc/openvpn/easy-rsa/pki/{{ item.src }}"
+    dest: "/etc/openvpn/server/{{ item.dest }}"
+    remote_src: true
+    mode: "{{ item.mode | default('0600') }}"
+  loop:
+    - { src: ca.crt, dest: ca.crt }
+    - { src: issued/server.crt, dest: server.crt }
+    - { src: private/server.key, dest: server.key }
+    - { src: crl.pem, dest: crl.pem, mode: "0644" }
+  notify: restart openvpn
+
+- name: Server config
+  ansible.builtin.template:
+    src: server.conf.j2
+    dest: /etc/openvpn/server/server.conf
+    mode: "0600"
+  notify: restart openvpn
+
+- name: Client management script
+  ansible.builtin.template:
+    src: cloudseed-vpn-client.j2
+    dest: /usr/local/sbin/cloudseed-vpn-client
+    mode: "0750"
+
+- name: OpenVPN service
+  ansible.builtin.systemd:
+    name: openvpn-server@server
+    enabled: true
+    state: started
+    daemon_reload: true

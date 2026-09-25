@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# cloudseed-vpn-client add <name>     -> prints an inline .ovpn profile for <name> to stdout (a new certificate when
+#                                        <name> has none, or when its certificate expires within 30 days)
+# cloudseed-vpn-client revoke <name>  -> revokes the certificate and refreshes the CRL
+# cloudseed-vpn-client list           -> issued client names
+# cloudseed-vpn-client certs          -> <name><TAB><expiry> for every issued certificate, the server's included
+set -euo pipefail
+cd /etc/openvpn/easy-rsa
+# the role's Easy-RSA settings: easy-rsa 3.0.8 (Ubuntu 22.04) does not read ./vars through the make-cadir symlink
+{% for k, v in easyrsa_env.items() %}
+export {{ k }}={{ v | quote }}
+{% endfor %}
+ACTION="${1:-}"; NAME="${2:-}"
+# The name becomes a certificate name, a file name under pki/ and an easyrsa argument: 1-64 letters, digits, '.', '_'
+# or '-', starting with a letter or digit (never an option such as -rf, never a path). 'server' is the server's own
+# certificate: `add server` would hand out the server's private key, `revoke server` would break the VPN server.
+check_name() {
+  if [[ ! "$NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || [[ "$NAME" =~ ^[Ss][Ee][Rr][Vv][Ee][Rr]$ ]]; then
+    echo "invalid client name: use 1-64 letters, digits, '.', '_' or '-', starting with a letter or digit ('server' is reserved)" >&2
+    exit 2
+  fi
+}
+case "$ACTION" in
+  add)
+    check_name
+    PUBLIC_IP="$(curl -fsS --max-time 5 https://checkip.amazonaws.com 2>/dev/null || curl -fsS --max-time 5 https://api.ipify.org)"
+    # a profile with an expired certificate could never connect: one that has expired, or will within 30 days, is
+    # revoked (easy-rsa moves it aside) and a new one issued below. OpenVPN re-reads the changed CRL by itself.
+    if [[ -f "pki/issued/$NAME.crt" ]] && ! openssl x509 -checkend 2592000 -noout -in "pki/issued/$NAME.crt" >/dev/null 2>&1; then
+      ./easyrsa --batch revoke "$NAME" >&2
+      ./easyrsa --batch gen-crl >&2
+      install -m 0644 pki/crl.pem /etc/openvpn/server/crl.pem
+    fi
+    [[ -f "pki/issued/$NAME.crt" ]] || ./easyrsa --batch build-client-full "$NAME" nopass >&2
+    cat <<PROFILE
+client
+dev tun
+proto udp
+remote ${PUBLIC_IP} {{ vpn_port }}
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+tls-version-min 1.2
+cipher AES-256-GCM
+{% if fips_mode | default(false) %}
+data-ciphers AES-256-GCM:AES-128-GCM
+tls-ciphersuites TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256
+tls-cipher TLS-ECDHE-ECDSA-WITH-AES-256-GCM-SHA384:TLS-ECDHE-RSA-WITH-AES-256-GCM-SHA384:TLS-ECDHE-ECDSA-WITH-AES-128-GCM-SHA256:TLS-ECDHE-RSA-WITH-AES-128-GCM-SHA256
+{% else %}
+data-ciphers AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305
+{% endif %}
+auth SHA256
+verb 3
+<ca>
+$(cat pki/ca.crt)
+</ca>
+<cert>
+$(openssl x509 -in "pki/issued/$NAME.crt")
+</cert>
+<key>
+$(cat "pki/private/$NAME.key")
+</key>
+<tls-crypt>
+$(cat /etc/openvpn/server/tc.key)
+</tls-crypt>
+PROFILE
+    ;;
+  revoke)
+    check_name
+    [[ -f "pki/issued/$NAME.crt" ]] || { echo "no such client: $NAME" >&2; exit 2; }
+    ./easyrsa --batch revoke "$NAME" >&2
+    ./easyrsa --batch gen-crl >&2
+    install -m 0644 pki/crl.pem /etc/openvpn/server/crl.pem
+    systemctl restart openvpn-server@server
+    echo "revoked $NAME"
+    ;;
+  list)
+    ls pki/issued 2>/dev/null | sed 's/\.crt$//' | grep -v '^server$' || true
+    ;;
+  certs)
+    for f in pki/issued/*.crt; do
+      [[ -f "$f" ]] || continue
+      end="$(openssl x509 -enddate -noout -dateopt iso_8601 -in "$f" 2>/dev/null || openssl x509 -enddate -noout -in "$f" 2>/dev/null || true)"
+      printf '%s\t%s\n' "$(basename "$f" .crt)" "${end#notAfter=}"
+    done
+    ;;
+  *)
+    echo "usage: $0 add|revoke <name> | list | certs" >&2; exit 2 ;;
+esac

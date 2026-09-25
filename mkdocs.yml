@@ -1,0 +1,206 @@
+# cloudseed documentation site (GitHub Pages, deployed by .github/workflows/docs.yml)
+# Local preview:  python3 -m venv .venv && .venv/bin/pip install -r requirements-docs.txt
+#                 python3 scripts/gen-docs.py && .venv/bin/mkdocs serve
+site_name: cloudseed
+site_url: https://nimeshbuilds.github.io/cloudseed/
+site_description: >-
+  Secure multi-cloud landing zones and a production Kubernetes platform on AWS, GCP, Azure and local VMware
+  from one command. Terraform + Ansible, a web console, an MCP server and AI-agent mode. Open source.
+site_author: Nimesh
+repo_name: nimeshbuilds/cloudseed
+repo_url: https://github.com/nimeshbuilds/cloudseed
+edit_uri: edit/main/docs/
+copyright: >-
+  Copyright &copy; 2026 Nimesh &middot; <a href="https://github.com/nimeshbuilds">nimeshbuilds</a> &middot;
+  Released under the <a href="https://github.com/nimeshbuilds/cloudseed/blob/main/LICENSE">Apache-2.0 License</a>
+
+theme:
+  name: material
+  custom_dir: overrides
+  language: en
+  logo: assets/icon.svg
+  favicon: assets/favicon.png
+  font: false                         # system font stack (see extra.css): fast, no third-party font requests
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil-outline
+    view: material/eye-outline
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to system preference
+  features:
+    - announce.dismiss
+    - content.action.edit
+    - content.code.annotate
+    - content.code.copy
+    - content.tabs.link
+    - content.tooltips
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.path
+    - navigation.sections
+    - navigation.tabs
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
+
+plugins:
+  - search:
+      separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - minify:
+      minify_html: true
+      minify_js: true
+      minify_css: true
+      htmlmin_opts:
+        remove_comments: true
+      cache_safe: true
+      js_files:
+        - javascripts/cloudseed.js
+      css_files:
+        - stylesheets/extra.css
+
+hooks:
+  - overrides/hooks.py                # exposes cloudseed's version (cloudseed/__init__.py) to the templates
+
+extra_css:
+  - stylesheets/extra.css
+extra_javascript:
+  - javascripts/cloudseed.js
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/nimeshbuilds/cloudseed
+      name: cloudseed on GitHub
+    - icon: octicons/organization-16
+      link: https://github.com/nimeshbuilds
+      name: nimeshbuilds on GitHub
+  # no analytics: the site sets no cookies and loads no trackers
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      permalink_title: Link to this section
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols:
+      fractions: false                # "us-east-1/2" and "CIS level 1/2" must not become ½
+  - pymdownx.snippets:
+      check_paths: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+    absolute_links: info
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: info
+    unrecognized_links: info
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Quickstart: getting-started/quickstart.md
+      - Installation: getting-started/installation.md
+      - Concepts: getting-started/concepts.md
+  - Scenarios:
+      - Scenarios: scenarios/index.md
+      - 01 · Your first lab on VMware: scenarios/01-first-lab-vmware.md
+      - 02 · Secure AWS landing zone: scenarios/02-aws-landing-zone.md
+      - 03 · GCP with private GKE: scenarios/03-gcp-private-gke.md
+      - 04 · Azure with private AKS: scenarios/04-azure-private-aks.md
+      - 05 · Local Kubernetes (RKE2 / kubeadm): scenarios/05-local-kubernetes.md
+      - 06 · A platform in one command: scenarios/06-platform-in-one-command.md
+      - 07 · Data and AI stack: scenarios/07-data-and-ai-stack.md
+      - 08 · Backups you can trust: scenarios/08-backups-you-can-trust.md
+      - 09 · Chaos engineering: scenarios/09-chaos-engineering.md
+      - 10 · Compliance scans: scenarios/10-compliance-scans.md
+      - 11 · FIPS 140 mode: scenarios/11-fips-140-mode.md
+      - 12 · Private access with VPN: scenarios/12-private-access-vpn.md
+      - 13 · Day-2 operations: scenarios/13-day-2-operations.md
+      - 14 · AI agents and MCP: scenarios/14-ai-agents-and-mcp.md
+      - 15 · Web console and FinOps: scenarios/15-web-console-and-finops.md
+  - Guides:
+      - Using the CLI: guides/cli.md
+      - Web console: guides/web-console.md
+      - Explain anything: guides/explain.md
+      - Kubernetes platform: guides/platform.md
+      - Resilience, chaos and scans: guides/resilience.md
+      - Security and FIPS: guides/security-and-fips.md
+      - VPN access: guides/vpn.md
+      - FinOps: guides/finops.md
+      - Undo and audit trail: guides/undo-and-audit.md
+      - MCP server: guides/mcp.md
+      - AI agent mode: guides/agentic.md
+      - Credentials vault: guides/credentials.md
+      - Dependencies and runtimes: guides/dependencies-and-runtimes.md
+      - Troubleshooting: guides/troubleshooting.md
+  - Reference:
+      - reference/index.md
+      - The manual (one page): guides/manual.md
+      - CLI commands: reference/commands.md
+      - Help topics: reference/topics.md
+      - AWS: reference/aws.md
+      - Google Cloud: reference/gcp.md
+      - Azure: reference/azure.md
+      - VMware (local): reference/vmware.md
+      - Platform catalog: reference/platform-catalog.md
+      - MCP tools: reference/mcp-tools.md
+      - Explain index: reference/explain-index.md
+      - Agent skills: reference/skills.md
+  - About:
+      - Architecture: about/architecture.md
+      - FAQ: about/faq.md
+      - Changelog: about/changelog.md
+      - Roadmap: https://github.com/nimeshbuilds/cloudseed/blob/main/ROADMAP.md
+      - Contributing: https://github.com/nimeshbuilds/cloudseed/blob/main/CONTRIBUTING.md

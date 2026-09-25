@@ -1,0 +1,72 @@
+name: Feature request
+description: Suggest a capability, a new target or a platform catalog item.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [roadmap](https://github.com/nimeshbuilds/cloudseed/blob/main/ROADMAP.md) and open issues first.
+        Open-ended ideas and questions are welcome in [Discussions](https://github.com/nimeshbuilds/cloudseed/discussions).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the infrastructure or platform task and what is hard about it today, with or without cloudseed.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like cloudseed to do?
+      description: The command, flag, catalog item or behaviour you have in mind, and what it should create or change.
+      placeholder: "cs platform install <item> ... / --var ... / a new `cs ...` subcommand"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Landing zone (network, bastion, baseline, state)
+        - Kubernetes (EKS / GKE / AKS / RKE2 / kubeadm, nodes)
+        - Platform catalog
+        - DR / chaos / scans / FIPS
+        - VPN and access
+        - FinOps
+        - Web console
+        - MCP server
+        - Agentic mode and skills
+        - Dependencies and packaging
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: targets
+    attributes:
+      label: Targets it applies to
+      multiple: true
+      options:
+        - aws
+        - gcp
+        - azure
+        - vmware
+        - all
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and workarounds
+      description: What you do today instead, and other tools that solve it.
+  - type: textarea
+    id: verification
+    attributes:
+      label: How could we verify it works?
+      description: A small test, a dry-run you would expect to pass, or the output you would expect to see.
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I would like to help implement this.

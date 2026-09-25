@@ -1,0 +1,193 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NO_COLOR: "1"
+  TF_IN_AUTOMATION: "1"
+  TF_INPUT: "0"
+
+jobs:
+  unit:
+    name: unit (${{ matrix.os }}, python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+          # no `cache: pip`: the CLI and its tests use the standard library only, nothing is pip-installed
+
+      # tests/test_cli_e2e.py renders and `terraform validate`s every target, and its vmware dry-run builds the
+      # VMware provider from providers/vmdesktop, so the suite needs Terraform and Go (no cloud access, no VMs)
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_wrapper: false
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: providers/vmdesktop/go.mod
+          cache-dependency-path: providers/vmdesktop/go.sum
+
+      - name: Terraform provider cache
+        run: |
+          mkdir -p "$HOME/.terraform.d/plugin-cache"
+          echo "TF_PLUGIN_CACHE_DIR=$HOME/.terraform.d/plugin-cache" >> "$GITHUB_ENV"
+
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-plugins-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('terraform/**/versions.tf', 'terraform/**/.terraform.lock.hcl') }}
+          restore-keys: terraform-plugins-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Unit tests (isolated CLOUDSEED_HOME)
+        run: |
+          CLOUDSEED_HOME="$(mktemp -d)"
+          export CLOUDSEED_HOME
+          python --version
+          python -m unittest discover -s tests
+
+  terraform:
+    name: terraform (fmt, validate, test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.12"
+
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_wrapper: false
+
+      # terraform/vmware needs cloudseed's own provider (registry.local/cloudseed/vmdesktop): build it with Go,
+      # exactly like `make provider` does on a workstation
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: providers/vmdesktop/go.mod
+          cache-dependency-path: providers/vmdesktop/go.sum
+
+      - name: Terraform provider cache and an isolated CLOUDSEED_HOME
+        run: |
+          mkdir -p "$HOME/.terraform.d/plugin-cache"
+          echo "TF_PLUGIN_CACHE_DIR=$HOME/.terraform.d/plugin-cache" >> "$GITHUB_ENV"
+          echo "CLOUDSEED_HOME=$RUNNER_TEMP/cloudseed-home" >> "$GITHUB_ENV"
+
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-plugins-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('terraform/**/versions.tf', 'terraform/**/.terraform.lock.hcl') }}
+          restore-keys: terraform-plugins-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive -diff terraform
+
+      - name: Build the VMware provider (make provider)
+        run: ./bin/cloudseed -y install vmware-provider
+
+      # terraform/vmware has no committed lock file (it would pin the checksum of one machine's provider build, see
+      # .gitignore): `terraform init` records the provider built above
+      - name: terraform validate every root (make validate)
+        run: make validate
+
+      - name: Mocked terraform test suites (make tftest)
+        run: make tftest
+
+  provider:
+    name: go (vet, test, build) providers/vmdesktop
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: providers/vmdesktop
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: providers/vmdesktop/go.mod
+          cache-dependency-path: providers/vmdesktop/go.sum
+
+      - name: go mod verify
+        run: go mod verify
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then echo "gofmt needed:"; echo "$unformatted"; exit 1; fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+      # Fusion Pro on macOS (arm64, amd64), Workstation Pro on Linux, and the experimental Windows host
+      - name: go build for every supported host
+        run: |
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64; do
+            echo "== $target"
+            GOOS="${target%/*}" GOARCH="${target#*/}" go build -mod=readonly -trimpath -o /dev/null .
+          done
+
+  scenarios:
+    name: scenario scripts (dry-run)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.12"
+
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_wrapper: false
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: providers/vmdesktop/go.mod
+          cache-dependency-path: providers/vmdesktop/go.sum
+
+      - name: Terraform provider cache
+        run: |
+          mkdir -p "$HOME/.terraform.d/plugin-cache"
+          echo "TF_PLUGIN_CACHE_DIR=$HOME/.terraform.d/plugin-cache" >> "$GITHUB_ENV"
+
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-plugins-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('terraform/**/versions.tf', 'terraform/**/.terraform.lock.hcl') }}
+          restore-keys: terraform-plugins-${{ runner.os }}-${{ runner.arch }}-
+
+      # Cloud scenarios run with --dry-run (Terraform render + validate, no credentials); scenarios that need
+      # VMware VMs are skipped unless their opt-in variable is set, which it never is here.
+      - name: tests/scenarios/run.sh
+        run: |
+          if [ ! -f tests/scenarios/run.sh ]; then
+            echo "::notice title=scenarios::tests/scenarios/run.sh not found, nothing to run"
+            exit 0
+          fi
+          export CLOUDSEED_HOME="$RUNNER_TEMP/cloudseed-scenarios"
+          bash tests/scenarios/run.sh

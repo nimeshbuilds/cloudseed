@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-label="cloudseed: secure landing zones and a Kubernetes platform from one command, on AWS, GCP, Azure and VMware">
+  <!-- GitHub social preview (Settings > General > Social preview). Render: rsvg-convert -w 1280 -h 640 social-preview.svg -o social-preview.png -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b1220"/><stop offset="0.55" stop-color="#0f172a"/><stop offset="1" stop-color="#1e3a8a"/></linearGradient>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1e3a8a"/><stop offset="1" stop-color="#312e81"/></linearGradient>
+    <linearGradient id="cloud" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dbeafe"/></linearGradient>
+    <linearGradient id="leaf" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#16a34a"/><stop offset="1" stop-color="#4ade80"/></linearGradient>
+    <linearGradient id="seed" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f59e0b"/><stop offset="1" stop-color="#d97706"/></linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4ade80"/><stop offset="1" stop-color="#7c9cf8"/></linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#4f7df3" stop-opacity="0.45"/><stop offset="0.55" stop-color="#22c55e" stop-opacity="0.10"/><stop offset="1" stop-color="#0f172a" stop-opacity="0"/></radialGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#334155" stroke-opacity="0.30" stroke-width="1"/></pattern>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <rect width="1280" height="640" fill="url(#grid)"/>
+  <circle cx="1060" cy="300" r="300" fill="url(#glow)"/>
+
+  <!-- icon, right -->
+  <g transform="translate(915 150) scale(0.5664)">
+    <rect width="512" height="512" rx="112" fill="url(#tile)" stroke="#7c9cf8" stroke-opacity="0.55" stroke-width="6"/>
+    <path fill="url(#cloud)" d="M148 328h224a56 56 0 0 0 6-111.7A88 88 0 0 0 208 190a64 64 0 0 0-108 44.6A48 48 0 0 0 148 328z"/>
+    <path fill="#1e3a8a" d="M256 226a22 22 0 0 0-22 22c0 8.6 5 16 12.3 19.6L240 300h32l-6.3-32.4A22 22 0 0 0 256 226z"/>
+    <rect x="120" y="372" width="272" height="12" rx="6" fill="#93c5fd" opacity="0.6"/>
+    <path d="M256 372v-64" stroke="url(#leaf)" stroke-width="14" stroke-linecap="round" fill="none"/>
+    <path fill="url(#leaf)" d="M256 322c-6-40-40-56-74-50 6 34 32 56 74 50z"/>
+    <path fill="url(#leaf)" d="M256 338c8-38 42-54 74-48-4 34-30 56-74 48z"/>
+    <ellipse cx="256" cy="396" rx="26" ry="16" fill="url(#seed)"/>
+  </g>
+
+  <g font-family="'Helvetica Neue', Helvetica, 'Segoe UI', Inter, Arial, sans-serif">
+    <!-- wordmark -->
+    <text x="92" y="138" font-size="80" font-weight="800" fill="#f8fafc" letter-spacing="-2.5">cloud<tspan fill="#4ade80">seed</tspan></text>
+    <rect x="96" y="168" width="120" height="8" rx="4" fill="url(#accent)"/>
+
+    <!-- headline -->
+    <g font-size="70" font-weight="800" letter-spacing="-1.5" fill="#f8fafc">
+      <text x="92" y="276">Secure landing zones</text>
+      <text x="92" y="358">+ Kubernetes platform,</text>
+      <text x="92" y="440" fill="#4ade80">one command.</text>
+    </g>
+
+    <!-- targets -->
+    <g font-size="32" font-weight="700">
+      <rect x="96" y="494" width="118" height="62" rx="31" fill="#f59e0b" fill-opacity="0.16" stroke="#f59e0b" stroke-opacity="0.8" stroke-width="2"/>
+      <text x="155" y="536" text-anchor="middle" fill="#fbbf24">AWS</text>
+      <rect x="230" y="494" width="118" height="62" rx="31" fill="#4f7df3" fill-opacity="0.18" stroke="#7c9cf8" stroke-opacity="0.8" stroke-width="2"/>
+      <text x="289" y="536" text-anchor="middle" fill="#a5b8fb">GCP</text>
+      <rect x="364" y="494" width="136" height="62" rx="31" fill="#06b6d4" fill-opacity="0.16" stroke="#22d3ee" stroke-opacity="0.8" stroke-width="2"/>
+      <text x="432" y="536" text-anchor="middle" fill="#67e8f9">Azure</text>
+      <rect x="516" y="494" width="170" height="62" rx="31" fill="#16a34a" fill-opacity="0.18" stroke="#4ade80" stroke-opacity="0.8" stroke-width="2"/>
+      <text x="601" y="536" text-anchor="middle" fill="#86efac">VMware</text>
+    </g>
+
+    <!-- command under the icon -->
+    <rect x="910" y="482" width="300" height="74" rx="14" fill="#020617" fill-opacity="0.85" stroke="#334155" stroke-width="2"/>
+    <text x="1060" y="529" text-anchor="middle" font-family="Menlo, 'SF Mono', SFMono-Regular, Consolas, monospace" font-size="28" font-weight="700" fill="#e2e8f0"><tspan fill="#4ade80">$</tspan> cs setup aws</text>
+  </g>
+</svg>

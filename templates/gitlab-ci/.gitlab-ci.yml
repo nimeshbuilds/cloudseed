@@ -1,0 +1,69 @@
+# cloudseed GitLab CI template: build -> test -> scan -> push -> deploy (GitOps via ArgoCD)
+# Copy into a project (`cs platform template gitlab-ci`) and set the variables below in GitLab CI/CD settings.
+# Tool images are pinned: the argocd CLI matches the Argo CD server cloudseed installs (argo-cd chart 10.9.2 = v3.5.3).
+#
+# On the GitLab cloudseed installs (cs platform install devsecops): jobs clone through the in-cluster service (the
+# runner's CLONE_URL), but the registry is registry.<domain>. That name must resolve from the job pods and the nodes
+# (a DNS record or CoreDNS rewrite to the ingress address) and its certificate must be trusted - or set
+# REGISTRY_INSECURE to "true" (CI/CD variable) to skip TLS verification in the build, scan and release jobs.
+stages: [build, test, scan, release, deploy]
+
+variables:
+  IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+  KANIKO_CACHE: "true"
+  REGISTRY_INSECURE: "false"
+  # ARGOCD_SERVER / ARGOCD_AUTH_TOKEN / ARGOCD_APP  -> set as protected CI variables
+
+build:
+  stage: build
+  # kaniko is archived upstream but this pinned build still works; swap in buildah or BuildKit rootless if you prefer
+  image: {name: gcr.io/kaniko-project/executor:v1.23.2-debug, entrypoint: [""]}
+  script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - TLS=""; if [ "$REGISTRY_INSECURE" = "true" ]; then TLS="--skip-tls-verify --skip-tls-verify-registry=$CI_REGISTRY"; fi
+    - /kaniko/executor --context "$CI_PROJECT_DIR" --dockerfile "$CI_PROJECT_DIR/Dockerfile" --destination "$IMAGE" --cache=$KANIKO_CACHE $TLS
+
+test:
+  stage: test
+  image: alpine:3.23
+  script:
+    - echo "add your unit tests here (make test / pytest / go test ...)"
+
+trivy-image:
+  stage: scan
+  image: {name: aquasec/trivy:0.74.0, entrypoint: [""]}
+  variables:
+    TRIVY_USERNAME: $CI_REGISTRY_USER
+    TRIVY_PASSWORD: $CI_REGISTRY_PASSWORD
+  script:
+    - TLS=""; if [ "$REGISTRY_INSECURE" = "true" ]; then TLS="--insecure"; fi
+    - trivy image $TLS --exit-code 0 --severity HIGH,CRITICAL --format table "$IMAGE"
+    - trivy image $TLS --exit-code 1 --severity CRITICAL --ignore-unfixed "$IMAGE"
+  allow_failure: false
+
+trivy-iac:
+  stage: scan
+  image: {name: aquasec/trivy:0.74.0, entrypoint: [""]}
+  script:
+    - trivy config --exit-code 1 --severity HIGH,CRITICAL .
+  allow_failure: true
+
+release:
+  stage: release
+  image: {name: gcr.io/go-containerregistry/crane:debug, entrypoint: [""]}
+  script:
+    - TLS=""; if [ "$REGISTRY_INSECURE" = "true" ]; then TLS="--insecure"; fi
+    - crane auth login $TLS -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - crane tag $TLS "$IMAGE" "$CI_COMMIT_REF_SLUG"
+  only: [main, tags]
+
+deploy:
+  stage: deploy
+  image: {name: quay.io/argoproj/argocd:v3.5.3, entrypoint: [""]}
+  script:
+    - argocd app set "$ARGOCD_APP" --server "$ARGOCD_SERVER" --auth-token "$ARGOCD_AUTH_TOKEN" --grpc-web --kustomize-image "$CI_REGISTRY_IMAGE=$IMAGE"
+    - argocd app sync "$ARGOCD_APP" --server "$ARGOCD_SERVER" --auth-token "$ARGOCD_AUTH_TOKEN" --grpc-web
+    - argocd app wait "$ARGOCD_APP" --server "$ARGOCD_SERVER" --auth-token "$ARGOCD_AUTH_TOKEN" --grpc-web --health --timeout 300
+  only: [main]
+  environment: {name: production}

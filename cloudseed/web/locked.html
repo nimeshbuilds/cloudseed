@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>cloudseed console</title><link rel="icon" href="/assets/icon.svg"><link rel="stylesheet" href="/static/style.css"></head>
+<body class="locked">
+<main class="lock-card">
+  <!-- the logo follows the system theme, or the theme picked in the console once the page knows it (data-theme) -->
+  <picture class="logo-auto"><source srcset="/assets/logo-dark.svg" media="(prefers-color-scheme: dark)"><img src="/assets/logo.svg" alt="cloudseed" width="280" height="62"></picture>
+  <img class="logo-light" src="/assets/logo.svg" alt="cloudseed" width="280" height="62"><img class="logo-dark" src="/assets/logo-dark.svg" alt="cloudseed" width="280" height="62">
+  <h1>This console is locked</h1>
+  <p>Open it with the link that carries your access token:</p>
+  <pre>cs ui</pre>
+  <p class="muted">That opens the console in your browser; <code>cs ui token</code> prints the link instead. The link stays valid until the token is rotated.</p>
+</main>
+</body></html>

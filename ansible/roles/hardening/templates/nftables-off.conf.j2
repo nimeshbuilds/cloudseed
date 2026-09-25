@@ -1,0 +1,25 @@
+#!/usr/sbin/nft -f
+# managed by cloudseed - host firewall off (cloudseed provision --no-firewall)
+# No `flush ruleset`: only cloudseed's own tables change. The filter table of an earlier run with the host firewall is
+# removed (declared first, so the delete also works when it is not there); every other table - fail2ban's, Tailscale's,
+# ufw/iptables-nft's - is left as it is. That includes an earlier run's `ip nat` table: iptables-nft users share the
+# name, so it is not deleted here; its rules duplicate cloudseed_nat's, and it is gone after the next reboot.
+table inet filter
+delete table inet filter
+table ip cloudseed_nat
+delete table ip cloudseed_nat
+{% if vpn_forward | default(false) | bool or (nat_source_cidrs | default([])) | length > 0 %}
+
+# this host forwards traffic for others (VPN clients, or the private network of a local bastion): masquerade it
+table ip cloudseed_nat {
+  chain postrouting {
+    type nat hook postrouting priority 100; policy accept;
+{% if vpn_forward | default(false) | bool %}
+    iifname { "tun0", "tailscale0" } oifname != { "tun0", "tailscale0" } masquerade
+{% endif %}
+{% for cidr in (nat_source_cidrs | default([])) %}
+    ip saddr {{ cidr }} oifname != { "tun0", "tailscale0" } masquerade
+{% endfor %}
+  }
+}
+{% endif %}

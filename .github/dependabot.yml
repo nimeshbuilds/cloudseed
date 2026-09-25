@@ -1,0 +1,38 @@
+version: 2
+updates:
+  # GitHub Actions used by .github/workflows (tests, docs)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # cloudseed's Terraform provider for VMware Fusion / Workstation
+  - package-ecosystem: gomod
+    directory: /providers/vmdesktop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      terraform-plugin:
+        patterns: ["github.com/hashicorp/*"]
+      go-libraries:
+        patterns: ["*"]
+        exclude-patterns: ["github.com/hashicorp/*"]
+
+  # documentation site toolchain (requirements-docs.txt: MkDocs Material and plugins)
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      documentation:
+        patterns: ["*"]
+
+  # the all-in-one runtime image (Dockerfile base image, pinned by digest)
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

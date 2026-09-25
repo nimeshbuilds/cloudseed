@@ -1,0 +1,134 @@
+---
+# FIPS 140 mode for a cloudseed host.
+#   Ubuntu:        Ubuntu Pro FIPS packages (fips-updates): validated kernel crypto, OpenSSL, OpenSSH, libgcrypt, strongSwan.
+#                  Pro FIPS cloud images (GCP/Azure) are already attached and enabled; other Ubuntu hosts need a Pro token:
+#                  the `ubuntu_pro_token` variable (kubernetes.yml reads UBUNTU_PRO_TOKEN on the controller), or
+#                  cs_secrets.ubuntu_pro_token (bastion.yml/vpn.yml read ~/cloudseed-secrets.json on the host and delete it).
+#                  The token never appears on a command line: `pro attach` reads it from a 0600 attach-config file
+#                  that is removed again whatever happens.
+#   Amazon Linux:  fips-mode-setup --enable (kernel fips=1 + FIPS crypto policy), the documented AL2023 procedure.
+# Enabling FIPS needs a reboot: plays that run over SSH reboot inline (fips_reboot_inline); the local bastion/VPN
+# playbooks schedule a reboot one minute after they finish (a systemd timer; SSH logins keep working until then) and
+# `cloudseed provision` waits for it and verifies fips_enabled afterwards.
+- name: Current FIPS state
+  ansible.builtin.command: cat /proc/sys/crypto/fips_enabled
+  register: fips_state
+  changed_when: false
+  failed_when: false
+
+- name: FIPS already enabled
+  ansible.builtin.set_fact:
+    fips_active: "{{ fips_state.rc == 0 and fips_state.stdout | trim == '1' }}"
+
+# ---------- Ubuntu (Ubuntu Pro) ----------
+- name: Ubuntu Pro FIPS packages
+  when: ansible_facts['distribution'] == 'Ubuntu' and not fips_active
+  block:
+    - name: Ubuntu Pro client
+      ansible.builtin.apt:
+        name: ubuntu-pro-client
+        state: present
+        update_cache: true
+
+    - name: Ubuntu Pro token
+      ansible.builtin.set_fact:
+        fips_pro_token: "{{ ubuntu_pro_token | default('', true) or (cs_secrets | default({})).ubuntu_pro_token | default('', true) }}"
+      no_log: true
+
+    - name: Ubuntu Pro attachment status
+      ansible.builtin.command: pro api u.pro.status.is_attached.v1
+      register: pro_attached
+      changed_when: false
+      failed_when: false
+
+    - name: Fail without a way to get FIPS packages
+      ansible.builtin.fail:
+        msg: >-
+          FIPS mode needs Ubuntu Pro on {{ inventory_hostname }}: use a Pro FIPS image, or export UBUNTU_PRO_TOKEN
+          before `cloudseed provision` (free for personal use: https://ubuntu.com/pro/dashboard).
+      when:
+        - "'\"is_attached\": true' not in (pro_attached.stdout | default(''))"
+        - fips_pro_token | length == 0
+
+    - name: Attach Ubuntu Pro
+      when: "'\"is_attached\": true' not in (pro_attached.stdout | default(''))"
+      block:
+        - name: Attach config (token file, 0600)
+          ansible.builtin.tempfile:
+            suffix: .pro-attach.yaml
+          register: pro_attach_cfg
+
+        - name: Token into the attach config
+          ansible.builtin.copy:
+            dest: "{{ pro_attach_cfg.path }}"
+            content: "{{ {'token': fips_pro_token} | to_nice_yaml }}"
+            mode: "0600"
+          no_log: true
+
+        - name: pro attach
+          ansible.builtin.command: pro attach --attach-config {{ pro_attach_cfg.path }} --no-auto-enable
+      always:
+        - name: Remove the attach config
+          ansible.builtin.file:
+            path: "{{ pro_attach_cfg.path }}"
+            state: absent
+          when: pro_attach_cfg.path is defined
+
+    - name: Enable fips-updates (validated modules + security updates)
+      ansible.builtin.command: pro enable fips-updates --assume-yes
+      register: pro_fips
+      changed_when: "'enabled' in pro_fips.stdout | lower"
+      failed_when: pro_fips.rc != 0 and 'already enabled' not in pro_fips.stdout | lower
+
+# ---------- Amazon Linux 2023 / RHEL family ----------
+- name: crypto-policies scripts
+  ansible.builtin.dnf:
+    name: crypto-policies-scripts
+    state: present
+  when: ansible_facts['os_family'] == 'RedHat' and not fips_active
+
+- name: Enable FIPS mode (kernel fips=1 + FIPS crypto policy)
+  ansible.builtin.command: fips-mode-setup --enable
+  when: ansible_facts['os_family'] == 'RedHat' and not fips_active
+
+# ---------- reboot ----------
+- name: Reboot now (SSH-driven play)
+  ansible.builtin.reboot:
+    msg: "cloudseed FIPS mode reboot"
+    reboot_timeout: 600
+  when: not fips_active and fips_reboot_inline | default(false)
+
+- name: Verify FIPS after reboot
+  ansible.builtin.command: cat /proc/sys/crypto/fips_enabled
+  register: fips_after
+  changed_when: false
+  failed_when: fips_after.stdout | trim != '1'
+  when: not fips_active and fips_reboot_inline | default(false)
+
+# The marker comes before the reboot is scheduled: the host can never reboot before cloudseed can see one is pending.
+- name: FIPS reboot pending marker
+  ansible.builtin.copy:
+    dest: /etc/cloudseed-fips-pending
+    content: "reboot scheduled by cloudseed to activate FIPS mode\n"
+    mode: "0644"
+  when: not fips_active and not (fips_reboot_inline | default(false))
+
+# A transient systemd timer, not `shutdown -r +1`: systemd-logind writes /run/nologin up to five minutes before a
+# scheduled shutdown (at once for +1), and pam_nologin then refuses every non-root SSH login - among them the check
+# `cloudseed provision` runs right after the play to wait for this reboot. A re-run inside the minute replaces the
+# timer of the earlier run.
+- name: Schedule a reboot one minute after provisioning finishes (local play)
+  ansible.builtin.shell: |
+    systemctl stop cloudseed-fips-reboot.timer >/dev/null 2>&1 || true
+    systemctl reset-failed cloudseed-fips-reboot.timer cloudseed-fips-reboot.service >/dev/null 2>&1 || true
+    systemd-run --quiet --collect --on-active=60 --unit=cloudseed-fips-reboot \
+      --description="cloudseed FIPS mode reboot" "$(command -v systemctl)" reboot
+  changed_when: true
+  when: not fips_active and not (fips_reboot_inline | default(false))
+
+# a marker left by an earlier run whose reboot already happened would make `cloudseed provision` wait for nothing
+- name: No FIPS reboot pending
+  ansible.builtin.file:
+    path: /etc/cloudseed-fips-pending
+    state: absent
+  when: fips_active

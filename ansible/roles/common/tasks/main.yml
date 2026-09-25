@@ -1,0 +1,75 @@
+---
+- name: Refresh package cache (Debian family)
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Base packages (Debian family)
+  ansible.builtin.apt:
+    name: [git, curl, unzip, jq, tmux, vim, htop, python3, python3-venv, python3-pip, ca-certificates, gnupg, tar, less, dnsutils, net-tools]
+    state: present
+  when: ansible_facts['os_family'] == 'Debian'
+
+# No `curl` here: Amazon Linux 2023 ships curl-minimal (it provides /usr/bin/curl), and asking dnf for `curl` by name
+# selects the full curl package, which conflicts with the installed curl-minimal and fails the whole transaction.
+- name: Base packages (Amazon Linux / RedHat family)
+  ansible.builtin.dnf:
+    name: [git, unzip, jq, tmux, vim, htop, python3, python3-pip, ca-certificates, tar, less, bind-utils]
+    state: present
+  when: ansible_facts['os_family'] == 'RedHat'
+
+# Timezone with builtin modules only (no community.general collection needed on the host).
+- name: UTC zone file
+  ansible.builtin.stat:
+    path: /usr/share/zoneinfo/Etc/UTC
+  register: utc_zone
+
+- name: Timezone UTC
+  ansible.builtin.file:
+    src: /usr/share/zoneinfo/Etc/UTC
+    dest: /etc/localtime
+    state: link
+    force: true
+  when: utc_zone.stat.exists
+
+- name: Timezone name (Debian family)
+  ansible.builtin.copy:
+    dest: /etc/timezone
+    content: "Etc/UTC\n"
+    mode: "0644"
+  when: utc_zone.stat.exists and ansible_facts['os_family'] == 'Debian'
+
+- name: Login message
+  ansible.builtin.template:
+    src: motd.j2
+    dest: /etc/motd
+    mode: "0644"
+
+- name: Ensure ~/.local/bin for the login user
+  ansible.builtin.file:
+    path: "/home/{{ ssh_user }}/.local/bin"
+    state: directory
+    owner: "{{ ssh_user }}"
+    group: "{{ ssh_user }}"
+    mode: "0755"
+
+- name: Link cloudseed and cs into ~/.local/bin
+  ansible.builtin.file:
+    src: "{{ repo_dir }}/bin/cloudseed"
+    dest: "/home/{{ ssh_user }}/.local/bin/{{ item }}"
+    state: link
+    force: true
+    owner: "{{ ssh_user }}"
+    group: "{{ ssh_user }}"
+  loop: [cloudseed, cs]
+  when: (repo_dir + '/bin/cloudseed') is file
+
+- name: PATH includes ~/.local/bin
+  ansible.builtin.lineinfile:
+    path: "/home/{{ ssh_user }}/.profile"
+    line: 'export PATH="$HOME/.local/bin:$PATH"'
+    create: true
+    owner: "{{ ssh_user }}"
+    group: "{{ ssh_user }}"
+    mode: "0644"

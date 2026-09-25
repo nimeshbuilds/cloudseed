@@ -1,0 +1,26 @@
+# VCS, build output, local environments
+.git
+build/
+dist/
+.venv/
+**/__pycache__/
+**/*.pyc
+.ruff_cache/
+*.spec
+# Terraform working state (provider caches, state, plans, crash logs, variable files that may hold secrets)
+**/.terraform/
+**/.terraform.lock.hcl
+**/*.tfstate*
+**/tfplan
+**/crash.log
+**/*.tfvars
+# local secrets and OS junk
+.env
+.env.*
+.envrc
+**/.DS_Store
+# provider build junk, large artwork
+providers/**/*.test
+providers/vmdesktop/go.sum.bak
+providers/**/terraform-provider-*
+assets/*.png

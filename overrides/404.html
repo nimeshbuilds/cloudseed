@@ -1,0 +1,24 @@
+{#- Branded "page not found" page (GitHub Pages serves it for every unknown path). -#}
+{% extends "main.html" %}
+
+{% block htmltitle %}
+  <title>Page not found · cloudseed</title>
+{% endblock %}
+
+{% block cs_robots %}<meta name="robots" content="noindex">{% endblock %}
+
+{% block content %}
+  <div class="cs-404">
+    <img src="{{ 'assets/icon.svg' | url }}" alt="" width="88" height="88">
+    <p class="cs-404__code">404</p>
+    <h1>This seed never sprouted.</h1>
+    <p>The page you are looking for does not exist or has moved. These are good places to start:</p>
+    <div class="cs-404__links">
+      <a class="md-button md-button--primary" href="{{ nav.homepage.url | url }}">Home</a>
+      <a class="md-button" href="{{ 'getting-started/quickstart/' | url }}">Quickstart</a>
+      <a class="md-button" href="{{ 'scenarios/' | url }}">15 scenarios</a>
+      <a class="md-button" href="{{ 'reference/' | url }}">Reference</a>
+    </div>
+    <p class="cs-404__hint">Or press <kbd>/</kbd> to search the documentation.</p>
+  </div>
+{% endblock %}

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://nimeshbuilds.github.io/cloudseed/sitemap.xml

@@ -1,0 +1,180 @@
+---
+- name: Architecture name for HashiCorp releases
+  ansible.builtin.set_fact:
+    tf_arch: "{{ 'arm64' if ansible_facts['architecture'] in ['aarch64', 'arm64'] else 'amd64' }}"
+
+- name: Latest Terraform version
+  ansible.builtin.uri:
+    url: https://checkpoint-api.hashicorp.com/v1/check/terraform
+    return_content: true
+  register: tf_check
+  when: install_terraform
+  failed_when: false
+
+- name: Terraform version to install
+  ansible.builtin.set_fact:
+    tf_version: "{{ (tf_check.json.current_version if (tf_check is defined and tf_check.json is defined) else '1.13.3') }}"
+  when: install_terraform
+
+- name: Installed Terraform version
+  ansible.builtin.command: terraform version -json
+  register: tf_installed
+  changed_when: false
+  failed_when: false
+  when: install_terraform
+
+- name: Download Terraform checksums
+  ansible.builtin.uri:
+    url: "https://releases.hashicorp.com/terraform/{{ tf_version }}/terraform_{{ tf_version }}_SHA256SUMS"
+    return_content: true
+  register: tf_sums
+  when: install_terraform and (tf_installed.rc != 0 or (tf_installed.stdout | from_json).terraform_version != tf_version)
+
+- name: Download Terraform (checksum verified)
+  ansible.builtin.get_url:
+    url: "https://releases.hashicorp.com/terraform/{{ tf_version }}/terraform_{{ tf_version }}_linux_{{ tf_arch }}.zip"
+    dest: /tmp/terraform.zip
+    checksum: "sha256:{{ (tf_sums.content | regex_search('([0-9a-f]{64})\\s+terraform_' + tf_version + '_linux_' + tf_arch + '\\.zip', '\\1'))[0] }}"
+    mode: "0644"
+  when: install_terraform and tf_sums is not skipped
+
+- name: Install Terraform binary
+  ansible.builtin.unarchive:
+    src: /tmp/terraform.zip
+    dest: /usr/local/bin
+    remote_src: true
+    include: [terraform]
+    mode: "0755"
+  when: install_terraform and tf_sums is not skipped
+
+# ---- cloud CLI for this environment's cloud ----
+- name: AWS CLI (Amazon Linux ships it; Debian family via official zip)
+  ansible.builtin.shell: |
+    set -e
+    ARCH=$(uname -m)
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${ARCH}.zip" -o /tmp/awscli.zip
+    unzip -qo /tmp/awscli.zip -d /tmp/awscli
+    /tmp/awscli/aws/install --update
+    rm -rf /tmp/awscli /tmp/awscli.zip
+  args:
+    creates: /usr/local/bin/aws
+  when: install_cloud_cli and cloud == 'aws' and ansible_facts['os_family'] == 'Debian'
+
+# The key is downloaded to a temp file first, so a failed or cut-off download never leaves an empty keyring behind;
+# gpg --batch --yes overwrites a keyring from an earlier attempt (or the image) instead of prompting on a missing tty.
+- name: Google Cloud CLI apt repo
+  ansible.builtin.shell: |
+    set -eo pipefail
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp"' EXIT
+    curl -fsSL --retry 5 --retry-delay 5 https://packages.cloud.google.com/apt/doc/apt-key.gpg -o "$tmp"
+    gpg --batch --yes --dearmor -o /usr/share/keyrings/cloud.google.gpg "$tmp"
+    test -s /usr/share/keyrings/cloud.google.gpg
+    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" > /etc/apt/sources.list.d/google-cloud-sdk.list
+    chmod 0644 /usr/share/keyrings/cloud.google.gpg /etc/apt/sources.list.d/google-cloud-sdk.list   # readable under the hardened umask 027
+    apt-get update -qq
+  args:
+    creates: /etc/apt/sources.list.d/google-cloud-sdk.list
+    executable: /bin/bash
+  when: install_cloud_cli and cloud == 'gcp' and ansible_facts['os_family'] == 'Debian'
+
+# kubectl against GKE needs the exec credential plugin: get-credentials writes a kubeconfig that runs
+# gke-gcloud-auth-plugin, and the apt-installed SDK has no component manager to add it later
+- name: Google Cloud CLI
+  ansible.builtin.apt:
+    name:
+      - google-cloud-cli
+      - google-cloud-cli-gke-gcloud-auth-plugin
+    state: present
+  when: install_cloud_cli and cloud == 'gcp' and ansible_facts['os_family'] == 'Debian'
+
+# Downloaded first (curl -f: an HTTP error page is never run as a script), and `az` must exist afterwards: a failed
+# download used to end in "changed" with no Azure CLI on the bastion.
+- name: Azure CLI
+  ansible.builtin.shell: |
+    set -eo pipefail
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp"' EXIT
+    curl -fsSL --retry 5 --retry-delay 5 https://aka.ms/InstallAzureCLIDeb -o "$tmp"
+    bash "$tmp"
+    test -x /usr/bin/az
+  args:
+    creates: /usr/bin/az
+    executable: /bin/bash
+  when: install_cloud_cli and cloud == 'azure' and ansible_facts['os_family'] == 'Debian'
+
+# ---- kubectl for the managed cluster (EKS / GKE / AKS) ----
+# The bastion's cloud identity may reach the cluster API (EKS: an access entry + eks:DescribeCluster for
+# `aws eks update-kubeconfig`; GKE: the auth plugin above; AKS: `az aks get-credentials`), so it gets kubectl too:
+# the release that matches the cluster's minor version (kubectl supports one minor version of skew), else the current
+# stable release, from dl.k8s.io and checked against the SHA-256 published with it. install_kubectl: bastion.yml.
+- name: Cluster Kubernetes version (EKS, when the configuration leaves it to EKS)
+  ansible.builtin.command:
+    argv: [aws, eks, describe-cluster, --name, "{{ kubernetes_cluster_name }}", --region, "{{ cloud_region }}",
+           --query, cluster.version, --output, text]
+  environment: "{{ {'AWS_USE_FIPS_ENDPOINT': 'true'} if fips_mode | default(false) | bool else {} }}"
+  register: eks_version
+  changed_when: false
+  failed_when: false
+  when: >-
+    install_kubectl | bool and cloud == 'aws' and (kubernetes_version | default('', true) | string | length == 0)
+    and (kubernetes_cluster_name | default('', true) | length > 0) and (cloud_region | default('', true) | length > 0)
+
+- name: Kubernetes minor version for kubectl
+  ansible.builtin.set_fact:
+    kubectl_minor: "{{ minor_from_config if minor_from_config else minor_from_eks }}"
+  vars:
+    # 1.33 / v1.33 / 1.33.2-gke.1200 -> 1.33
+    minor_from_config: >-
+      {{ (kubernetes_version | default('', true) | string | trim)
+         | regex_search('^v?[0-9]+[.][0-9]+') | default('', true) | regex_replace('^v', '') }}
+    minor_from_eks: >-
+      {{ (eks_version.stdout | default('') | trim) | regex_search('^[0-9]+[.][0-9]+$') | default('', true) }}
+  when: install_kubectl | bool
+
+- name: kubectl release to install
+  ansible.builtin.uri:
+    url: "https://dl.k8s.io/release/{{ ('stable-' + kubectl_minor) if kubectl_minor else 'stable' }}.txt"
+    return_content: true
+  register: kubectl_release
+  retries: 3
+  delay: 5
+  until: kubectl_release.status | default(0) == 200
+  when: install_kubectl | bool
+
+- name: kubectl release answer is a version
+  ansible.builtin.assert:
+    that: kubectl_release.content | default('') | trim is match('^v[0-9]+[.][0-9]+[.][0-9]+$')
+    fail_msg: "dl.k8s.io did not answer with a kubectl release ({{ kubectl_release.content | default('') | trim | truncate(80) }})"
+    quiet: true
+  when: install_kubectl | bool
+
+- name: kubectl (checksum verified)
+  ansible.builtin.get_url:
+    url: "https://dl.k8s.io/release/{{ kubectl_release.content | trim }}/bin/linux/{{ tf_arch }}/kubectl"
+    checksum: "sha256:https://dl.k8s.io/release/{{ kubectl_release.content | trim }}/bin/linux/{{ tf_arch }}/kubectl.sha256"
+    dest: /usr/local/bin/kubectl
+    mode: "0755"
+  register: kubectl_download
+  retries: 3
+  delay: 5
+  until: kubectl_download is succeeded
+  when: install_kubectl | bool
+
+# ---- AWS FIPS endpoints for the CLI tools on the bastion ----
+# In FIPS mode the stack's Terraform provider calls the FIPS 140 validated endpoints; the aws CLI in a login shell,
+# and the `aws eks get-token` of a kubeconfig written there by `aws eks update-kubeconfig`, do the same.
+- name: AWS CLI uses the FIPS endpoints (FIPS mode)
+  ansible.builtin.copy:
+    dest: /etc/profile.d/cloudseed-aws-fips.sh
+    mode: "0644"
+    content: |
+      # cloudseed: FIPS mode - AWS API calls go to the FIPS 140 validated endpoints
+      export AWS_USE_FIPS_ENDPOINT=true
+  when: cloud == 'aws' and fips_mode | default(false) | bool
+
+- name: No AWS FIPS endpoint setting outside FIPS mode
+  ansible.builtin.file:
+    path: /etc/profile.d/cloudseed-aws-fips.sh
+    state: absent
+  when: not (cloud == 'aws' and fips_mode | default(false) | bool)

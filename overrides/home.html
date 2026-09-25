@@ -1,0 +1,458 @@
+{#- cloudseed landing page (docs/index.md: template: home.html). The full-width sections replace Material's article
+    inside <main> (no sidebars); extra.css lets that container span the viewport. Styles: docs/stylesheets/extra.css
+    (cs-*), behaviour (terminal demo, copy buttons, screenshot tabs, star count): docs/javascripts/cloudseed.js. -#}
+{% extends "main.html" %}
+
+{#- The landing page shows no sidebars on wide screens (docs/index.md hides "navigation" and "toc"), but keeps the
+    primary navigation in the page: on phones and tablets it is the drawer behind the header's menu button. -#}
+
+{% block container %}
+  {%- set repo = config.repo_url -%}
+  {%- set version = config.extra.cloudseed_version -%}
+  {%- set install = "git clone https://github.com/nimeshbuilds/cloudseed && cd cloudseed && ./scripts/install.sh" -%}
+  <div class="cs-landing" id="cloudseed">
+
+    {#- ------------------------------------------------------------------ hero -#}
+    <section class="cs-hero" aria-labelledby="cs-hero-title">
+      <div class="cs-hero__glow" aria-hidden="true"></div>
+      <div class="cs-hero__inner md-grid">
+        <div class="cs-hero__copy">
+          <a class="cs-eyebrow" href="{{ 'about/changelog/' | url }}">
+            <span class="cs-eyebrow__dot" aria-hidden="true"></span>
+            <span>v{{ version }} · open source · Apache-2.0</span>
+            <span class="cs-eyebrow__arrow" aria-hidden="true">{% include ".icons/material/arrow-right.svg" %}</span>
+          </a>
+          <h1 id="cs-hero-title" class="cs-hero__title">
+            Secure landing zones and a Kubernetes platform, <span class="cs-grad">from one command.</span>
+          </h1>
+          <p class="cs-hero__lead">
+            A private network, NAT, a bastion only your IP can reach and a security baseline on <strong>AWS</strong>,
+            <strong>Google Cloud</strong>, <strong>Azure</strong> or <strong>VMware</strong> on your laptop — then a
+            production Kubernetes platform on top. Plain Terraform and Ansible you own, driven from a CLI, a web
+            console or your AI agent.
+          </p>
+          <div class="cs-cta">
+            <a class="cs-btn cs-btn--primary" href="{{ 'getting-started/quickstart/' | url }}">
+              Get started <span class="cs-btn__icon" aria-hidden="true">{% include ".icons/material/arrow-right.svg" %}</span>
+            </a>
+            <a class="cs-btn cs-btn--glass" href="{{ 'scenarios/' | url }}">Browse 15 scenarios</a>
+            <a class="cs-btn cs-btn--star" href="{{ repo }}" data-cs-stars aria-label="Star cloudseed on GitHub">
+              <span class="cs-btn__icon" aria-hidden="true">{% include ".icons/fontawesome/brands/github.svg" %}</span>
+              <span>Star</span>
+              <span class="cs-btn__count" data-cs-stars-count hidden></span>
+            </a>
+          </div>
+          <div class="cs-install" role="group" aria-label="Install cloudseed">
+            <span class="cs-install__prompt" aria-hidden="true">$</span>
+            <code class="cs-install__cmd" tabindex="0">{{ install }}</code>
+            <button class="cs-copy" type="button" data-cs-copy="{{ install | e }}" aria-label="Copy the install command">
+              <span class="cs-copy__icon" aria-hidden="true">{% include ".icons/material/content-copy.svg" %}</span>
+              <span class="cs-copy__done" aria-hidden="true">{% include ".icons/material/check.svg" %}</span>
+            </button>
+          </div>
+          <p class="cs-hero__note">Python 3.9+ standard library only · Terraform ≥ 1.10 (cloudseed installs it for you) · macOS and Linux</p>
+        </div>
+
+        {#- the animated terminal: plain text without JavaScript, typed line by line with it -#}
+        <figure class="cs-hero__demo">
+          <div class="cs-term" data-cs-term>
+            <div class="cs-term__bar">
+              <span class="cs-term__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <ol class="cs-term__steps" aria-hidden="true">
+                <li data-cs-step="0" class="is-active">1 · landing zone</li>
+                <li data-cs-step="1">2 · platform</li>
+                <li data-cs-step="2">3 · DR drill</li>
+              </ol>
+            </div>
+            <div class="cs-term__screen" aria-hidden="true" pre>
+<div class="l cmd" data-step="0"><span class="p">❯</span> <span class="c">cs setup vmware</span></div>
+<div class="l"><span class="b">  ━━ cloudseed · VMware Fusion / Workstation (local) ━━━━</span></div>
+<div class="l">  <span class="b">◆ 1/4</span>  Environment    <span class="w">lab</span></div>
+<div class="l">  <span class="b">◆ 2/4</span>  Network        <span class="d">host-only vmnet behind a NAT'd bastion</span></div>
+<div class="l">  <span class="b">◆ 3/4</span>  Access         <span class="d">this machine only · generated SSH key</span></div>
+<div class="l">  <span class="b">◆ 4/4</span>  Kubernetes     <span class="w">RKE2</span> <span class="d">· 1 control plane + 2 workers</span></div>
+<div class="l" data-d="500">  <span class="a">●</span> Terraform plan: bastion + 3 cluster VMs on a private network</div>
+<div class="l" data-d="300">  <span class="b">?</span> <span class="w">Apply this plan?</span> <span class="d">[y/N] ›</span> y</div>
+<div class="l" data-d="900">  <span class="g">✔</span> Bastion hardened by Ansible <span class="d">sshd · fail2ban · auditd · nftables</span></div>
+<div class="l" data-d="700">  <span class="g">✔</span> RKE2 cluster up <span class="d">· cs kubectl get nodes</span></div>
+<div class="l panel" data-d="300"><span class="pt">vmware-lab is ready</span>
+<span class="d">ssh    </span> cs ssh vmware --env lab
+<span class="d">status </span> cs status vmware --env lab</div>
+<div class="l cmd" data-step="1"><span class="p">❯</span> <span class="c">cs platform install basek8s</span></div>
+<div class="l">  <span class="b">◆</span> <span class="w">gateway-api</span>  <span class="d">Kubernetes Gateway API CRDs</span></div>
+<div class="l">  <span class="g">✔</span> gateway-api installed <span class="d">(cluster-scoped CRDs)</span></div>
+<div class="l">  <span class="g">✔</span> cert-manager installed <span class="d">in namespace cert-manager</span></div>
+<div class="l">  <span class="g">✔</span> envoy-gateway installed <span class="d">in namespace envoy-gateway-system</span></div>
+<div class="l">  <span class="g">✔</span> argocd installed <span class="d">in namespace argocd</span></div>
+<div class="l">  <span class="g">✔</span> kube-prometheus-stack installed <span class="d">in namespace monitoring</span></div>
+<div class="l">  <span class="g">✔</span> loki installed <span class="d">in namespace monitoring</span></div>
+<div class="l">  <span class="g">✔</span> external-secrets installed <span class="d">in namespace external-secrets</span></div>
+<div class="l panel" data-d="300"><span class="pt">Done</span>
+<span class="d">installed</span> metrics-server, cert-manager, argocd, …
+<span class="d">web UIs  </span> cs platform ui</div>
+<div class="l cmd" data-step="2"><span class="p">❯</span> <span class="c">cs dr test</span></div>
+<div class="l">  <span class="b">?</span> <span class="w">Velero is not installed yet. Install it now?</span> <span class="d">[Y/n] ›</span> y</div>
+<div class="l" data-d="600">  <span class="g">✔</span> minio installed <span class="d">in namespace minio</span></div>
+<div class="l" data-d="500">  <span class="g">✔</span> velero installed <span class="d">in namespace velero</span></div>
+<div class="l"><span class="b">  ━━ DR drill 20260924-140212 on vmware-lab ━━━━</span></div>
+<div class="l" data-d="600">  <span class="g">✔</span> 1. create sample workload  <span class="d">(8.1s)</span></div>
+<div class="l" data-d="700">  <span class="g">✔</span> 2. backup  <span class="d">(12.6s)</span></div>
+<div class="l" data-d="500">  <span class="g">✔</span> 3. delete it (disaster)  <span class="d">(4.9s)</span></div>
+<div class="l" data-d="800">  <span class="g">✔</span> 4. restore from backup  <span class="d">(17.3s)</span></div>
+<div class="l" data-d="500">  <span class="g">✔</span> 5. verify  <span class="d">(3.2s)</span></div>
+<div class="l" data-d="400">  <span class="g gb">PASS - backup and restore are trustworthy</span></div>
+<div class="l" data-d="100">  <span class="d">measured RTO (restore + verify) 20.5s · volumes tested</span></div>
+            </div>
+          </div>
+          <figcaption class="cs-hero__caption">
+            <span class="cs-sr">Demo: </span><code>cs setup vmware</code> builds a hardened local lab (here with its optional RKE2 cluster),
+            <code>cs platform install basek8s</code> adds GitOps, observability and a Gateway, and <code>cs dr test</code>
+            proves backups restore. Output condensed.
+          </figcaption>
+        </figure>
+      </div>
+
+      <div class="cs-targets md-grid">
+        <span class="cs-targets__label">Runs on</span>
+        <ul class="cs-targets__list">
+          <li><span class="cs-chip cs-chip--aws" aria-hidden="true">AWS</span>Amazon Web Services</li>
+          <li><span class="cs-chip cs-chip--gcp" aria-hidden="true">GCP</span>Google Cloud</li>
+          <li><span class="cs-chip cs-chip--az" aria-hidden="true">AZ</span>Microsoft Azure</li>
+          <li><span class="cs-chip cs-chip--vm" aria-hidden="true">VM</span>VMware Fusion / Workstation</li>
+        </ul>
+      </div>
+    </section>
+
+    {#- ------------------------------------------------------------------ numbers -#}
+    <section class="cs-stats" aria-label="cloudseed at a glance">
+      <ul class="cs-stats__list md-grid">
+        <li><strong class="cs-stats__num">4</strong><span class="cs-stats__label">targets</span><span class="cs-stats__sub">AWS, GCP, Azure, VMware</span></li>
+        <li><strong class="cs-stats__num">73</strong><span class="cs-stats__label">platform items</span><span class="cs-stats__sub">pinned Helm / kustomize</span></li>
+        <li><strong class="cs-stats__num">30</strong><span class="cs-stats__label">MCP tools</span><span class="cs-stats__sub">every feature, for agents</span></li>
+        <li><strong class="cs-stats__num">15</strong><span class="cs-stats__label">scenarios</span><span class="cs-stats__sub">step by step, each with a test</span></li>
+        <li><strong class="cs-stats__num">0</strong><span class="cs-stats__label">Python dependencies</span><span class="cs-stats__sub">standard library only</span></li>
+      </ul>
+    </section>
+
+    {#- ------------------------------------------------------------------ features -#}
+    <section class="cs-section" aria-labelledby="cs-features-title">
+      <div class="md-grid">
+        <header class="cs-section__head">
+          <p class="cs-kicker">What you get</p>
+          <h2 id="cs-features-title" class="cs-h2">Everything a secure cloud foundation needs</h2>
+          <p class="cs-section__lead">Opinionated, well-architected defaults on every target — and every piece is plain
+            Terraform, Ansible and Helm you can read, change and undo.</p>
+        </header>
+        <div class="cs-features">
+          <a class="cs-feature" href="{{ 'getting-started/concepts/' | url }}">
+            <span class="cs-feature__icon cs-tone--brand" aria-hidden="true">{% include ".icons/material/cloud-lock-outline.svg" %}</span>
+            <h3>Landing zones on 4 targets</h3>
+            <p>Multi-cloud landing zones: a VPC / VNet with public and private subnets, NAT, flow logs, a hardened
+              bastion reachable only from your IP, and CloudTrail, GuardDuty, Defender or audit logs as a baseline.</p>
+            <span class="cs-feature__cmds"><code>cs setup &lt;cloud&gt;</code></span>
+          </a>
+          <a class="cs-feature" href="{{ 'guides/platform/' | url }}">
+            <span class="cs-feature__icon cs-tone--sky" aria-hidden="true">{% include ".icons/material/kubernetes.svg" %}</span>
+            <h3>Kubernetes platform catalog</h3>
+            <p>Private EKS, GKE and AKS, or RKE2 / kubeadm on VMware. One command adds ArgoCD, Prometheus, Loki,
+              Gateway API + Envoy, cert-manager and secrets — plus data, AI, agentic, FinOps and DevSecOps stacks.</p>
+            <span class="cs-feature__cmds"><code>cs platform install basek8s</code></span>
+          </a>
+          <a class="cs-feature" href="{{ 'guides/resilience/' | url }}">
+            <span class="cs-feature__icon cs-tone--leaf" aria-hidden="true">{% include ".icons/material/lifebuoy.svg" %}</span>
+            <h3>DR, chaos and compliance</h3>
+            <p>Velero drills that back up, delete, restore and verify with a measured RTO. Chaos Mesh suites with
+              steady-state verdicts. CIS, STIG, kubescape, trivy and prowler scans with reports.</p>
+            <span class="cs-feature__cmds"><code>cs dr test</code><code>cs chaos run</code><code>cs scan all</code></span>
+          </a>
+          <a class="cs-feature" href="{{ 'guides/security-and-fips/' | url }}">
+            <span class="cs-feature__icon cs-tone--amber" aria-hidden="true">{% include ".icons/material/shield-key-outline.svg" %}</span>
+            <h3>FIPS 140 mode</h3>
+            <p>One flag at creation: FIPS endpoints, Bottlerocket FIPS on EKS, FIPS node pools on AKS, Ubuntu Pro
+              FIPS hosts, FIPS-only SSH and TLS — and <code class="cs-inline">cs scan fips</code> verifies it end to end.</p>
+            <span class="cs-feature__cmds"><code>--var fips_mode=true</code></span>
+          </a>
+          <a class="cs-feature" href="{{ 'guides/web-console/' | url }}">
+            <span class="cs-feature__icon cs-tone--violet" aria-hidden="true">{% include ".icons/material/monitor-dashboard.svg" %}</span>
+            <h3>Web console</h3>
+            <p>A local, token-protected console: an environment wizard, the platform catalog, DR, chaos and scans,
+              agents and MCP — each button runs the same command, streams its output live and lands in the audit trail.</p>
+            <span class="cs-feature__cmds"><code>cs enable ui</code></span>
+          </a>
+          <a class="cs-feature" href="{{ 'guides/mcp/' | url }}">
+            <span class="cs-feature__icon cs-tone--brand" aria-hidden="true">{% include ".icons/material/connection.svg" %}</span>
+            <h3>MCP server for cloud</h3>
+            <p>Every feature as an MCP tool for Claude Code, Claude Desktop, Codex, Cursor, Windsurf, Gemini CLI and
+              VS Code. Loopback only, token-protected, and anything that changes infrastructure needs <code class="cs-inline">confirm=true</code>.</p>
+            <span class="cs-feature__cmds"><code>cs setup mcp</code></span>
+          </a>
+          <a class="cs-feature" href="{{ 'guides/agentic/' | url }}">
+            <span class="cs-feature__icon cs-tone--rose" aria-hidden="true">{% include ".icons/material/robot-outline.svg" %}</span>
+            <h3>AI agent mode</h3>
+            <p>Describe the infrastructure you want in plain English. The built-in agent, Claude Code, Codex or Gemini
+              drive cloudseed with a research brief — credentials stripped, output redacted, changes approved by you.</p>
+            <span class="cs-feature__cmds"><code>cs agentic "create a staging env"</code></span>
+          </a>
+          <a class="cs-feature" href="{{ 'guides/undo-and-audit/' | url }}">
+            <span class="cs-feature__icon cs-tone--sky" aria-hidden="true">{% include ".icons/material/undo-variant.svg" %}</span>
+            <h3>Undo and audit trail</h3>
+            <p>Reverse the previous action — a setup change, an install, a node change, a backup — fifteen deep per
+              environment. Every command is recorded with its redacted log and an inventory of what exists.</p>
+            <span class="cs-feature__cmds"><code>cs undo</code><code>cs inventory</code></span>
+          </a>
+          <a class="cs-feature" href="{{ 'guides/explain/' | url }}">
+            <span class="cs-feature__icon cs-tone--leaf" aria-hidden="true">{% include ".icons/material/lightbulb-on-outline.svg" %}</span>
+            <h3>Explain everywhere</h3>
+            <p>Ask how anything is implemented — the files, resources, controls and commands behind it — in the
+              terminal, from the console's "?" panel, or over MCP. Known failures come with their fix.</p>
+            <span class="cs-feature__cmds"><code>cs explain bastion</code></span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    {#- ------------------------------------------------------------------ console screenshots -#}
+    {%- set shots = [
+      ("platform", "Platform catalog", "Install, plan or uninstall whole groups or single items on the selected cluster.", "The platform catalog: base Kubernetes, scaling, data, AI, agentic, FinOps, DevSecOps, security and resilience groups"),
+      ("wizard", "Create wizard", "Built from each cloud's own questions, with a live preview of the exact command it will run.", "The environment wizard creating an AWS environment, with the live command preview"),
+      ("overview", "Overview", "Every environment on every cloud at a glance, with its bastion, network and last drills.", "Overview of five environments on AWS, Azure, Google Cloud and VMware"),
+      ("resilience", "Resilience", "DR drills, chaos suites and compliance scans, one click each, with reports.", "Resilience page with Velero drills, Chaos Mesh experiments and compliance scans"),
+      ("agents", "Agents & MCP", "Turn on agentic mode, pick an agent and model, and connect MCP clients.", "Agents and MCP page listing Claude Code, Claude Desktop, Codex, Cursor, Windsurf, Gemini CLI and VS Code"),
+      ("explain", "Explain anything", 'A "?" beside everything opens the page cs explain prints: how it works, where, which controls.', "The Explain panel open beside the Overview, explaining the bastion: how it works, where it is implemented, its security controls and commands"),
+    ] -%}
+    <section class="cs-section cs-section--alt" aria-labelledby="cs-console-title">
+      <div class="md-grid">
+        <header class="cs-section__head">
+          <p class="cs-kicker">Web console</p>
+          <h2 id="cs-console-title" class="cs-h2">A console that runs the same commands you would</h2>
+          <p class="cs-section__lead"><code>cs enable ui</code> starts a branded console on <code>127.0.0.1</code> — no
+            CDN, no telemetry. Every action is the same <code>cloudseed</code> command, streamed live into Activity.</p>
+        </header>
+        <div class="cs-showcase" data-cs-tabs>
+          <div class="cs-showcase__tabs" role="tablist" aria-label="Web console screens">
+            {%- for key, label, text, alt in shots %}
+            <button type="button" role="tab" id="cs-tab-{{ key }}" aria-controls="cs-panel-{{ key }}"
+                    aria-selected="{{ 'true' if loop.first else 'false' }}" tabindex="{{ '0' if loop.first else '-1' }}" class="cs-showcase__tab">
+              <span class="cs-showcase__label">{{ label }}</span>
+              <span class="cs-showcase__text">{{ text }}</span>
+            </button>
+            {%- endfor %}
+          </div>
+          <div class="cs-showcase__panels">
+            {%- for key, label, text, alt in shots %}
+            <div class="cs-showcase__panel" role="tabpanel" id="cs-panel-{{ key }}" aria-labelledby="cs-tab-{{ key }}" {% if not loop.first %}data-cs-later{% endif %}>
+              <div class="cs-window">
+                <div class="cs-window__bar" aria-hidden="true"><i></i><i></i><i></i><span>127.0.0.1:7434</span></div>
+                {%- set light = ('assets/screenshots/console-' ~ key ~ '-light.webp') | url %}
+                {%- set dark = ('assets/screenshots/console-' ~ key ~ '-dark.webp') | url %}
+                <a class="cs-shot cs-shot--light" href="{{ light }}" target="_blank" rel="noopener" title="Open the full-size screenshot">
+                  <img src="{{ light }}" alt="{{ alt }} (light theme)" width="2160" height="1350" loading="lazy" decoding="async">
+                </a>
+                <a class="cs-shot cs-shot--dark" href="{{ dark }}" target="_blank" rel="noopener" title="Open the full-size screenshot">
+                  <img src="{{ dark }}" alt="{{ alt }} (dark theme)" width="2160" height="1350" loading="lazy" decoding="async">
+                </a>
+              </div>
+            </div>
+            {%- endfor %}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    {#- ------------------------------------------------------------------ how it works -#}
+    <section class="cs-section" aria-labelledby="cs-how-title">
+      <div class="md-grid">
+        <header class="cs-section__head">
+          <p class="cs-kicker">How it works</p>
+          <h2 id="cs-how-title" class="cs-h2">Terraform + Ansible + your cloud. No magic, no lock-in.</h2>
+          <p class="cs-section__lead">cloudseed is a thin, deterministic driver. It writes plain Terraform, shows you the
+            plan, and hardens hosts with Ansible — in your own account, with state you own.</p>
+        </header>
+        <ol class="cs-flow">
+          <li class="cs-flow__step">
+            <span class="cs-flow__num">1</span>
+            <h3>You ask</h3>
+            <p>From the CLI, the web console, an MCP client or <code>cs agentic "…"</code> — they all run the same command.</p>
+          </li>
+          <li class="cs-flow__step">
+            <span class="cs-flow__num">2</span>
+            <h3>cloudseed plans</h3>
+            <p>Renders a Terraform root per environment, picks a free CIDR, tags every resource and waits for your approval.</p>
+          </li>
+          <li class="cs-flow__step">
+            <span class="cs-flow__num">3</span>
+            <h3>Terraform builds</h3>
+            <p>Network, bastion, baseline and cluster — state local or in a versioned, encrypted bucket with locking.</p>
+          </li>
+          <li class="cs-flow__step">
+            <span class="cs-flow__num">4</span>
+            <h3>Ansible hardens</h3>
+            <p>sshd, fail2ban, auditd, nftables and security updates on the bastion and VPN hosts; RKE2 or kubeadm on VMware.</p>
+          </li>
+          <li class="cs-flow__step cs-flow__step--end">
+            <span class="cs-flow__num" aria-hidden="true">{% include ".icons/material/check-decagram.svg" %}</span>
+            <h3>Your cloud</h3>
+            <p>AWS, Google Cloud, Azure or VMware on your laptop — the same shape everywhere.</p>
+          </li>
+        </ol>
+
+        {%- set chores = [
+          ("A secure network, bastion and baseline", "Pick modules, wire them together, review every rule", "<code>cs setup &lt;cloud&gt;</code>, with the plan shown before anything is created"),
+          ("SSH from your IP only", "Write the rule, then fix it every time your IP changes", "The default; <code>cs update-ip</code> follows you"),
+          ("Remote state", "Bootstrap a bucket by hand before the first apply", "A hardened, versioned bucket, created first by default"),
+          ("Kubernetes add-ons", "One Helm chart at a time, with values per cloud", "73 pinned items, installed dependencies first"),
+          ("“Do our backups restore?”", "A hope", "<code>cs dr test</code>: PASS or FAIL, with the measured restore time"),
+          ("Letting an AI agent help", "Hand it your shell and your credentials", "MCP tools that need <code>confirm=true</code>; credentials stripped, output redacted"),
+        ] -%}
+        <div class="cs-compare">
+          <h3 class="cs-compare__title" id="cs-compare-title">What one command replaces</h3>
+          <table class="cs-compare__table" aria-labelledby="cs-compare-title">
+            <thead>
+              <tr><th scope="col">The chore</th><th scope="col">By hand</th><th scope="col">With cloudseed</th></tr>
+            </thead>
+            <tbody>
+              {%- for task, manual, seeded in chores %}
+              <tr>
+                <th scope="row">{{ task }}</th>
+                <td class="cs-compare__manual"><span class="cs-compare__tag" aria-hidden="true">By hand</span>{{ manual }}</td>
+                <td class="cs-compare__seeded"><span class="cs-compare__check" aria-hidden="true">{% include ".icons/material/check-circle.svg" %}</span><span>{{ seeded }}</span></td>
+              </tr>
+              {%- endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    {#- ------------------------------------------------------------------ scenarios -#}
+    {%- set scenarios = [
+      ("01-first-lab-vmware", "Your first lab on VMware", "A bastion and private VMs on your laptop in about ten minutes.", "live"),
+      ("02-aws-landing-zone", "Secure AWS landing zone", "VPC, NAT, flow logs, hardened bastion and remote state in S3.", "dry"),
+      ("03-gcp-private-gke", "GCP with private GKE", "Custom VPC, Cloud NAT, OS Login and a private GKE cluster.", "dry"),
+      ("04-azure-private-aks", "Azure with private AKS", "VNet, NSGs, NAT gateway, Defender and a private AKS cluster.", "dry"),
+      ("05-local-kubernetes", "Local Kubernetes", "RKE2 or kubeadm on VMware, with cs kubectl, helm and k9s.", "live"),
+      ("06-platform-in-one-command", "A platform in one command", "GitOps, observability, Gateway API + Envoy, certificates and secrets.", "live"),
+      ("07-data-and-ai-stack", "Data and AI stack", "MinIO, a Postgres operator, Ollama and Open WebUI.", "live"),
+      ("08-backups-you-can-trust", "Backups you can trust", "Velero backups, schedules, restores and an automated DR drill.", "live"),
+      ("09-chaos-engineering", "Chaos engineering", "Chaos Mesh suites with steady-state PASS / FAIL verdicts.", "live"),
+      ("10-compliance-scans", "Compliance scans", "CIS, kubescape, trivy, OpenSCAP CIS / STIG and FIPS verification.", "live"),
+      ("11-fips-140-mode", "FIPS 140 mode", "What changes in FIPS mode, and how cloudseed checks it.", "dry"),
+      ("12-private-access-vpn", "Private access with VPN", "OpenVPN users, connect and revoke; a Tailscale subnet router.", "dry"),
+      ("13-day-2-operations", "Day-2 operations", "Scale nodes, change settings, undo, audit and troubleshoot.", "live"),
+      ("14-ai-agents-and-mcp", "AI agents and MCP", "Agent mode, skills and the MCP server for your AI tools.", "local"),
+      ("15-web-console-and-finops", "Web console and FinOps", "The console, the explain panel, Activity and cost estimates.", "local"),
+    ] -%}
+    {%- set pills = {"live": ("Live", " · VMware", "live"), "local": ("Live", " · local", "live"), "dry": ("Dry-run", " · plan", "dry")} -%}
+    <section class="cs-section cs-section--alt" aria-labelledby="cs-scenarios-title">
+      <div class="md-grid">
+        <header class="cs-section__head cs-section__head--row">
+          <div>
+            <p class="cs-kicker">Learn by doing</p>
+            <h2 id="cs-scenarios-title" class="cs-h2">15 scenarios, step by step</h2>
+            <p class="cs-section__lead">Together they cover every feature. Each page has exact commands, expected output,
+              checks, cleanup — and a script that runs those same commands.</p>
+          </div>
+          <a class="cs-btn cs-btn--outline" href="{{ 'scenarios/' | url }}">All scenarios <span class="cs-btn__icon" aria-hidden="true">{% include ".icons/material/arrow-right.svg" %}</span></a>
+        </header>
+        <ol class="cs-scenarios">
+          {%- for slug, title, text, kind in scenarios %}
+          <li>
+            <a class="cs-scenario" href="{{ ('scenarios/' ~ slug ~ '/') | url }}">
+              <span class="cs-scenario__num" aria-hidden="true">{{ slug[:2] }}</span>
+              <span class="cs-scenario__body">
+                <span class="cs-scenario__title">{{ title }}</span>
+                <span class="cs-scenario__text">{{ text }}</span>
+              </span>
+              <span class="cs-pill cs-pill--{{ pills[kind][2] }}"><span>{{ pills[kind][0] }}<span class="cs-pill__more">{{ pills[kind][1] }}</span></span></span>
+            </a>
+          </li>
+          {%- endfor %}
+        </ol>
+      </div>
+    </section>
+
+    {#- ------------------------------------------------------------------ security and trust -#}
+    <section class="cs-section" aria-labelledby="cs-trust-title">
+      <div class="md-grid cs-trust">
+        <div class="cs-trust__main">
+          <p class="cs-kicker">Security and trust</p>
+          <h2 id="cs-trust-title" class="cs-h2">Secure by default. Honest about it.</h2>
+          <ul class="cs-checks">
+            <li><span class="cs-checks__icon" aria-hidden="true">{% include ".icons/material/shield-lock-outline.svg" %}</span>
+              <div><strong>A bastion only you can reach.</strong> SSH is allowed from your IP alone (never <code>0.0.0.0/0</code>);
+                workloads live in private subnets; <code>cs update-ip</code> follows you when your address changes.</div></li>
+            <li><span class="cs-checks__icon" aria-hidden="true">{% include ".icons/material/lock-check-outline.svg" %}</span>
+              <div><strong>Encryption and audit logging on.</strong> Encrypted disks and remote state, flow logs, CloudTrail
+                and GuardDuty on AWS, audit logs on GCP, Log Analytics (and optional Defender) on Azure.</div></li>
+            <li><span class="cs-checks__icon" aria-hidden="true">{% include ".icons/material/eye-off-outline.svg" %}</span>
+              <div><strong>Credentials never leave your machine.</strong> Agents run with secrets stripped from their
+                environment and every line of output redacted; the vault, state and keys stay under <code>~/.cloudseed</code>.</div></li>
+            <li><span class="cs-checks__icon" aria-hidden="true">{% include ".icons/material/server-security.svg" %}</span>
+              <div><strong>Local by design.</strong> The console and the MCP server listen on loopback only, require a token
+                and check Origin; changes over MCP need <code>confirm=true</code>. No telemetry anywhere.</div></li>
+            <li><span class="cs-checks__icon" aria-hidden="true">{% include ".icons/material/history.svg" %}</span>
+              <div><strong>Reversible and auditable.</strong> <code>cs undo</code> for the last actions, an audit trail, redacted
+                logs and an inventory with history for every environment.</div></li>
+            <li><span class="cs-checks__icon" aria-hidden="true">{% include ".icons/material/package-variant-closed.svg" %}</span>
+              <div><strong>A small supply chain.</strong> A standard-library-only Python CLI, SHA256-verified tool downloads
+                and chart versions pinned per release.</div></li>
+          </ul>
+        </div>
+        <aside class="cs-trust__side">
+          <div class="cs-verify">
+            <h3>How it is verified</h3>
+            <ul>
+              <li><span class="cs-pill cs-pill--live">Live</span><span>VMware scenarios run for real on VMware Fusion; the agent and console scenarios on a local machine.</span></li>
+              <li><span class="cs-pill cs-pill--dry">Dry-run</span><span>AWS, GCP and Azure scenarios are rendered and validated
+                with <code>--dry-run</code>; run them for real with your cloud credentials.</span></li>
+              <li><span class="cs-pill cs-pill--neutral">CI</span><span>Unit tests, <code>terraform validate</code> and mocked
+                <code>terraform test</code> suites on every change — no cloud access needed.</span></li>
+            </ul>
+          </div>
+          <div class="cs-license">
+            <span class="cs-license__icon" aria-hidden="true">{% include ".icons/material/scale-balance.svg" %}</span>
+            <div><strong>Apache-2.0, built in public.</strong> Read every line, fork it, ship it.
+              <a href="{{ repo }}">Source on GitHub</a></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    {#- ------------------------------------------------------------------ final call to action -#}
+    <section class="cs-final" aria-labelledby="cs-final-title">
+      <div class="cs-final__inner md-grid">
+        <div class="cs-final__copy">
+          <h2 id="cs-final-title" class="cs-h2">Plant the seed.</h2>
+          <p>From zero to a hardened lab in about ten minutes — then the same commands on AWS, Google Cloud or Azure.</p>
+          <div class="cs-cta">
+            <a class="cs-btn cs-btn--primary" href="{{ 'getting-started/quickstart/' | url }}">Get started <span class="cs-btn__icon" aria-hidden="true">{% include ".icons/material/arrow-right.svg" %}</span></a>
+            <a class="cs-btn cs-btn--star" href="{{ repo }}" data-cs-stars aria-label="Star cloudseed on GitHub">
+              <span class="cs-btn__icon" aria-hidden="true">{% include ".icons/fontawesome/brands/github.svg" %}</span>
+              <span>Star on GitHub</span>
+              <span class="cs-btn__count" data-cs-stars-count hidden></span>
+            </a>
+          </div>
+        </div>
+        <div class="cs-final__code">
+          <div class="cs-code">
+            <button class="cs-copy cs-copy--corner" type="button" aria-label="Copy the quick start commands"
+                    data-cs-copy="git clone https://github.com/nimeshbuilds/cloudseed
+cd cloudseed
+./scripts/install.sh
+cs setup vmware">
+              <span class="cs-copy__icon" aria-hidden="true">{% include ".icons/material/content-copy.svg" %}</span>
+              <span class="cs-copy__done" aria-hidden="true">{% include ".icons/material/check.svg" %}</span>
+            </button>
+<pre tabindex="0" aria-label="Quick start commands"><code><span class="d"># 1. get cloudseed</span>
+<span class="p">$</span> git clone https://github.com/nimeshbuilds/cloudseed
+<span class="p">$</span> cd cloudseed
+<span class="d"># 2. put cloudseed (and its alias cs) on your PATH</span>
+<span class="p">$</span> ./scripts/install.sh
+<span class="d"># 3. build a local lab (or: cs setup aws | gcp | azure)</span>
+<span class="p">$</span> cs setup vmware</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+{% endblock %}

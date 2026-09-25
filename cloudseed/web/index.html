@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="cs-token" content="__CS_TOKEN__">
+<meta name="color-scheme" content="light dark">
+<title>cloudseed console</title>
+<link rel="icon" href="/assets/icon.svg">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="app" class="app">
+  <a class="skip" id="skip" href="#main">Skip to content</a>
+  <aside class="rail" id="rail" aria-label="Main navigation">
+    <div class="rail-brand">
+      <img src="/assets/icon.svg" alt="" class="rail-icon">
+      <div class="rail-name"><span>cloudseed</span><small id="version"></small></div>
+    </div>
+    <nav class="rail-nav" id="nav" aria-label="Views"></nav>
+    <div class="rail-foot">
+      <div class="rail-status" id="rail-status"></div>
+      <button class="rail-collapse" id="rail-collapse" type="button" aria-controls="rail" aria-expanded="true" aria-label="Collapse sidebar" title="Collapse sidebar (⌘B)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 18l-6-6 6-6"/></svg></button>
+    </div>
+  </aside>
+
+  <div class="shell">
+    <header class="topbar">
+      <button class="btn ghost icon menu-btn" id="menu-btn" type="button" aria-controls="rail" aria-expanded="false" aria-label="Menu" title="Menu (⌘B)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+      <h1 class="crumbs"><span id="crumb-view">Overview</span></h1>
+      <button class="xq crumb-xq" id="crumb-xq" type="button" aria-haspopup="dialog" aria-keyshortcuts="Shift+?" aria-label="Explain this page" data-explain="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6"/><path d="M12 17.2h.01"/></svg></button>
+      <div class="topbar-actions">
+        <button class="palette-btn" id="palette-btn" type="button" aria-keyshortcuts="Meta+K Control+K" aria-label="Search actions, environments, catalog"><svg class="palette-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><span class="palette-icon" aria-hidden="true">⌘K</span><span class="palette-text" aria-hidden="true">Search actions, environments, catalog…</span></button>
+        <div class="env-switch">
+          <label class="env-label" for="current-env">Environment</label>
+          <select id="current-env" class="env-select" aria-label="Environment"></select>
+        </div>
+        <button class="btn ghost" id="undo-btn" type="button" title="Undo history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg><span class="btn-text">Undo</span></button>
+        <button class="btn ghost icon theme-btn" id="theme-btn" type="button" title="Switch the theme" aria-label="Switch the theme"><svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+        <button class="btn ghost activity-btn" id="toggle-console" type="button" aria-controls="console" aria-expanded="false" title="Activity (`)"><span class="dot" id="activity-dot" aria-hidden="true"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 17l6-5-6-5M12 19h8"/></svg><span class="btn-text">Activity</span><span class="count" id="activity-count"></span></button>
+      </div>
+    </header>
+
+    <main class="content" id="main" tabindex="-1" aria-busy="true">
+      <div class="boot" id="boot" aria-hidden="true"><div class="sk sk-hero"></div><div class="sk-tiles"><div class="sk"></div><div class="sk"></div><div class="sk"></div><div class="sk"></div><div class="sk"></div><div class="sk"></div></div><div class="sk-cards"><div class="sk"></div><div class="sk"></div><div class="sk"></div></div></div>
+      <section id="view-overview" class="view" aria-labelledby="crumb-view"></section>
+      <section id="view-create" class="view" aria-labelledby="crumb-view"></section>
+      <section id="view-envs" class="view" aria-labelledby="crumb-view"></section>
+      <section id="view-platform" class="view" aria-labelledby="crumb-view"></section>
+      <section id="view-resilience" class="view" aria-labelledby="crumb-view"></section>
+      <section id="view-actions" class="view" aria-labelledby="crumb-view"></section>
+      <section id="view-reports" class="view" aria-labelledby="crumb-view"></section>
+      <section id="view-agents" class="view" aria-labelledby="crumb-view"></section>
+      <section id="view-creds" class="view" aria-labelledby="crumb-view"></section>
+      <section id="view-help" class="view" aria-labelledby="crumb-view"></section>
+    </main>
+
+    <section class="drawer" id="console" aria-label="Activity">
+      <div class="drawer-handle" id="drawer-handle" role="separator" aria-orientation="horizontal" tabindex="0" aria-label="Resize activity" aria-controls="job-output" aria-valuemin="140" aria-valuemax="600" aria-valuenow="320" title="Drag, or use the arrow keys, to resize"></div>
+      <div class="drawer-bar">
+        <div class="drawer-tabs" id="job-tabs" aria-label="Jobs"></div>
+        <span class="spacer"></span>
+        <span id="job-status" class="muted small" role="status"></span>
+        <button class="btn ghost small" id="job-copy" type="button">Copy</button>
+        <button class="btn ghost small" id="job-cancel" type="button">Interrupt</button>
+        <button class="btn ghost small" id="console-close" type="button" aria-label="Close activity" title="Close activity (`)">✕</button>
+      </div>
+      <div class="job-cmd" id="job-cmd"></div>
+      <pre id="job-output" class="term" tabindex="0" aria-label="Job output"></pre>
+    </section>
+  </div>
+
+  <div id="palette" class="palette hidden">
+    <div class="palette-card" role="dialog" aria-modal="true" aria-label="Command palette">
+      <input id="palette-input" placeholder="Type an action, environment, catalog item or view…" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="palette-list" aria-autocomplete="list" aria-label="Search actions, environments, catalog items and views">
+      <div id="palette-list" class="palette-list" role="listbox" aria-label="Results"></div>
+      <div class="palette-foot muted small">↑↓ navigate · ↵ open · esc close</div>
+    </div>
+  </div>
+  <div id="modal" class="modal hidden"><div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="modal-head"><h2 id="modal-title" class="modal-title"></h2><button class="btn ghost small" id="modal-close" type="button" aria-label="Close dialog" title="Close (Esc)">✕</button></div><div id="modal-body"></div></div></div>
+  <!-- the Explain panel: `cs explain` as a page (a right-hand sheet; a bottom sheet on phones) -->
+  <div id="explain" class="xp hidden">
+    <div class="xp-scrim" id="xp-scrim"></div>
+    <aside class="xp-sheet" id="xp-sheet" role="dialog" aria-modal="true" aria-labelledby="xp-title" aria-describedby="xp-summary">
+      <div class="xp-head">
+        <div class="xp-bar">
+          <button class="btn ghost small icon xp-back" id="xp-back" type="button" aria-label="Back" title="Back" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <span class="xp-crumb" id="xp-crumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6"/><path d="M12 17.2h.01"/></svg><span>Explain</span></span>
+          <span class="spacer"></span>
+          <div class="seg" role="group" aria-label="Show the page as"><button type="button" id="xp-rich" aria-pressed="true">Page</button><button type="button" id="xp-plain" aria-pressed="false" title="Exactly what cs explain prints">Terminal</button></div>
+          <button class="btn ghost small" id="xp-close" type="button" aria-label="Close explanation" title="Close (Esc)">✕</button>
+        </div>
+        <div class="xp-kind" id="xp-kind"></div>
+        <h2 class="xp-title" id="xp-title" tabindex="-1">Explain</h2>
+        <p class="xp-summary" id="xp-summary"></p>
+      </div>
+      <div class="xp-body" id="xp-body" aria-live="off"></div>
+      <div class="xp-foot" id="xp-foot"></div>
+    </aside>
+  </div>
+  <div id="xtip" class="xtip" role="tooltip" hidden></div>
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

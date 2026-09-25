@@ -1,0 +1,93 @@
+name: Bug report
+description: Something in cloudseed does not work as documented.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. For a **security vulnerability**, do not open an issue: use
+        [private reporting](https://github.com/nimeshbuilds/cloudseed/security/advisories/new) instead.
+
+        **Remove credentials, tokens, account / project / subscription IDs, IP addresses you consider private,
+        Terraform state, kubeconfigs and `.ovpn` files from everything you paste.** cloudseed redacts its own logs,
+        other tools may not.
+  - type: input
+    id: version
+    attributes:
+      label: cloudseed version or commit
+      description: "`cloudseed help` prints the version on its first line; for a checkout, `git rev-parse --short HEAD`."
+      placeholder: "0.1.0, or main at abc1234"
+    validations:
+      required: true
+  - type: dropdown
+    id: target
+    attributes:
+      label: Target
+      description: Which environment type is affected?
+      multiple: true
+      options:
+        - aws
+        - gcp
+        - azure
+        - vmware (local VMs)
+        - none / not environment-specific
+    validations:
+      required: true
+  - type: dropdown
+    id: interface
+    attributes:
+      label: How were you running cloudseed?
+      multiple: true
+      options:
+        - CLI (cloudseed / cs)
+        - Web console (cs enable ui)
+        - MCP server (cs setup mcp)
+        - Agentic mode (cs agentic)
+        - Container runtime (--runtime container)
+        - Single binary (cs deps bundle)
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and tool versions
+      description: "Your OS and architecture, Python, Terraform, and for VMware the Fusion / Workstation version. `cloudseed doctor` shows most of this."
+      placeholder: "macOS 26.1 arm64, Python 3.12, Terraform 1.16.1, Fusion Pro 13.6"
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: What you ran
+      description: The exact command(s), or the console / MCP action and its inputs.
+      render: shell
+      placeholder: "cs setup aws --env dev --region us-east-1 --var enable_kubernetes=true"
+    validations:
+      required: true
+  - type: textarea
+    id: behaviour
+    attributes:
+      label: What you expected, and what happened instead
+    validations:
+      required: true
+  - type: textarea
+    id: troubleshoot
+    attributes:
+      label: Output of `cloudseed troubleshoot`
+      description: "Run `cloudseed troubleshoot <cloud> --env <name>` and paste the (sanitized) result, plus the relevant part of the log it points to under `<workdir>/logs/`."
+      render: text
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Workarounds you found, whether it worked in an earlier version, screenshots of the web console.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and discussions for this problem.
+          required: true
+        - label: I removed credentials, tokens, state, kubeconfigs and private identifiers from this report.
+          required: true

@@ -1,0 +1,63 @@
+name: Docs
+
+# Builds the documentation site with MkDocs Material and deploys it to GitHub Pages
+# (Settings > Pages > Source: GitHub Actions): https://nimeshbuilds.github.io/cloudseed/
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-docs.txt
+
+      - name: Install MkDocs Material
+        run: python -m pip install --disable-pip-version-check -r requirements-docs.txt
+
+      - name: Generate the reference pages from the code
+        run: |
+          if [ -f scripts/gen-docs.py ]; then
+            python scripts/gen-docs.py
+          else
+            echo "scripts/gen-docs.py not found: building the committed pages as they are"
+          fi
+
+      - name: Build the site (strict)
+        run: mkdocs build --strict
+
+      - uses: actions/configure-pages@v6.0.0
+
+      - uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5.0.1

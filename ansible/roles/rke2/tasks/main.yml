@@ -1,0 +1,210 @@
+---
+# node_role: server (control plane) | agent (worker)
+#
+# Version: rke2_version (e.g. v1.36.4+rke2r1) when given; otherwise every node joins with the version the first
+# control plane runs, so a node added weeks later never gets a newer kubelet than the servers (only the very first
+# server installs from the channel, rke2_channel, default stable).
+# rke2_cis_profile: RKE2's CIS hardening profile (profile: cis, etcd user, CIS kernel parameters, audit logging).
+# It enforces the "restricted" Pod Security Standard outside the system namespaces, so it is opt-in. The servers get
+# RKE2's own restricted admission configuration with cloudseed's host-access namespaces exempt as well
+# (rke2_psa_exempt_namespaces): the kube-bench scan, Velero's node agent, local-path storage, MinIO and Chaos Mesh.
+- name: RKE2 version of the running cluster (first control plane)
+  ansible.builtin.shell: /usr/local/bin/rke2 --version 2>/dev/null | awk 'NR==1 {print $3}'
+  delegate_to: "{{ groups['control_plane'][0] }}"
+  register: cluster_rke2
+  changed_when: false
+  failed_when: false
+  when: not (rke2_version | default('', true))
+
+- name: RKE2 version to install
+  ansible.builtin.set_fact:
+    rke2_install_version: "{{ rke2_version | default('', true) or (cluster_rke2.stdout | default('') | trim) }}"
+
+# The servers' CriticalAddonsOnly taint keeps workloads on the workers. A cluster without workers must run them on its
+# servers, so the first control plane decides once (RKE2 applies node-taint only when a node registers) and later
+# runs keep that choice: no config churn and no rke2 restart when workers are added or removed.
+- name: First control plane's RKE2 config
+  ansible.builtin.slurp:
+    src: /etc/rancher/rke2/config.yaml
+  delegate_to: "{{ groups['control_plane'][0] }}"
+  register: cp1_rke2_config
+  failed_when: false
+  no_log: true          # holds the cluster token
+  when: node_role == 'server'
+
+- name: Dedicated (tainted) control plane?
+  ansible.builtin.set_fact:
+    rke2_taint_servers: >-
+      {{ ('CriticalAddonsOnly' in (cp1_rke2_config.content | b64decode))
+         if (cp1_rke2_config.content | default('')) | length > 0
+         else ((groups['workers'] | default([])) | length > 0) }}
+  when: node_role == 'server'
+
+- name: RKE2 config directory
+  ansible.builtin.file:
+    path: /etc/rancher/rke2
+    state: directory
+    mode: "0750"
+
+# RKE2's restricted defaults (enforce/audit/warn restricted, its own exemptions) plus cloudseed's namespaces. Written
+# before the config that names it; its checksum is part of the config, so a changed exemption list restarts the server.
+- name: Pod Security admission configuration (CIS profile)
+  ansible.builtin.set_fact:
+    rke2_pss_config: |
+      apiVersion: apiserver.config.k8s.io/v1
+      kind: AdmissionConfiguration
+      plugins:
+        - name: PodSecurity
+          configuration:
+            apiVersion: pod-security.admission.config.k8s.io/v1
+            kind: PodSecurityConfiguration
+            defaults:
+              enforce: "restricted"
+              enforce-version: "latest"
+              audit: "restricted"
+              audit-version: "latest"
+              warn: "restricted"
+              warn-version: "latest"
+            exemptions:
+              usernames: []
+              runtimeClasses: []
+              namespaces: {{ (rke2_psa_system_namespaces + rke2_psa_exempt_namespaces | default(rke2_psa_cloudseed_namespaces)) | unique | to_json }}
+  vars:
+    rke2_psa_system_namespaces: [kube-system, cis-operator-system, compliance-operator-system, tigera-operator]
+    rke2_psa_cloudseed_namespaces: [cloudseed-scan, velero, local-path-storage, minio, chaos-mesh]
+  when: rke2_cis_profile | default(false) | bool and node_role == 'server'
+
+- name: Pod Security admission configuration file (CIS profile)
+  ansible.builtin.copy:
+    dest: /etc/rancher/rke2/cloudseed-pss.yaml
+    mode: "0600"
+    content: "{{ rke2_pss_config }}"
+  when: rke2_cis_profile | default(false) | bool and node_role == 'server'
+
+- name: RKE2 config
+  ansible.builtin.copy:
+    dest: /etc/rancher/rke2/config.yaml
+    mode: "0600"
+    content: |
+      token: "{{ k8s_token }}"
+      {% if rke2_cis_profile | default(false) | bool %}
+      profile: cis
+      {% endif %}
+      {% if node_role == 'server' %}
+      write-kubeconfig-mode: "0600"
+      {% if rke2_cis_profile | default(false) | bool %}
+      pod-security-admission-config-file: /etc/rancher/rke2/cloudseed-pss.yaml
+      # cloudseed-pss.yaml sha1 {{ rke2_pss_config | hash('sha1') }}
+      {% endif %}
+      cni: canal
+      tls-san:
+      {% for h in groups['control_plane'] %}
+        - {{ hostvars[h].ansible_host }}
+        - {{ h }}
+      {% endfor %}
+      {% if rke2_taint_servers | bool %}
+      node-taint:
+        - "CriticalAddonsOnly=true:NoExecute"
+      {% endif %}
+      # cloudseed's platform brings its own Gateway API implementation (Envoy Gateway, or Istio / kgateway). RKE2's
+      # bundled ingress controller (nginx up to 1.35, Traefik from 1.36) ships its own copy of the Gateway API CRDs
+      # and crash-loops forever once another owner exists, so it is disabled up front. Ingress is an explicit
+      # `cs platform install ingress-nginx` on RKE2, like everywhere else.
+      disable:
+        - rke2-ingress-nginx
+        - rke2-traefik
+        - rke2-traefik-crd
+      {% if inventory_hostname != groups['control_plane'][0] %}
+      server: https://{{ hostvars[groups['control_plane'][0]].ansible_host }}:9345
+      {% endif %}
+      {% else %}
+      server: https://{{ hostvars[groups['control_plane'][0]].ansible_host }}:9345
+      {% endif %}
+  register: rke2_config
+
+- name: No cloudseed Pod Security admission configuration outside the CIS profile
+  ansible.builtin.file:
+    path: /etc/rancher/rke2/cloudseed-pss.yaml
+    state: absent
+  when: not (rke2_cis_profile | default(false) | bool and node_role == 'server')
+
+# Downloaded to a file first (a cut-off download never runs half a script), with retries; bash for pipefail (dash,
+# /bin/sh on Debian/Ubuntu, has none); and the binary must exist afterwards, or the task fails here and not later with
+# a confusing "unit rke2-server not found".
+- name: Install RKE2 ({{ node_role }})
+  ansible.builtin.shell: |
+    set -eo pipefail
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp"' EXIT
+    curl -sSfL --retry 5 --retry-delay 5 --retry-connrefused https://get.rke2.io -o "$tmp"
+    INSTALL_RKE2_TYPE={{ node_role }} {{ 'INSTALL_RKE2_VERSION=' + rke2_install_version if rke2_install_version else '' }} sh "$tmp"
+    test -x /usr/local/bin/rke2
+  args:
+    creates: /usr/local/bin/rke2
+    executable: /bin/bash
+  environment:
+    INSTALL_RKE2_CHANNEL: "{{ rke2_channel | default('stable') }}"
+
+- name: CIS profile - etcd user (server)
+  ansible.builtin.user:
+    name: etcd
+    system: true
+    shell: /sbin/nologin
+    create_home: false
+    comment: etcd user
+  when: rke2_cis_profile | default(false) | bool and node_role == 'server'
+
+- name: CIS profile - kernel parameters
+  ansible.builtin.shell: |
+    set -e
+    for f in /usr/local/share/rke2/rke2-cis-sysctl.conf /usr/share/rke2/rke2-cis-sysctl.conf; do
+      if [ -f "$f" ]; then
+        if cmp -s "$f" /etc/sysctl.d/60-rke2-cis.conf; then echo unchanged; exit 0; fi
+        install -m 0644 "$f" /etc/sysctl.d/60-rke2-cis.conf
+        systemctl restart systemd-sysctl
+        echo changed; exit 0
+      fi
+    done
+    echo "rke2-cis-sysctl.conf not found" >&2; exit 1
+  register: rke2_cis_sysctl
+  changed_when: "'changed' in rke2_cis_sysctl.stdout_lines"
+  when: rke2_cis_profile | default(false) | bool
+
+- name: Enable and start rke2-{{ node_role }}
+  ansible.builtin.systemd:
+    name: "rke2-{{ node_role }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  register: rke2_started
+
+# A changed config on a node that was already running (a new control plane's tls-san, the CIS profile switched on):
+# restart it here, one control plane at a time (serial play), before the API wait below - never in a handler that
+# swallows a failure. A node started just now already runs the new config. The units are Type=notify with no start
+# timeout: `timeout` turns a restart that never becomes ready into a failed run instead of a hang.
+- name: Restart rke2-{{ node_role }} with the changed config
+  ansible.builtin.command: timeout 900 systemctl restart rke2-{{ node_role }}
+  when: rke2_config is changed and rke2_started is not changed
+
+- name: Wait for the API server (first control plane)
+  ansible.builtin.wait_for:
+    port: 6443
+    host: "{{ ansible_host }}"
+    timeout: 600
+  when: node_role == 'server'
+
+- name: kubectl and crictl on PATH
+  ansible.builtin.file:
+    src: "/var/lib/rancher/rke2/bin/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+    force: true
+  loop: [kubectl, crictl, ctr]
+  when: node_role == 'server'
+  failed_when: false
+
+- name: Root kubeconfig for convenience on the control plane
+  ansible.builtin.lineinfile:
+    path: /root/.bashrc
+    line: 'export KUBECONFIG=/etc/rancher/rke2/rke2.yaml'
+  when: node_role == 'server'

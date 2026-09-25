@@ -1,0 +1,153 @@
+# Self-managed Kubernetes on cloudseed VMs (local VMware target): RKE2 (default) or kubeadm.
+# Run from the host by `cloudseed provision` with the generated inventory:
+#   ansible-playbook -i <workdir>/k8s/inventory.ini ansible/kubernetes.yml -e @<workdir>/k8s/vars.json
+---
+- name: Prepare all Kubernetes nodes
+  hosts: k8s
+  become: true
+  gather_facts: true
+  any_errors_fatal: true
+  vars:
+    kubernetes_distro: rke2
+    harden: true                # `cloudseed provision --no-harden` passes harden/harden_ssh/enable_auditd = false
+    harden_ssh: true
+    host_firewall: false        # Kubernetes/CNI own the packet filter on nodes
+    ip_forward: true            # pods route through the node; the forwarding sysctl file (loaded last) must agree
+    enable_auditd: true
+    auto_updates: false         # node upgrades should be deliberate
+    allowed_ssh_cidrs: []
+    install_terraform: false
+    install_cloud_cli: false
+    repo_dir: /nonexistent
+    banner_text: "cloudseed kubernetes node - authorized access only."
+    fips_mode: false
+    fips_reboot_inline: true    # this play runs over SSH: the fips role reboots the node itself
+    # read on this machine (the Ansible controller) from the environment `cloudseed provision` runs in: the token is
+    # never written to the vars file or to the nodes' disks
+    ubuntu_pro_token: "{{ lookup('env', 'UBUNTU_PRO_TOKEN') }}"
+  pre_tasks:
+    - name: Debian family only (Ubuntu / Debian cloud images)
+      ansible.builtin.assert:
+        that: ansible_facts['os_family'] == 'Debian'
+        fail_msg: "Kubernetes nodes must run Ubuntu or Debian (this one: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }})"
+        quiet: true
+  roles:
+    - role: hardening
+    - role: fips
+      when: fips_mode
+    - role: k8s_common
+
+- name: Control plane
+  hosts: control_plane
+  become: true
+  serial: 1
+  any_errors_fatal: true      # workers must not try to join a control plane that failed to come up
+  vars:
+    kubernetes_distro: rke2
+    node_role: server
+  roles:
+    - role: rke2
+      when: kubernetes_distro == 'rke2'
+    - role: kubeadm
+      when: kubernetes_distro == 'kubeadm'
+
+- name: Workers
+  hosts: workers
+  become: true
+  vars:
+    kubernetes_distro: rke2
+    node_role: agent
+  roles:
+    - role: rke2
+      when: kubernetes_distro == 'rke2'
+    - role: kubeadm
+      when: kubernetes_distro == 'kubeadm'
+
+- name: Fetch kubeconfig to this machine
+  hosts: control_plane[0]
+  become: true
+  vars:
+    kubernetes_distro: rke2
+    node_kubectl: >-
+      {{ '/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml'
+         if kubernetes_distro == 'rke2' else 'kubectl --kubeconfig /etc/kubernetes/admin.conf' }}
+  tasks:
+    # Without workers nothing could schedule: RKE2 servers carry CriticalAddonsOnly (when the cluster was created with
+    # workers) and kubeadm control planes node-role.kubernetes.io/control-plane:NoSchedule. Let them run workloads.
+    - name: No workers - the control planes run workloads
+      ansible.builtin.command: >-
+        {{ node_kubectl }} taint nodes -l node-role.kubernetes.io/control-plane
+        {{ 'CriticalAddonsOnly-' if kubernetes_distro == 'rke2' else 'node-role.kubernetes.io/control-plane-' }}
+      register: cp_untaint
+      changed_when: cp_untaint.rc == 0
+      failed_when: cp_untaint.rc != 0 and 'not found' not in cp_untaint.stderr
+      retries: 12
+      delay: 10
+      until: cp_untaint.rc == 0 or 'not found' in cp_untaint.stderr
+      when: (groups['workers'] | default([])) | length == 0
+
+    - name: Read kubeconfig
+      ansible.builtin.slurp:
+        src: "{{ '/etc/rancher/rke2/rke2.yaml' if kubernetes_distro == 'rke2' else '/etc/kubernetes/admin.conf' }}"
+      register: kc
+    # Rebuilt, not text-replaced: the cluster, user and context are all named after the environment (vmware-<env>)
+    # for both distros (RKE2 names them 'default', kubeadm 'kubernetes' / 'kubernetes-admin'), so merging it into
+    # ~/.kube/config never replaces the user's own entries, and the API address is the node's reachable IP.
+    - name: Write kubeconfig locally with the reachable API address
+      ansible.builtin.copy:
+        dest: "{{ kubeconfig_dest }}"
+        mode: "0600"
+        content: "{{ kc_doc | to_nice_yaml(indent=2) }}"
+      vars:
+        kc_src: "{{ kc.content | b64decode | from_yaml }}"
+        kc_name: "{{ cluster_name | default('cloudseed') }}"
+        kc_doc:
+          apiVersion: v1
+          kind: Config
+          preferences: {}
+          clusters:
+            - name: "{{ kc_name }}"
+              cluster: "{{ kc_src.clusters[0].cluster | combine({'server': 'https://' + ansible_host + ':6443'}) }}"
+          users:
+            - name: "{{ kc_name }}"
+              user: "{{ kc_src.users[0].user }}"
+          contexts:
+            - name: "{{ kc_name }}"
+              context: {cluster: "{{ kc_name }}", user: "{{ kc_name }}"}
+          current-context: "{{ kc_name }}"
+      delegate_to: localhost
+      become: false
+    - name: Kubernetes version of the cluster
+      ansible.builtin.shell: >-
+        {{ node_kubectl }} version -o json 2>/dev/null
+        | python3 -c 'import json,sys; print(json.load(sys.stdin)["serverVersion"]["gitVersion"])'
+      register: cluster_version
+      changed_when: false
+      failed_when: false
+    - name: Record it for cloudseed
+      ansible.builtin.copy:
+        dest: "{{ kubeconfig_dest | dirname }}/version"
+        mode: "0600"
+        content: "{{ cluster_version.stdout | default('') | trim }}\n"
+      delegate_to: localhost
+      become: false
+      when: (cluster_version.stdout | default('') | trim) | length > 0
+    # `setup` and `node add` say the cluster is ready only when it is: every node this run installed has registered
+    # and is Ready. An agent started a moment ago joins within a minute or so (its CNI pods start first); until then
+    # `kubectl get nodes` shows it NotReady, or not at all, and new pods wait. With --limit (node add: the new nodes
+    # plus the first control plane) only those are waited for, so an old node that is down does not block adding its
+    # replacement. Last in the play: when a node never gets Ready, the kubeconfig above is still there to look.
+    - name: Every node is registered and Ready
+      ansible.builtin.shell: |
+        end=$(( $(date +%s) + {{ k8s_ready_timeout | default(600) | int }} ))
+        until {{ node_kubectl }} wait --for=condition=Ready --timeout=20s {{ ready_nodes | map('lower') | map('regex_replace', '^', 'node/') | join(' ') }} >/dev/null 2>&1; do
+          if [ "$(date +%s)" -ge "$end" ]; then
+            echo "not every node is Ready after {{ k8s_ready_timeout | default(600) | int }} s:" >&2
+            {{ node_kubectl }} get nodes -o wide >&2
+            exit 1
+          fi
+          sleep 5
+        done
+      vars:
+        ready_nodes: "{{ groups['k8s'] | intersect(query('inventory_hostnames', ansible_limit)) if ansible_limit is defined else groups['k8s'] }}"
+      changed_when: false

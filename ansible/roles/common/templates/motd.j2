@@ -1,0 +1,16 @@
+{# Login message: every line is padded to the same width, so the box closes whatever the user name, path or title. #}
+{# the tools role installs a cloud CLI only on cloud hosts (a VMware bastion has none) #}
+{% set cloud_cli = {'aws': 'aws', 'gcp': 'gcloud', 'azure': 'az'} %}
+{% set tools = (['terraform'] if install_terraform | default(false) | bool else [])
+             + ([cloud_cli[cloud]] if install_cloud_cli | default(false) | bool and cloud | default('') in cloud_cli else [])
+             + (['kubectl'] if install_kubectl | default(false) | bool else [])
+             + ['git', 'jq', 'tmux'] %}
+{% set title = motd_title | default('cloudseed host') %}
+{% set lines = ([motd_hint] if motd_hint | default('') | length > 0 else [])
+             + ['cloudseed repo: ' + repo_dir, 'Tools: ' + tools | join(', ')] %}
+{% set w = ([62, title | length + 2] + (lines | map('length') | list)) | max %}
+┌─ {{ title }} {{ '─' * (w - (title | length) - 1) }}┐
+{% for l in lines %}
+│ {{ l.ljust(w) }} │
+{% endfor %}
+└{{ '─' * (w + 2) }}┘

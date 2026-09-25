@@ -1,0 +1,49 @@
+---
+# Tailscale subnet router: advertises vpn_routes (the private network, plus the GKE control plane on GCP) to your
+# tailnet. The auth key comes from cs_secrets (vpn.yml reads ~/cloudseed-secrets.json, written by `cloudseed provision`
+# from TS_AUTHKEY, and deletes it at once). It reaches `tailscale up` through a 0600 file, never the command line.
+- name: Install Tailscale
+  ansible.builtin.shell: |
+    set -eo pipefail
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp"' EXIT
+    curl -fsSL --retry 5 --retry-delay 5 --retry-connrefused https://tailscale.com/install.sh -o "$tmp"
+    sh "$tmp"
+    test -x /usr/bin/tailscale
+  args:
+    creates: /usr/bin/tailscale
+    executable: /bin/bash
+
+- name: Tailscale enabled
+  ansible.builtin.systemd:
+    name: tailscaled
+    enabled: true
+    state: started
+
+- name: Tailscale up (subnet router)
+  when: (cs_secrets | default({})).tailscale_authkey | default('') | length > 0
+  block:
+    - name: Auth key file (0600)
+      ansible.builtin.tempfile:
+        suffix: .tskey
+      register: ts_key_file
+
+    - name: Auth key into the file
+      ansible.builtin.copy:
+        dest: "{{ ts_key_file.path }}"
+        content: "{{ cs_secrets.tailscale_authkey }}"
+        mode: "0600"
+      no_log: true
+
+    - name: tailscale up
+      ansible.builtin.command: >
+        tailscale up --auth-key=file:{{ ts_key_file.path }}
+        --advertise-routes={{ vpn_routes | default([network_cidr]) | join(',') }}
+        --hostname={{ env_id | default('cloudseed') }}-vpn --accept-dns=false
+      changed_when: true
+  always:
+    - name: Remove the auth key file
+      ansible.builtin.file:
+        path: "{{ ts_key_file.path }}"
+        state: absent
+      when: ts_key_file.path is defined

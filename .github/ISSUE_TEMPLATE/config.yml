@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation and quick start
+    url: https://nimeshbuilds.github.io/cloudseed/
+    about: The quick start, 15 step-by-step scenarios, guides and the command reference.
+  - name: Questions, ideas and show-and-tell
+    url: https://github.com/nimeshbuilds/cloudseed/discussions
+    about: Ask for help with a setup or share what you built with cloudseed.
+  - name: Report a security vulnerability privately
+    url: https://github.com/nimeshbuilds/cloudseed/security/advisories/new
+    about: Keep vulnerability details out of public issues.

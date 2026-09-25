@@ -1,0 +1,12 @@
+---
+# Flannel CNI release for NEW kubeadm clusters: a pinned tag, never releases/latest (installs must be reproducible and
+# must not move under a running cluster). A cluster that already runs Flannel keeps its version: `node add` and
+# re-provisioning never re-apply the manifest.
+flannel_version: v0.28.9
+
+# Pod and Service ranges of new clusters. The pod range is also the one in Flannel's own manifest (net-conf.json), so it
+# is fixed. The Service range is /16 rather than kubeadm's default 10.96.0.0/12, which covers 10.96-10.111 and with it
+# the 10.100.x networks cloudseed falls back to for local environments. cloudseed.provision.LOCAL_K8S_RANGES mirrors
+# both, to refuse a node network that overlaps them.
+kubeadm_pod_cidr: 10.244.0.0/16
+kubeadm_service_cidr: 10.96.0.0/16

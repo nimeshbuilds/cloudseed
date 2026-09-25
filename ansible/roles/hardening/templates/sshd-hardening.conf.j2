@@ -1,0 +1,35 @@
+# managed by cloudseed
+Protocol 2
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+PubkeyAuthentication yes
+PermitEmptyPasswords no
+MaxAuthTries 3
+MaxSessions 10
+LoginGraceTime 30
+ClientAliveInterval 300
+ClientAliveCountMax 2
+X11Forwarding no
+AllowAgentForwarding no
+AllowTcpForwarding yes
+PermitTunnel no
+IgnoreRhosts yes
+HostbasedAuthentication no
+UseDNS no
+LogLevel VERBOSE
+Banner /etc/issue.net
+{% if fips_mode | default(false) %}
+# FIPS 140: only approved algorithms (no chacha20, curve25519, ed25519, sntrup)
+KexAlgorithms ecdh-sha2-nistp384,ecdh-sha2-nistp256,ecdh-sha2-nistp521,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256
+Ciphers aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
+HostKeyAlgorithms ecdsa-sha2-nistp384,ecdsa-sha2-nistp256,ecdsa-sha2-nistp521,rsa-sha2-512,rsa-sha2-256
+PubkeyAcceptedAlgorithms ecdsa-sha2-nistp384,ecdsa-sha2-nistp256,ecdsa-sha2-nistp521,rsa-sha2-512,rsa-sha2-256
+{% else %}
+KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+{% endif %}
+AllowUsers {{ ssh_user }}

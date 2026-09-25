@@ -1,0 +1,48 @@
+# cloudseed bastion provisioning: run ON the bastion (localhost) by ansible/bootstrap.sh, which amounts to:
+#   cd ~/cloudseed/ansible && ~/.cloudseed-ansible/bin/ansible-playbook -i localhost, -c local bastion.yml -e @~/cloudseed-vars.json
+---
+- name: Provision and harden the cloudseed bastion
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+
+  vars:
+    cloud: aws                   # aws | gcp | azure
+    ssh_user: "{{ lookup('env', 'SUDO_USER') | default(lookup('env', 'USER'), true) }}"
+    allowed_ssh_cidrs: []        # host firewall allow-list for TCP/22 (IPv4)
+    ssh_open_any: false          # with an empty allow-list: open SSH to any source (only local VMware bastions do this)
+    harden: true                 # OS hardening: PAM, fail2ban, sysctls, core dumps, sudo logging, umask (--no-harden: false)
+    harden_ssh: true
+    host_firewall: true
+    enable_auditd: true
+    auto_updates: true
+    install_terraform: true
+    install_cloud_cli: true
+    enable_kubernetes: false     # the environment has a managed cluster (EKS / GKE / AKS): kubectl joins the tools
+    kubernetes_version: ""       # the cluster's version (kubectl follows its minor; GKE: the running one), "" = the cloud's default
+    kubernetes_cluster_name: ""
+    cloud_region: ""
+    install_kubectl: "{{ (install_cloud_cli | bool) and (enable_kubernetes | bool) and cloud in ['aws', 'gcp', 'azure'] }}"
+    repo_dir: "/home/{{ ssh_user }}/cloudseed"
+    banner_text: "cloudseed bastion - authorized access only. All activity is logged."
+    motd_title: cloudseed bastion
+    motd_hint: Workloads live in the private subnets; hop from here with ssh.
+    nat_source_cidrs: []         # local (VMware) bastions NAT the private network: [private_cidr]
+    fips_mode: false             # FIPS 140: Ubuntu Pro FIPS / AL2023 fips-mode-setup, FIPS-only sshd algorithms (reboot scheduled at the end)
+
+  pre_tasks:
+    - name: Sanity check distro family
+      ansible.builtin.assert:
+        that: ansible_facts['os_family'] in ['RedHat', 'Debian']
+        fail_msg: "Unsupported OS family {{ ansible_facts['os_family'] }} (expected Amazon Linux 2023, Debian 12 or Ubuntu 22.04/24.04)"
+        quiet: true
+    - name: Provisioning secrets
+      ansible.builtin.include_tasks: tasks/read-secrets.yml
+
+  roles:
+    - role: common
+    - role: hardening
+    - role: tools
+    - role: fips
+      when: fips_mode

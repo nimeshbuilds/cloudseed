@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 160" width="720" height="160" role="img" aria-label="cloudseed">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f172a"/><stop offset="1" stop-color="#1e3a8a"/></linearGradient>
+    <linearGradient id="cloud" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dbeafe"/></linearGradient>
+    <linearGradient id="leaf" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#16a34a"/><stop offset="1" stop-color="#4ade80"/></linearGradient>
+    <linearGradient id="seed" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f59e0b"/><stop offset="1" stop-color="#d97706"/></linearGradient>
+  </defs>
+  <g transform="translate(8 8) scale(0.28125)">
+    <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+    <path fill="url(#cloud)" d="M148 328h224a56 56 0 0 0 6-111.7A88 88 0 0 0 208 190a64 64 0 0 0-108 44.6A48 48 0 0 0 148 328z"/>
+    <path fill="#1e3a8a" d="M256 226a22 22 0 0 0-22 22c0 8.6 5 16 12.3 19.6L240 300h32l-6.3-32.4A22 22 0 0 0 256 226z"/>
+    <rect x="120" y="372" width="272" height="12" rx="6" fill="#93c5fd" opacity="0.6"/>
+    <path d="M256 372v-64" stroke="url(#leaf)" stroke-width="14" stroke-linecap="round" fill="none"/>
+    <path fill="url(#leaf)" d="M256 322c-6-40-40-56-74-50 6 34 32 56 74 50z"/>
+    <path fill="url(#leaf)" d="M256 338c8-38 42-54 74-48-4 34-30 56-74 48z"/>
+    <ellipse cx="256" cy="396" rx="26" ry="16" fill="url(#seed)"/>
+  </g>
+  <text x="176" y="92" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="64" font-weight="700" fill="#0f172a" letter-spacing="-1.5">cloud<tspan fill="#16a34a">seed</tspan></text>
+  <text x="178" y="128" textLength="520" lengthAdjust="spacingAndGlyphs" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="22" font-weight="500" fill="#475569" letter-spacing="0.5">secure multi-cloud landing zones · AWS · GCP · Azure</text>
+</svg>

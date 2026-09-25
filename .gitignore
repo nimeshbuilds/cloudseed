@@ -1,0 +1,33 @@
+# terraform
+**/.terraform/
+# dependency lock files: the registry-only roots keep theirs (hashes for linux and darwin, amd64 and arm64, written
+# by `terraform providers lock`); vmware's pins the checksum of a provider built on this machine
+# (`cloudseed install vmware-provider`), which no other build matches, so it is never committed
+**/.terraform.lock.hcl
+!/terraform/azure/.terraform.lock.hcl
+!/terraform/azure-bootstrap/.terraform.lock.hcl
+!/terraform/gcp/.terraform.lock.hcl
+!/terraform/gcp-bootstrap/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+tfplan
+crash.log
+*.log
+
+# python / build
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+.venv/
+.ruff_cache/
+# mkdocs build output
+/site/
+
+# local
+.env
+.DS_Store
+providers/vmdesktop/go.sum.bak

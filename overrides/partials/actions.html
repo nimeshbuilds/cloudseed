@@ -1,0 +1,14 @@
+{#- "Edit this page": not on the reference pages, which scripts/gen-docs.py generates from the code (an edit there
+    would be overwritten); those link to the generator instead. -#}
+{% if page.edit_url %}
+  {% if page.file.src_uri.startswith("reference/") %}
+    <a href="{{ config.repo_url }}/blob/main/scripts/gen-docs.py" title="Generated from the code by scripts/gen-docs.py" class="md-content__button md-icon">
+      {% include ".icons/material/cog-sync-outline.svg" %}
+    </a>
+  {% elif "content.action.edit" in features %}
+    <a href="{{ page.edit_url }}" title="{{ lang.t('action.edit') }}" class="md-content__button md-icon" rel="edit">
+      {% set icon = config.theme.icon.edit or "material/file-edit-outline" %}
+      {% include ".icons/" ~ icon ~ ".svg" %}
+    </a>
+  {% endif %}
+{% endif %}

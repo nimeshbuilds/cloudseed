@@ -1,0 +1,15 @@
+# Host compliance scan (OpenSCAP + SCAP Security Guide, or Ubuntu Security Guide on Ubuntu 22.04 with Ubuntu Pro):
+# CIS or DISA STIG profile per host, results fetched back.
+# Run from the workstation by `cloudseed scan host|stig` with a generated inventory:
+#   ansible-playbook -i <workdir>/scans/inventory.ini ansible/scan.yml -e '{"scan_profile": "cis", "ssg_version": "0.1.82", "scan_dest": "<dir>"}'
+---
+- name: OpenSCAP compliance scan
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    scan_profile: cis
+    ssg_version: "0.1.82"        # cloudseed passes the latest release (scan.SSG_FALLBACK when GitHub is unreachable)
+    scan_dest: /tmp/cloudseed-scans
+  roles:
+    - role: openscap

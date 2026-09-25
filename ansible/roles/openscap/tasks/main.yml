@@ -1,0 +1,268 @@
+---
+# OpenSCAP evaluation of this host against the SCAP Security Guide (ComplianceAsCode) datastream for its OS:
+# CIS benchmark or DISA STIG profile. Results (XML) and the HTML report are fetched back to the workstation by
+# ansible/scan.yml. Variables: scan_profile (cis|stig|<full xccdf profile id>), ssg_version, scan_dest.
+#
+# A host that cannot be scanned for the requested profile is reported "not applicable", not failed: meta.json gets a
+# `skipped` reason and the host ends its play successfully. That covers
+#   - Ubuntu 22.04 without Ubuntu Pro: jammy ships no openscap-scanner (only libopenscap8 1.2.17, too old for the SSG
+#     content). With Ubuntu Pro attached (the GCP/Azure FIPS images, VMware FIPS VMs) the scan runs through
+#     Canonical's Ubuntu Security Guide (usg) instead;
+#   - no such profile for the OS: SSG has no DISA STIG content for Amazon Linux 2023 (the AWS bastion) or Debian 12
+#     (the default GCP bastion).
+- name: SSG product for this OS
+  ansible.builtin.set_fact:
+    ssg_product: >-
+      {{ 'ubuntu' + ansible_facts['distribution_version'] | replace('.', '') if ansible_facts['distribution'] == 'Ubuntu'
+         else 'debian' + ansible_facts['distribution_major_version'] if ansible_facts['distribution'] == 'Debian'
+         else 'al2023' if ansible_facts['distribution'] == 'Amazon'
+         else 'rhel' + ansible_facts['distribution_major_version'] }}
+    scan_os: "{{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+    scap_old_ubuntu: "{{ ansible_facts['distribution'] == 'Ubuntu' and ansible_facts['distribution_version'] is version('24.04', '<') }}"
+
+- name: Local result directory
+  ansible.builtin.file:
+    path: "{{ scan_dest }}/{{ inventory_hostname }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+
+- name: Work files from an earlier scan
+  ansible.builtin.file:
+    path: "/tmp/cloudseed-scan-{{ item }}"
+    state: absent
+  loop: [results.xml, report.html]
+
+# ---------- Ubuntu before 24.04: Ubuntu Security Guide (Ubuntu Pro) ----------
+- name: Ubuntu Security Guide
+  when: scap_old_ubuntu | bool
+  block:
+    - name: Ubuntu Pro attachment status
+      ansible.builtin.command: pro api u.pro.status.is_attached.v1
+      register: scap_pro
+      changed_when: false
+      failed_when: false
+
+    - name: Not scannable without Ubuntu Pro
+      ansible.builtin.copy:
+        dest: "{{ scan_dest }}/{{ inventory_hostname }}/meta.json"
+        mode: "0644"
+        content: >-
+          {{ {'host': inventory_hostname, 'product': ssg_product, 'profile': scan_profile, 'ssg_version': ssg_version,
+              'os': scan_os,
+              'skipped': 'Ubuntu ' + ansible_facts['distribution_version'] + ' ships no openscap-scanner (only libopenscap8 1.2.17, too old for the SCAP Security Guide). Attach Ubuntu Pro (sudo pro attach <token>) so the scan can use the Ubuntu Security Guide, or use Ubuntu 24.04.'} | to_json }}
+      delegate_to: localhost
+      become: false
+      when: "'\"is_attached\": true' not in (scap_pro.stdout | default(''))"
+
+    - name: End this host (not applicable)
+      ansible.builtin.meta: end_host
+      when: "'\"is_attached\": true' not in (scap_pro.stdout | default(''))"
+
+    - name: USG enabled (Ubuntu Pro service)
+      ansible.builtin.command: pro enable usg --assume-yes
+      register: usg_enable
+      changed_when: "'already enabled' not in (usg_enable.stdout | lower)"
+      failed_when: usg_enable.rc != 0 and 'already enabled' not in (usg_enable.stdout ~ usg_enable.stderr) | lower
+
+    - name: usg package
+      ansible.builtin.apt:
+        name: usg
+        state: present
+        update_cache: true
+
+    - name: USG profile
+      ansible.builtin.set_fact:
+        usg_profile: >-
+          {{ 'cis_level1_server' if scan_profile == 'cis'
+             else 'disa_stig' if scan_profile == 'stig'
+             else scan_profile | regex_replace('^xccdf_org[.]ssgproject[.]content_profile_', '') }}
+
+    # usg's exit status is not oscap's 0/2 convention: success is judged by the results file this run wrote.
+    # Ansible renders task names also for skipped tasks: usg_profile only exists on this branch, hence the default.
+    - name: usg audit {{ usg_profile | default('') }}
+      ansible.builtin.shell: |
+        set -u
+        marker=$(mktemp)
+        trap 'rm -f "$marker"' EXIT
+        sleep 1
+        rc=0
+        usg audit {{ usg_profile | quote }} >/tmp/cloudseed-usg.log 2>&1 || rc=$?
+        res=$(find /var/lib/usg -maxdepth 1 -name 'usg-results-*.xml' -newer "$marker" 2>/dev/null | sort | tail -1)
+        rep=$(find /var/lib/usg -maxdepth 1 -name 'usg-report-*.html' -newer "$marker" 2>/dev/null | sort | tail -1)
+        if [ -z "$res" ]; then
+          echo "usg audit {{ usg_profile }} wrote no results (exit $rc):" >&2
+          tail -n 20 /tmp/cloudseed-usg.log >&2
+          exit 1
+        fi
+        cp "$res" /tmp/cloudseed-scan-results.xml
+        if [ -n "$rep" ]; then cp "$rep" /tmp/cloudseed-scan-report.html
+        else echo "<html><body>usg audit wrote no HTML report</body></html>" > /tmp/cloudseed-scan-report.html; fi
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Scanner used
+      ansible.builtin.set_fact:
+        chosen_profile: "usg:{{ usg_profile }}"
+        ssg_product: "usg-{{ ssg_product }}"
+
+# ---------- OpenSCAP + SCAP Security Guide ----------
+- name: OpenSCAP scan
+  when: not (scap_old_ubuntu | bool)
+  block:
+    - name: OpenSCAP scanner (Debian family)
+      ansible.builtin.apt:
+        name: [openscap-scanner, unzip]
+        state: present
+        update_cache: true
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: OpenSCAP scanner (RedHat family)
+      ansible.builtin.dnf:
+        name: [openscap-scanner, unzip]
+        state: present
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    # Only the one datastream this OS needs is kept (8-30 MB), in /var/lib/cloudseed/ssg/<version>. The release zip
+    # (~180 MB, ~2.3 GB unpacked) is a temp file deleted right after, and earlier versions are removed.
+    - name: SSG content directory
+      ansible.builtin.file:
+        path: "/var/lib/cloudseed/ssg/{{ ssg_version }}"
+        state: directory
+        mode: "0755"
+
+    - name: Datastream from an earlier scan
+      ansible.builtin.stat:
+        path: "/var/lib/cloudseed/ssg/{{ ssg_version }}/ssg-{{ ssg_product }}-ds.xml"
+      register: ds_cached
+
+    - name: Fetch the datastream
+      when: not ds_cached.stat.exists
+      block:
+        - name: Temp file for the SSG release
+          ansible.builtin.tempfile:
+            suffix: .ssg.zip
+          register: ssg_zip
+
+        - name: SCAP Security Guide {{ ssg_version }}
+          ansible.builtin.get_url:
+            url: "https://github.com/ComplianceAsCode/content/releases/download/v{{ ssg_version }}/scap-security-guide-{{ ssg_version }}.zip"
+            dest: "{{ ssg_zip.path }}"
+            force: true
+            mode: "0600"
+            timeout: 120
+          register: ssg_download
+          retries: 3
+          delay: 10
+          until: ssg_download is succeeded
+
+        # exit 11 = no such member (no content for this OS): reported by the check below
+        - name: Extract ssg-{{ ssg_product }}-ds.xml
+          ansible.builtin.command: >-
+            unzip -o -j -q {{ ssg_zip.path }} scap-security-guide-{{ ssg_version }}/ssg-{{ ssg_product }}-ds.xml
+            -d /var/lib/cloudseed/ssg/{{ ssg_version }}
+          register: ssg_unzip
+          changed_when: ssg_unzip.rc == 0
+          failed_when: ssg_unzip.rc not in [0, 11]
+      always:
+        - name: Remove the SSG release zip
+          ansible.builtin.file:
+            path: "{{ ssg_zip.path }}"
+            state: absent
+          when: ssg_zip.path is defined
+
+    - name: Release trees and zips left in /opt by earlier cloudseed versions (~2.3 GB each)
+      ansible.builtin.find:
+        paths: /opt
+        patterns: "scap-security-guide-*"
+        file_type: any
+      register: ssg_legacy
+
+    - name: Datastreams of earlier SSG versions
+      ansible.builtin.find:
+        paths: /var/lib/cloudseed/ssg
+        file_type: directory
+      register: ssg_versions
+
+    - name: Remove them
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: >-
+        {{ (ssg_legacy.files + ssg_versions.files) | map(attribute='path')
+           | reject('equalto', '/var/lib/cloudseed/ssg/' + ssg_version) | list }}
+
+    - name: Datastream present for this OS
+      ansible.builtin.stat:
+        path: "/var/lib/cloudseed/ssg/{{ ssg_version }}/ssg-{{ ssg_product }}-ds.xml"
+      register: ds
+
+    - name: No SSG datastream for this OS
+      ansible.builtin.fail:
+        msg: "SCAP Security Guide {{ ssg_version }} has no content for {{ ssg_product }} ({{ scan_os }}); supported: ubuntu2204 (with Ubuntu Pro), ubuntu2404, debian12, al2023, rhel8/9."
+      when: not ds.stat.exists
+
+    - name: Available profiles
+      ansible.builtin.command: oscap info --profiles "{{ ds.stat.path }}"
+      register: profiles
+      changed_when: false
+
+    - name: Pick the profile
+      ansible.builtin.set_fact:
+        chosen_profile: >-
+          {{ (profiles.stdout_lines | map('regex_search', '^(xccdf_org\.ssgproject\.content_profile_[^:]+):') | select('string') | map('regex_replace', ':$', '') | list)
+             | select('match', profile_pattern) | first | default('') }}
+      vars:
+        profile_pattern: >-
+          {{ scan_profile if scan_profile.startswith('xccdf_')
+             else '.*_profile_cis_level2_server$|.*_profile_cis_level1_server$|.*_profile_cis$' if scan_profile == 'cis'
+             else '.*_profile_stig$' if scan_profile == 'stig'
+             else '.*_profile_' + scan_profile + '$' }}
+
+    - name: Profile not available (explicit profile id)
+      ansible.builtin.fail:
+        msg: "No '{{ scan_profile }}' profile in ssg-{{ ssg_product }}-ds.xml. Available:\n{{ profiles.stdout }}"
+      when: chosen_profile | length == 0 and scan_profile not in ['cis', 'stig']
+
+    - name: No {{ scan_profile }} content for this OS (not applicable)
+      ansible.builtin.copy:
+        dest: "{{ scan_dest }}/{{ inventory_hostname }}/meta.json"
+        mode: "0644"
+        content: >-
+          {{ {'host': inventory_hostname, 'product': ssg_product, 'profile': scan_profile, 'ssg_version': ssg_version,
+              'os': scan_os,
+              'skipped': 'SCAP Security Guide ' + ssg_version + ' has no ' + ('DISA STIG' if scan_profile == 'stig' else 'CIS')
+                         + ' profile for ' + scan_os + ' (' + ssg_product + ')'
+                         + ('; `cloudseed scan host` runs its CIS benchmark' if scan_profile == 'stig' else '') + '.'} | to_json }}
+      delegate_to: localhost
+      become: false
+      when: chosen_profile | length == 0
+
+    - name: End this host (not applicable)
+      ansible.builtin.meta: end_host
+      when: chosen_profile | length == 0
+
+    - name: Evaluate {{ chosen_profile | default('') }}
+      ansible.builtin.command: >
+        oscap xccdf eval --profile {{ chosen_profile }} --results /tmp/cloudseed-scan-results.xml --report /tmp/cloudseed-scan-report.html "{{ ds.stat.path }}"
+      register: oscap
+      changed_when: false
+      failed_when: oscap.rc not in [0, 2]     # 2 = rules failed (that is the point of the scan)
+
+# ---------- results ----------
+- name: Fetch results
+  ansible.builtin.fetch:
+    src: "/tmp/cloudseed-scan-{{ item }}"
+    dest: "{{ scan_dest }}/{{ inventory_hostname }}/{{ item }}"
+    flat: true
+  loop: [results.xml, report.html]
+
+- name: Scan metadata
+  ansible.builtin.copy:
+    dest: "{{ scan_dest }}/{{ inventory_hostname }}/meta.json"
+    mode: "0644"
+    content: "{{ {'host': inventory_hostname, 'product': ssg_product, 'profile': chosen_profile, 'ssg_version': ssg_version, 'os': scan_os} | to_json }}"
+  delegate_to: localhost
+  become: false

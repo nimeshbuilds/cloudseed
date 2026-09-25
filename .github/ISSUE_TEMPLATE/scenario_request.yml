@@ -1,0 +1,57 @@
+name: Scenario request
+description: Ask for a new step-by-step scenario, or report a problem with an existing one.
+title: "[Scenario]: "
+labels: [documentation]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Scenarios are the step-by-step guides on the [documentation site](https://nimeshbuilds.github.io/cloudseed/scenarios/).
+        Each one has a script in `tests/scenarios/` that runs its commands, so every scenario stays tested.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Request type
+      options:
+        - A new scenario
+        - A step in an existing scenario does not work
+        - An existing scenario is unclear or incomplete
+    validations:
+      required: true
+  - type: input
+    id: existing
+    attributes:
+      label: Existing scenario (if any)
+      description: Link or number of the scenario page.
+      placeholder: "https://nimeshbuilds.github.io/cloudseed/scenarios/08-backups-you-can-trust/"
+  - type: textarea
+    id: goal
+    attributes:
+      label: What should the reader have at the end?
+      description: The outcome in one or two sentences, for example "a private GKE cluster with ArgoCD deploying from my Git repo".
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps or commands involved
+      description: The cloudseed commands you expect it to use, or the step that failed and its (sanitized) output.
+      render: shell
+  - type: dropdown
+    id: targets
+    attributes:
+      label: Target
+      multiple: true
+      options:
+        - aws
+        - gcp
+        - azure
+        - vmware (local)
+        - any
+    validations:
+      required: true
+  - type: textarea
+    id: audience
+    attributes:
+      label: Who is it for?
+      description: "Your role and experience level (for example: platform engineer new to Azure), and the time and cost you would accept for the scenario."

@@ -1,0 +1,444 @@
+---
+# OS hardening + host firewall. `harden` (false with --no-harden) switches off every hardening control; the host
+# firewall (host_firewall, --no-firewall) and IP forwarding for VPN/NAT/Kubernetes hosts are independent of it.
+# A control that is off describes the host after the run, not only what this run skips: the files cloudseed installed
+# for it in an earlier run are removed (the PAM null-password and login.defs umask edits stay: the original values
+# were never saved; removed kernel settings return to the distribution's at the next reboot; automatic security
+# updates stay on, as Ubuntu images ship them).
+# ---------- SSH daemon ----------
+- name: sshd drop-in directory
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    mode: "0755"
+  when: harden_ssh | bool
+
+- name: Ensure sshd_config includes drop-ins
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^Include /etc/ssh/sshd_config\.d/\*\.conf'
+    line: 'Include /etc/ssh/sshd_config.d/*.conf'
+    insertbefore: BOF
+  when: harden_ssh | bool
+
+- name: Hardened sshd settings
+  ansible.builtin.template:
+    src: sshd-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/00-cloudseed-hardening.conf
+    mode: "0600"
+    validate: "sshd -t -f %s"
+  notify: restart sshd
+  when: harden_ssh | bool
+
+- name: SSH login banner
+  ansible.builtin.copy:
+    dest: /etc/issue.net
+    mode: "0644"
+    content: "{{ banner_text }}\n"
+  when: harden_ssh | bool
+
+- name: cloudseed sshd settings from an earlier run (SSH hardening off)
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d/00-cloudseed-hardening.conf
+    state: absent
+  notify: restart sshd
+  when: not (harden_ssh | bool)
+
+- name: No null passwords via PAM (CIS no_empty_passwords)
+  ansible.builtin.replace:
+    path: "{{ item }}"
+    regexp: '(pam_unix\.so.*)\s+nullok(_secure)?'
+    replace: '\1'
+  loop: [/etc/pam.d/common-auth, /etc/pam.d/common-password]
+  when: harden | default(true) | bool and ansible_facts['os_family'] == 'Debian'
+
+# ---------- fail2ban (every family) ----------
+# Amazon Linux 2023: only fail2ban-server. The `fail2ban` metapackage there pulls in fail2ban-firewalld (firewalld,
+# which fights nftables.service, and a firewalld banaction) and fail2ban-sendmail (an MTA).
+# nftables: the jail bans with nft (banaction below), also on hosts provisioned --no-firewall (package only; the
+# nftables service is left as it is).
+- name: fail2ban
+  ansible.builtin.package:
+    name:
+      - "{{ 'fail2ban-server' if ansible_facts['os_family'] == 'RedHat' else 'fail2ban' }}"
+      - nftables
+    state: present
+  when: harden | default(true) | bool
+
+# The SSH allow-list sources are the operator's own addresses (the host firewall admits nobody else): never ban them.
+# Early "Permission denied" attempts while a fresh VM is still installing its key would otherwise lock the operator
+# out the moment fail2ban starts and reads them back from the journal. fail2ban_ignore_cidrs: the operator's addresses
+# when the host firewall does not pin SSH sources (cloud hosts: the cloud firewall does, and update-ip changes it), and
+# on local VMs the workstation's address on their network. cloudseed_ssh_client: the address the provisioning SSH
+# session really comes from (bootstrap.sh reads SSH_CLIENT; become drops it), e.g. a VMware host adapter or a public IP
+# that is not in the allow-list yet.
+- name: fail2ban sshd jail
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.d/cloudseed-sshd.local
+    mode: "0644"
+    content: |
+      [sshd]
+      enabled = true
+      ignoreip = 127.0.0.1/8 ::1{% for c in allowed_ssh_cidrs | default([]) %} {{ c }}{% endfor %}{% for c in fail2ban_ignore_cidrs | default([]) if c not in allowed_ssh_cidrs | default([]) %} {{ c }}{% endfor %}{% if (cloudseed_ssh_client | default('') | string) is match('^[0-9A-Fa-f:.]+$') %} {{ cloudseed_ssh_client }}{% endif %}
+
+      mode = aggressive
+      maxretry = 4
+      findtime = 10m
+      bantime = 1h
+      backend = systemd
+      banaction = nftables-multiport
+      banaction_allports = nftables-allports
+  notify: restart fail2ban
+  when: harden | default(true) | bool
+
+# RPM packages are not enabled on install (Debian's are): enable/start here, not only in the handler, which a failed
+# run would never reach
+- name: fail2ban enabled
+  ansible.builtin.systemd:
+    name: fail2ban
+    enabled: true
+    state: started
+  when: harden | default(true) | bool
+
+- name: cloudseed fail2ban jail from an earlier run (hardening off)
+  ansible.builtin.file:
+    path: /etc/fail2ban/jail.d/cloudseed-sshd.local
+    state: absent
+  register: f2b_jail_removed
+  when: not (harden | default(true) | bool)
+
+- name: fail2ban stopped (cloudseed installed it for the hardening)
+  ansible.builtin.systemd:
+    name: fail2ban
+    enabled: false
+    state: stopped
+  failed_when: false
+  when: f2b_jail_removed is changed
+
+# ---------- automatic security updates ----------
+- name: unattended-upgrades (Debian family)
+  ansible.builtin.apt:
+    name: unattended-upgrades
+    state: present
+  when: auto_updates and ansible_facts['os_family'] == 'Debian'
+
+- name: Unmask apt timers disabled during first boot
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: false
+  loop: [apt-daily.service, apt-daily-upgrade.service]
+  when: auto_updates and ansible_facts['os_family'] == 'Debian'
+  failed_when: false
+
+# Enabled here; bootstrap.sh stops the timers for the duration of the run and starts every enabled one again at the end.
+- name: Enable apt timers
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+  loop: [apt-daily.timer, apt-daily-upgrade.timer]
+  when: auto_updates and ansible_facts['os_family'] == 'Debian'
+  failed_when: false
+
+# VMware bastions created by older cloudseed versions keep their first-boot template, which masks the apt timers on
+# EVERY boot (cloud-init bootcmd), so the automatic security updates stopped at the first reboot. cloud-init runs the
+# per-boot scripts after bootcmd: this one switches them back on. (New VMs mask them on the first boot only; the script
+# is a no-op there and on cloud hosts. Like the updates themselves, it stays when hardening is switched off.)
+- name: cloud-init per-boot scripts directory
+  ansible.builtin.file:
+    path: /var/lib/cloud/scripts/per-boot
+    state: directory
+    mode: "0755"
+  when: auto_updates and ansible_facts['os_family'] == 'Debian'
+
+- name: Keep the apt timers on after every boot
+  ansible.builtin.copy:
+    dest: /var/lib/cloud/scripts/per-boot/50-cloudseed-apt-timers.sh
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      # cloudseed: automatic security updates. Undoes a first-boot template that masks the apt timers on every boot.
+      systemctl unmask apt-daily.service apt-daily-upgrade.service
+      systemctl enable --now --no-block apt-daily.timer apt-daily-upgrade.timer
+      exit 0
+  when: auto_updates and ansible_facts['os_family'] == 'Debian'
+
+- name: Enable unattended-upgrades
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    mode: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+  when: auto_updates and ansible_facts['os_family'] == 'Debian'
+
+# Amazon Linux 2023 repositories are versioned: dnf (and dnf-automatic) stay on the release the AMI shipped with and
+# never see a later fix. `latest` follows every new release, as AWS documents for AL2023 automatic updates.
+# (Amazon only: on RHEL/Rocky/Alma `latest` is not a valid $releasever.)
+- name: Follow the latest Amazon Linux 2023 repository release
+  ansible.builtin.copy:
+    dest: /etc/dnf/vars/releasever
+    content: "latest\n"
+    mode: "0644"
+  when: auto_updates and ansible_facts['distribution'] == 'Amazon'
+
+- name: Security updates published since the AMI was built
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest
+    security: true
+    update_cache: true
+  when: auto_updates and ansible_facts['distribution'] == 'Amazon'
+
+- name: dnf-automatic (Amazon Linux)
+  ansible.builtin.dnf:
+    name: dnf-automatic
+    state: present
+  when: auto_updates and ansible_facts['os_family'] == 'RedHat'
+
+- name: dnf-automatic applies security updates
+  ansible.builtin.lineinfile:
+    path: /etc/dnf/automatic.conf
+    regexp: "^{{ item.key }}\\s*="
+    line: "{{ item.key }} = {{ item.value }}"
+  loop:
+    - { key: upgrade_type, value: security }
+    - { key: apply_updates, value: "yes" }
+  when: auto_updates and ansible_facts['os_family'] == 'RedHat'
+
+- name: Enable dnf-automatic timer
+  ansible.builtin.systemd:
+    name: dnf-automatic.timer
+    enabled: true
+    state: started
+  when: auto_updates and ansible_facts['os_family'] == 'RedHat'
+
+# ---------- kernel / sysctl ----------
+# Forwarding is not hardening: it is written whatever `harden` says. It stays off unless the host routes for others:
+# VPN host, NAT bastion, or a Kubernetes node (CNI). This file sorts after 90-kubernetes.conf and wins.
+- name: sysctl drop-in directory
+  ansible.builtin.file:
+    path: /etc/sysctl.d
+    state: directory
+    mode: "0755"
+
+- name: IP forwarding
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/98-cloudseed-forward.conf
+    mode: "0644"
+    content: |
+      net.ipv4.ip_forward = {{ 1 if (ip_forward | default(false) or vpn_forward | default(false) or (nat_source_cidrs | default([])) | length > 0) else 0 }}
+  notify: apply sysctl
+
+- name: Kernel hardening sysctls
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-cloudseed-hardening.conf
+    mode: "0644"
+    content: |
+      net.ipv4.conf.all.rp_filter = 1
+      net.ipv4.conf.default.rp_filter = 1
+      net.ipv4.conf.all.accept_redirects = 0
+      net.ipv4.conf.default.accept_redirects = 0
+      net.ipv4.conf.all.secure_redirects = 0
+      net.ipv4.conf.all.send_redirects = 0
+      net.ipv4.conf.default.send_redirects = 0
+      net.ipv4.conf.all.accept_source_route = 0
+      net.ipv4.conf.default.accept_source_route = 0
+      net.ipv4.conf.all.log_martians = 1
+      net.ipv4.icmp_echo_ignore_broadcasts = 1
+      net.ipv4.icmp_ignore_bogus_error_responses = 1
+      net.ipv4.tcp_syncookies = 1
+      net.ipv6.conf.all.accept_redirects = 0
+      net.ipv6.conf.default.accept_redirects = 0
+      net.ipv6.conf.all.accept_source_route = 0
+      kernel.kptr_restrict = 2
+      kernel.dmesg_restrict = 1
+      kernel.yama.ptrace_scope = 1
+      kernel.randomize_va_space = 2
+      fs.protected_hardlinks = 1
+      fs.protected_symlinks = 1
+      fs.protected_fifos = 2
+      fs.protected_regular = 2
+      fs.suid_dumpable = 0
+      # IP forwarding: /etc/sysctl.d/98-cloudseed-forward.conf
+  notify: apply sysctl
+  when: harden | default(true) | bool
+
+- name: Disable core dumps
+  ansible.builtin.copy:
+    dest: /etc/security/limits.d/99-cloudseed.conf
+    mode: "0644"
+    content: |
+      * hard core 0
+      * soft core 0
+  when: harden | default(true) | bool
+
+- name: Sudo logging and pty
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/99-cloudseed
+    mode: "0440"
+    content: |
+      Defaults use_pty
+      Defaults logfile="/var/log/sudo.log"
+    validate: "visudo -cf %s"
+  when: harden | default(true) | bool
+
+- name: Restrictive default umask
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^UMASK'
+    line: 'UMASK           027'
+  when: harden | default(true) | bool
+
+- name: cloudseed kernel, core dump and sudo settings from an earlier run (hardening off)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/sysctl.d/99-cloudseed-hardening.conf
+    - /etc/security/limits.d/99-cloudseed.conf
+    - /etc/sudoers.d/99-cloudseed
+  when: not (harden | default(true) | bool)
+
+# ---------- auditd ----------
+# Root commands are recorded when they trace back to a login (auid set by pam_loginuid, kept by sudo): what an admin or
+# Ansible runs. Daemons have no login uid, so container runtimes, CNI plugins, probes and cron do not flood the log and
+# rotate the identity/sudoers/sshd records away (the default 8 MB x 5 files).
+- name: auditd package
+  ansible.builtin.package:
+    name: "{{ 'audit' if ansible_facts['os_family'] == 'RedHat' else 'auditd' }}"
+    state: present
+  when: enable_auditd | bool
+
+- name: audit rules
+  ansible.builtin.copy:
+    dest: /etc/audit/rules.d/cloudseed.rules
+    mode: "0640"
+    content: |
+      -D
+      -b 8192
+      -f 1
+      -w /etc/passwd -p wa -k identity
+      -w /etc/group -p wa -k identity
+      -w /etc/shadow -p wa -k identity
+      -w /etc/sudoers -p wa -k sudoers
+      -w /etc/sudoers.d/ -p wa -k sudoers
+      -w /etc/ssh/sshd_config -p wa -k sshd
+      -w /etc/ssh/sshd_config.d/ -p wa -k sshd
+      -w /var/log/sudo.log -p wa -k sudo
+      -a always,exit -F arch=b64 -S execve -F euid=0 -F auid>=1000 -F auid!=unset -k rootcmd
+      -e 1
+  notify: restart auditd
+  when: enable_auditd | bool
+
+- name: auditd enabled
+  ansible.builtin.systemd:
+    name: auditd
+    enabled: true
+    state: started
+  when: enable_auditd | bool
+
+- name: cloudseed audit rules from an earlier run (auditd off)
+  ansible.builtin.file:
+    path: /etc/audit/rules.d/cloudseed.rules
+    state: absent
+  notify: restart auditd
+  when: not (enable_auditd | bool)
+
+# ---------- host firewall (nftables) ----------
+# Fail closed: an empty SSH allow-list only means "any source" where that is intended (local VMware bastions on the
+# host-only network set ssh_open_any). Anything else would silently open TCP/22 at the host layer.
+- name: SSH allow-list for the host firewall
+  ansible.builtin.assert:
+    that: (allowed_ssh_cidrs | default([])) | length > 0 or ssh_open_any | default(false) | bool
+    fail_msg: >-
+      The host firewall needs at least one IPv4 source for SSH (allowed_ssh_cidrs is empty); refusing to open TCP/22
+      to everyone. Set your IPv4 address with `cloudseed update-ip`, then re-run `cloudseed provision`.
+    quiet: true
+  when: host_firewall
+
+# Host firewall off (--no-firewall): an earlier run's cloudseed ruleset is replaced by one without the filter table. The
+# NAT a VPN host (vpn_forward) or a local bastion (nat_source_cidrs) needs stays - it is written on a first run too, as
+# long as /etc/nftables.conf is cloudseed's or the distribution's rule-less one. A ruleset of your own is left alone.
+- name: Host firewall off - the current /etc/nftables.conf
+  ansible.builtin.slurp:
+    src: /etc/nftables.conf
+  register: nft_current
+  failed_when: false
+  when: not host_firewall
+
+- name: Host firewall off - what to write
+  ansible.builtin.set_fact:
+    nft_needs_nat: "{{ vpn_forward | default(false) | bool or (nat_source_cidrs | default([])) | length > 0 }}"
+    nft_off_write: >-
+      {{ nft_text is search('managed by cloudseed')
+         or ((vpn_forward | default(false) | bool or (nat_source_cidrs | default([])) | length > 0)
+             and (nft_text | regex_replace('#[^\n]*', '')) is not search('\b(accept|drop|reject|masquerade|snat|dnat|redirect|jump|goto|queue|counter|log)\b')) }}
+  vars:
+    nft_text: "{{ (nft_current.content | b64decode) if nft_current.content is defined else '' }}"
+  when: not host_firewall
+
+- name: Host firewall off - NAT not set up (your own /etc/nftables.conf)
+  ansible.builtin.debug:
+    msg: >-
+      /etc/nftables.conf is not cloudseed's, so it is left as it is. This host forwards traffic for others (VPN clients
+      or the private network) and needs a masquerade rule for it; add one to your ruleset.
+  when: not host_firewall and nft_needs_nat | bool and not (nft_off_write | bool)
+
+- name: nftables package
+  ansible.builtin.package:
+    name: nftables
+    state: present
+  when: host_firewall or (nft_off_write | default(false) | bool)
+
+- name: Host firewall off - cloudseed's NAT only
+  ansible.builtin.template:
+    src: nftables-off.conf.j2
+    dest: /etc/nftables.conf
+    mode: "0600"
+    validate: "nft -c -f %s"
+  notify: [reload nftables, resync fail2ban]
+  when: not host_firewall and nft_off_write | bool
+
+- name: nftables enabled (the NAT is loaded at boot)
+  ansible.builtin.systemd:
+    name: nftables
+    enabled: true
+    state: started
+  when: not host_firewall and nft_off_write | bool and nft_needs_nat | bool
+
+- name: Disable ufw if present (nftables takes over)
+  ansible.builtin.systemd:
+    name: ufw
+    enabled: false
+    state: stopped
+  failed_when: false
+  when: host_firewall and ansible_facts['os_family'] == 'Debian'
+
+- name: nftables ruleset
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    mode: "0600"
+    validate: "nft -c -f %s"
+  notify: [reload nftables, resync fail2ban]
+  when: host_firewall
+
+# RedHat-family nftables.service loads /etc/sysconfig/nftables.conf (comments only as shipped), not /etc/nftables.conf:
+# without this the ruleset is gone after the first reboot. The notify also repairs hosts provisioned before this task.
+- name: nftables.service loads the cloudseed ruleset at boot (RedHat family)
+  ansible.builtin.copy:
+    dest: /etc/sysconfig/nftables.conf
+    mode: "0600"
+    content: |
+      # managed by cloudseed: the ruleset lives in /etc/nftables.conf
+      include "/etc/nftables.conf"
+  notify: [reload nftables, resync fail2ban]
+  when: host_firewall and ansible_facts['os_family'] == 'RedHat'
+
+- name: nftables enabled
+  ansible.builtin.systemd:
+    name: nftables
+    enabled: true
+    state: started
+  when: host_firewall

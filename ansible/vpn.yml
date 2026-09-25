@@ -1,0 +1,58 @@
+# cloudseed VPN host provisioning: hardening + OpenVPN server (or Tailscale subnet router).
+# Run ON the VPN host by ansible/bootstrap.sh (CLOUDSEED_PLAYBOOK=vpn.yml), like bastion.yml.
+---
+- name: Provision and harden the cloudseed VPN host
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+
+  vars:
+    cloud: aws
+    vpn_type: openvpn            # openvpn | tailscale
+    vpn_port: 1194
+    # `cloudseed provision` passes these computed from the network CIDRs (no ansible.utils/netaddr needed on the host).
+    # The OpenVPN client pool is chosen per environment outside every routed network (10.8.0.0/24 when that is free)
+    # and kept in its config.json (vpn_client_cidr); the values here are only fallbacks.
+    vpn_client_net: 10.8.0.0
+    vpn_client_mask: 255.255.255.0
+    network_cidr: "10.0.0.0/16"
+    vpn_routes: ["{{ network_cidr }}"]              # pushed to clients / advertised to the tailnet (+ GKE control plane)
+    vpn_push_routes: [["10.0.0.0", "255.255.0.0"]]  # the same routes as [network, netmask] for OpenVPN
+    ssh_user: "{{ lookup('env', 'SUDO_USER') | default(lookup('env', 'USER'), true) }}"
+    allowed_ssh_cidrs: []
+    ssh_open_any: false
+    harden: true
+    harden_ssh: true
+    host_firewall: true
+    enable_auditd: true
+    auto_updates: true
+    install_terraform: false
+    install_cloud_cli: false
+    repo_dir: "/home/{{ ssh_user }}/cloudseed"
+    banner_text: "cloudseed VPN host - authorized access only. All activity is logged."
+    motd_title: cloudseed VPN host
+    motd_hint: "{{ 'OpenVPN' if vpn_type == 'openvpn' else 'Tailscale' }} gateway to the private network; connect with: cloudseed vpn connect"
+    # hardening role hooks
+    vpn_forward: true
+    extra_udp_ports: "{{ [vpn_port] if vpn_type == 'openvpn' else [41641] }}"
+    fips_mode: false
+
+  pre_tasks:
+    - name: Sanity check distro family
+      ansible.builtin.assert:
+        that: ansible_facts['os_family'] == 'Debian'
+        fail_msg: "The VPN host must be Ubuntu/Debian (OpenVPN + easy-rsa packages)."
+        quiet: true
+    - name: Provisioning secrets
+      ansible.builtin.include_tasks: tasks/read-secrets.yml
+
+  roles:
+    - role: common
+    - role: hardening
+    - role: openvpn
+      when: vpn_type == 'openvpn'
+    - role: tailscale
+      when: vpn_type == 'tailscale'
+    - role: fips
+      when: fips_mode

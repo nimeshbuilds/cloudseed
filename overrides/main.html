@@ -1,0 +1,100 @@
+{#- cloudseed site shell: per-page SEO (title, description, Open Graph, Twitter cards), icons, theme colour and the
+    announcement bar. Canonical URLs, prev/next links and the meta description come from Material's base.html. -#}
+{% extends "base.html" %}
+
+{% block htmltitle %}
+  {%- if page and page.is_homepage -%}
+    <title>cloudseed — Multi-cloud landing zones &amp; Kubernetes platform</title>
+  {%- elif page and page.meta and page.meta.title -%}
+    <title>{{ page.meta.title | striptags }} · cloudseed</title>
+  {%- elif page and page.title -%}
+    <title>{{ page.title | striptags }} · cloudseed</title>
+  {%- else -%}
+    <title>{{ config.site_name }}</title>
+  {%- endif -%}
+{% endblock %}
+
+{% block extrahead %}
+  {%- set cs_home = page and page.is_homepage -%}
+  {%- if cs_home -%}
+    {%- set cs_title = "cloudseed — secure multi-cloud landing zones and a Kubernetes platform from one command" -%}
+  {%- elif page and page.meta and page.meta.title -%}
+    {%- set cs_title = (page.meta.title | striptags) ~ " · cloudseed" -%}
+  {%- elif page and page.title -%}
+    {%- set cs_title = (page.title | striptags) ~ " · cloudseed" -%}
+  {%- else -%}
+    {%- set cs_title = config.site_name -%}
+  {%- endif -%}
+  {%- if page and page.meta and page.meta.description -%}
+    {%- set cs_description = page.meta.description -%}
+  {%- else -%}
+    {%- set cs_description = config.site_description -%}
+  {%- endif -%}
+  {%- set cs_image = config.site_url ~ "assets/og-image.png" -%}
+  {%- set cs_url = (page.canonical_url if page and page.canonical_url else config.site_url) -%}
+  <meta name="theme-color" content="#0f172a">
+  {% block cs_robots %}<meta name="robots" content="index, follow, max-image-preview:large">{% endblock %}
+  <link rel="icon" type="image/svg+xml" href="{{ 'assets/icon.svg' | url }}">
+  <link rel="apple-touch-icon" href="{{ 'assets/apple-touch-icon.png' | url }}">
+  <meta property="og:type" content="{{ 'website' if cs_home else 'article' }}">
+  <meta property="og:site_name" content="cloudseed">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:title" content="{{ cs_title | e }}">
+  <meta property="og:description" content="{{ cs_description | e }}">
+  <meta property="og:url" content="{{ cs_url }}">
+  <meta property="og:image" content="{{ cs_image }}">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="cloudseed: secure multi-cloud landing zones and a Kubernetes platform on AWS, Google Cloud, Azure and VMware from one command">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ cs_title | e }}">
+  <meta name="twitter:description" content="{{ cs_description | e }}">
+  <meta name="twitter:image" content="{{ cs_image }}">
+  <meta name="twitter:image:alt" content="cloudseed: secure multi-cloud landing zones and a Kubernetes platform from one command">
+  {%- if cs_home %}
+    {%- set cs_ld = {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "cloudseed",
+      "alternateName": "cs",
+      "description": config.site_description | trim,
+      "url": config.site_url,
+      "downloadUrl": config.repo_url,
+      "installUrl": config.site_url ~ "getting-started/installation/",
+      "softwareHelp": config.site_url ~ "getting-started/quickstart/",
+      "sameAs": [config.repo_url],
+      "image": cs_image,
+      "screenshot": config.site_url ~ "assets/screenshots/console-platform-light.webp",
+      "applicationCategory": "DeveloperApplication",
+      "applicationSubCategory": "Infrastructure as code",
+      "operatingSystem": "macOS, Linux",
+      "softwareVersion": config.extra.cloudseed_version,
+      "license": "https://www.apache.org/licenses/LICENSE-2.0",
+      "isAccessibleForFree": true,
+      "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+      "author": {"@type": "Person", "name": "Nimesh", "url": "https://github.com/nimeshbuilds"},
+      "publisher": {"@type": "Organization", "name": "nimeshbuilds", "url": "https://github.com/nimeshbuilds"},
+      "keywords": "multi-cloud landing zone, Terraform AWS landing zone, GCP landing zone, Azure landing zone, secure bastion, Kubernetes platform, EKS, GKE, AKS, RKE2, VMware Fusion Kubernetes lab, disaster recovery, chaos engineering, CIS, FIPS 140, MCP server for cloud, AI agent infrastructure",
+      "featureList": [
+        "Secure landing zones on AWS, Google Cloud, Azure and local VMware: private networks, NAT, flow logs, a hardened bastion reachable only from your IP, security baseline",
+        "Private EKS, GKE and AKS, or RKE2 / kubeadm on VMware",
+        "Kubernetes platform catalog: GitOps, observability, Gateway API, cert-manager, secrets, data, AI and agentic stacks",
+        "Disaster recovery drills with Velero, chaos engineering with Chaos Mesh, CIS / STIG / vulnerability scans",
+        "FIPS 140 mode",
+        "Local web console, MCP server and AI-agent mode",
+        "Undo, audit trail and explain for every feature"
+      ]
+    } -%}
+    {%- if not config.extra.cloudseed_version -%}{%- set _ = cs_ld.pop("softwareVersion") -%}{%- endif %}
+    <script type="application/ld+json">{{ cs_ld | tojson }}</script>
+  {%- endif %}
+{% endblock %}
+
+{% block announce %}
+  <a class="cs-announce" href="https://github.com/nimeshbuilds/cloudseed">
+    <span class="cs-announce__tag">New</span>
+    <span>cloudseed {{ config.extra.cloudseed_version }} is open source<span class="cs-announce__more"> under Apache-2.0</span><span class="cs-announce__more"> — star it on GitHub</span></span>
+    <span class="cs-announce__icon" aria-hidden="true">{% include ".icons/octicons/star-16.svg" %}</span>
+  </a>
+{% endblock %}

@@ -1,0 +1,41 @@
+# managed by cloudseed
+port {{ vpn_port }}
+proto udp
+dev tun
+topology subnet
+server {{ vpn_client_net }} {{ vpn_client_mask }}
+{# the private network, plus private endpoints outside it (the GKE control plane); computed by `cloudseed provision` #}
+{% for r in vpn_push_routes %}
+push "route {{ r[0] }} {{ r[1] }}"
+{% endfor %}
+keepalive 10 120
+ca ca.crt
+cert server.crt
+key server.key
+dh none
+tls-crypt tc.key
+crl-verify crl.pem
+tls-version-min 1.2
+tls-cert-profile preferred
+cipher AES-256-GCM
+{# key exchange groups: tls-groups (OpenVPN 2.5+); `ecdh-curve` is ignored with OpenSSL 3. Without FIPS, OpenSSL's own
+   defaults (X25519 first). In FIPS mode only NIST curves: X25519 is not an approved group and would stop the server. #}
+{% if fips_mode | default(false) %}
+tls-groups secp384r1:secp256r1
+data-ciphers AES-256-GCM:AES-128-GCM
+tls-ciphersuites TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256
+tls-cipher TLS-ECDHE-ECDSA-WITH-AES-256-GCM-SHA384:TLS-ECDHE-RSA-WITH-AES-256-GCM-SHA384:TLS-ECDHE-ECDSA-WITH-AES-128-GCM-SHA256:TLS-ECDHE-RSA-WITH-AES-128-GCM-SHA256
+{% else %}
+data-ciphers AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305
+{% endif %}
+auth SHA256
+user nobody
+group nogroup
+persist-key
+persist-tun
+explicit-exit-notify 1
+verb 3
+{# the client list, rewritten every 30 s (not appended). The log itself goes to journald (no log-append): the unit runs
+   openvpn with --suppress-timestamps because journald adds them, and journald rotates it:
+   journalctl -u openvpn-server@server #}
+status /var/log/openvpn/status.log 30

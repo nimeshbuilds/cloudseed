@@ -1,0 +1,37 @@
+cloudseed
+Copyright 2026 Nimesh
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+Source: https://github.com/nimeshbuilds/cloudseed
+
+Third-party software
+--------------------
+The cloudseed repository does not vendor third-party source code. The CLI
+(cloudseed/) uses only the Python standard library. The following are fetched
+at build or run time, each under its own license:
+
+  * providers/vmdesktop (cloudseed's Terraform provider for VMware Fusion /
+    Workstation) is compiled against HashiCorp's terraform-plugin-framework and
+    its dependencies (see providers/vmdesktop/go.mod and go.sum), mostly under
+    the Mozilla Public License 2.0, BSD-style and Apache-2.0 licenses.
+  * Terraform, the cloud providers' Terraform providers, Ansible, the cloud
+    CLIs, kubectl, Helm, k9s and the other tools that `cloudseed install` or
+    `cloudseed deps` download or that the Dockerfile builds into an image.
+    The single-binary bundle (`cloudseed deps bundle`) embeds a Terraform
+    release; Terraform is distributed by HashiCorp under the Business Source
+    License 1.1, so check its terms before redistributing a bundle.
+  * The Helm charts and manifests installed by `cloudseed platform install`
+    (the platform catalog in cloudseed/platform.py). They are pulled from their
+    upstream repositories and remain under their authors' licenses.
+  * The built-in agent installs the Anthropic Python SDK into its own virtual
+    environment on first use (~/.cloudseed/venv-agent).
+  * Official cloud images (Ubuntu, Debian) that `cloudseed setup vmware`
+    downloads are subject to their distributors' terms.
+
+Trademarks
+----------
+Amazon Web Services, AWS, Google Cloud, GCP, GKE, Microsoft Azure, AKS,
+VMware, VMware Fusion, VMware Workstation, Kubernetes, Terraform, Ansible,
+Claude, Codex, Gemini, Grok, Cursor, Databricks, Snowflake and other names are
+trademarks of their respective owners. cloudseed is an independent open-source
+project and is not affiliated with, sponsored by or endorsed by any of them.

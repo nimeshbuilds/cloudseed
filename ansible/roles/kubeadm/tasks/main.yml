@@ -1,0 +1,203 @@
+---
+# node_role: server (control plane) | agent (worker). Upstream Kubernetes with containerd + Flannel.
+# Secrets (bootstrap token, certificate key) reach kubeadm through the task environment, never the command line, so a
+# failing task does not print them (Ansible shows the command of a failed task, not its environment).
+
+# ---- Kubernetes version: the running cluster's, so joining nodes never get a newer kubelet than the API server ----
+- name: Kubernetes version of the running cluster (first control plane)
+  ansible.builtin.command: kubeadm version -o short
+  delegate_to: "{{ groups['control_plane'][0] }}"
+  register: cluster_kubeadm
+  changed_when: false
+  failed_when: false
+
+- name: Kubernetes minor version
+  ansible.builtin.set_fact:
+    # kubernetes_version: "1.35" / "v1.35.2" (first install only); default: a supported minor that still runs with
+    # the distro containerd 1.x (Debian 12)
+    k8s_minor: >-
+      {{ (cluster_kubeadm.stdout | default('') | trim
+          if (cluster_kubeadm.rc | default(1)) == 0 and (cluster_kubeadm.stdout | default('') | trim) is match('v?[0-9]+[.][0-9]+')
+          else (kubernetes_version | default('', true) or '1.35'))
+         | string | regex_replace('^v?([0-9]+[.][0-9]+).*$', '\1') }}
+
+- name: containerd
+  ansible.builtin.apt:
+    name: containerd
+    state: present
+
+# Regenerated from containerd's defaults and replaced only when it differs. Not `creates:`: Debian 12's package ships
+# its own config.toml (cgroupfs, CNI bin_dir /usr/lib/cni), which would then never be replaced.
+- name: containerd config with systemd cgroups
+  ansible.builtin.shell: |
+    set -e
+    mkdir -p /etc/containerd
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp"' EXIT
+    containerd config default > "$tmp"
+    sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' "$tmp"
+    sed -i 's#sandbox_image = ".*"#sandbox_image = "registry.k8s.io/pause:3.10"#' "$tmp"
+    grep -q 'SystemdCgroup = true' "$tmp"
+    if cmp -s "$tmp" /etc/containerd/config.toml; then
+      echo unchanged
+    else
+      install -m 0644 "$tmp" /etc/containerd/config.toml   # explicit mode: the hardened umask is 027
+      echo changed
+    fi
+  register: containerd_cfg
+  changed_when: "'changed' in containerd_cfg.stdout_lines"
+
+- name: Node already part of the cluster?
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf
+
+# Restarted here, not by a handler at the end of the play: kubeadm init/join must already run against this config.
+# A node that has not joined yet runs no workloads, so it is always restarted (also repairs an earlier failed run).
+- name: containerd running with that config
+  ansible.builtin.systemd:
+    name: containerd
+    enabled: true
+    state: "{{ 'restarted' if (containerd_cfg is changed or not kubelet_conf.stat.exists) else 'started' }}"
+
+- name: kubelet picks up containerd's new cgroup driver (read only at kubelet start)
+  ansible.builtin.systemd:
+    name: kubelet
+    state: restarted
+  when: containerd_cfg is changed and kubelet_conf.stat.exists
+
+- name: Kubernetes apt keyring
+  ansible.builtin.shell: |
+    set -eo pipefail
+    mkdir -p /etc/apt/keyrings
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp"' EXIT
+    curl -fsSL --retry 5 --retry-delay 5 https://pkgs.k8s.io/core:/stable:/v{{ k8s_minor }}/deb/Release.key -o "$tmp"
+    gpg --batch --yes --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg "$tmp"
+    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v{{ k8s_minor }}/deb/ /" > /etc/apt/sources.list.d/kubernetes.list
+    # the hardening role sets a restrictive umask; apt fetches as the unprivileged _apt user and must be able to read both
+    chmod 0644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg /etc/apt/sources.list.d/kubernetes.list
+  args:
+    creates: /etc/apt/sources.list.d/kubernetes.list
+    executable: /bin/bash
+
+- name: Kubernetes apt files readable by apt's sandbox user
+  ansible.builtin.file:
+    path: "{{ item }}"
+    mode: "0644"
+  loop:
+    - /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    - /etc/apt/sources.list.d/kubernetes.list
+
+- name: kubeadm, kubelet, kubectl
+  ansible.builtin.apt:
+    name: [kubeadm, kubelet, kubectl]
+    state: present
+    update_cache: true
+
+- name: Hold Kubernetes packages
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: [kubeadm, kubelet, kubectl]
+
+- name: kubelet node IP
+  ansible.builtin.copy:
+    dest: /etc/default/kubelet
+    mode: "0644"
+    content: 'KUBELET_EXTRA_ARGS=--node-ip={{ ansible_host }}'
+
+# ---- first control plane ----
+- name: kubeadm init
+  ansible.builtin.shell: >
+    kubeadm init --control-plane-endpoint {{ hostvars[groups['control_plane'][0]].ansible_host }}:6443
+    --apiserver-advertise-address {{ ansible_host }} --pod-network-cidr {{ kubeadm_pod_cidr }}
+    --service-cidr {{ kubeadm_service_cidr }} --token "$K8S_TOKEN" --upload-certs
+  args:
+    creates: /etc/kubernetes/admin.conf
+  environment:
+    K8S_TOKEN: "{{ k8s_token }}"
+  when: node_role == 'server' and inventory_hostname == groups['control_plane'][0]
+
+# Flannel is applied once, when the cluster has none: re-applying on every provisioning run / `node add` would roll a
+# different CNI version over every node. The DaemonSet is the manifest's last object, so its presence means an earlier
+# apply got through all of it. Any other error than "not found" (the API still starting) is retried, never taken as
+# "missing".
+- name: Flannel running in the cluster?
+  ansible.builtin.command: >-
+    kubectl --kubeconfig /etc/kubernetes/admin.conf -n kube-flannel get daemonset kube-flannel-ds
+    -o jsonpath={.spec.template.spec.containers[0].image}
+  register: flannel_ds
+  changed_when: false
+  failed_when: flannel_ds.rc != 0 and 'not found' not in flannel_ds.stderr
+  retries: 12
+  delay: 5
+  until: flannel_ds.rc == 0 or 'not found' in flannel_ds.stderr
+  when: node_role == 'server' and inventory_hostname == groups['control_plane'][0]
+
+- name: Flannel CNI {{ flannel_version }}
+  ansible.builtin.command: >-
+    kubectl --kubeconfig /etc/kubernetes/admin.conf apply
+    -f https://github.com/flannel-io/flannel/releases/download/{{ flannel_version }}/kube-flannel.yml
+  when: node_role == 'server' and inventory_hostname == groups['control_plane'][0] and flannel_ds.rc != 0
+  changed_when: "'created' in flannel.stdout or 'configured' in flannel.stdout"
+  retries: 5
+  delay: 10
+  register: flannel
+  until: flannel.rc == 0
+
+- name: Flannel left at the version the cluster runs
+  ansible.builtin.debug:
+    msg: >-
+      The cluster runs {{ flannel_ds.stdout }}; cloudseed installs Flannel {{ flannel_version }} on new clusters and does
+      not change the CNI of a running one.
+  when: >-
+    node_role == 'server' and inventory_hostname == groups['control_plane'][0] and flannel_ds.rc == 0
+    and not flannel_ds.stdout.endswith(':' + flannel_version)
+
+# ---- join info from the first control plane ----
+- name: Discovery hash and certificate key
+  ansible.builtin.shell: |
+    set -eo pipefail
+    test -s /etc/kubernetes/pki/ca.crt
+    HASH=$(openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl pkey -pubin -outform der | openssl dgst -sha256 -hex | sed 's/^.* //')
+    CERTKEY=$(kubeadm init phase upload-certs --upload-certs 2>/dev/null | tail -1)
+    kubeadm token create "$K8S_TOKEN" >/dev/null 2>&1 || true   # (re)creates the bootstrap token if it expired
+    test -n "$HASH"
+    echo "sha256:$HASH $CERTKEY"
+  args:
+    executable: /bin/bash
+  environment:
+    K8S_TOKEN: "{{ k8s_token }}"
+  delegate_to: "{{ groups['control_plane'][0] }}"
+  register: joininfo
+  changed_when: false
+  when: inventory_hostname != groups['control_plane'][0]
+
+- name: kubeadm join (additional control plane)
+  ansible.builtin.shell: >
+    kubeadm join {{ hostvars[groups['control_plane'][0]].ansible_host }}:6443 --token "$K8S_TOKEN"
+    --discovery-token-ca-cert-hash {{ joininfo.stdout.split()[0] }} --control-plane
+    --certificate-key "$K8S_CERT_KEY" --apiserver-advertise-address {{ ansible_host }}
+  args:
+    creates: /etc/kubernetes/kubelet.conf
+  environment:
+    K8S_TOKEN: "{{ k8s_token }}"
+    K8S_CERT_KEY: "{{ joininfo.stdout.split()[1] }}"
+  when: node_role == 'server' and inventory_hostname != groups['control_plane'][0]
+
+- name: kubeadm join (worker)
+  ansible.builtin.shell: >
+    kubeadm join {{ hostvars[groups['control_plane'][0]].ansible_host }}:6443 --token "$K8S_TOKEN"
+    --discovery-token-ca-cert-hash {{ joininfo.stdout.split()[0] }}
+  args:
+    creates: /etc/kubernetes/kubelet.conf
+  environment:
+    K8S_TOKEN: "{{ k8s_token }}"
+  when: node_role == 'agent'
+
+- name: Root kubeconfig on control planes
+  ansible.builtin.lineinfile:
+    path: /root/.bashrc
+    line: 'export KUBECONFIG=/etc/kubernetes/admin.conf'
+  when: node_role == 'server'

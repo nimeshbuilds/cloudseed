@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use cloudseed in your work, please cite it as below."
+type: software
+title: "cloudseed: secure multi-cloud landing zones and a Kubernetes platform from one command"
+abstract: >-
+  cloudseed is an open-source command-line tool that builds secure landing zones on AWS, Google Cloud and Azure
+  (network, NAT, hardened bastion, security baseline, remote state) and the same shape on local VMware Fusion or
+  Workstation VMs with Terraform and Ansible. It adds private Kubernetes (EKS, GKE, AKS, RKE2, kubeadm), a catalog of
+  platform components, disaster-recovery drills, chaos experiments, compliance scans, a FIPS 140 mode, a local web
+  console, an MCP server and an agentic mode.
+authors:
+  - given-names: Nimesh
+    alias: npandeya
+version: 0.1.0
+date-released: "2026-09-24"
+license: Apache-2.0
+repository-code: "https://github.com/nimeshbuilds/cloudseed"
+url: "https://nimeshbuilds.github.io/cloudseed/"
+keywords:
+  - terraform
+  - landing-zone
+  - aws
+  - gcp
+  - azure
+  - vmware
+  - kubernetes
+  - platform-engineering
+  - infrastructure-as-code
+  - bastion
+  - fips
+  - mcp
+  - ai-agents
