@@ -5,9 +5,10 @@ description: "Velero backups with the bucket and identity created for you, autom
 
 # Resilience: backups, DR drills and chaos
 
-Backups you have never restored and failover you have never tested are hopes, not plans. cloudseed gives you both
-halves with verdicts: `cs dr test` proves a restore works end to end, and `cs chaos run` proves your workloads survive
-faults.
+`cs dr test` backs up and restores a generated sample workload and reports which checks passed.
+`cs chaos run` measures a generated canary under injected faults; use `--target` to test a selected Deployment.
+Results apply to that sample or target and the checks actually performed. Use the
+[application recovery workflow](../scenarios/18-upgrades-and-recovery.md#step-4-rehearse-an-application-restore) to assess a selected application backup.
 
 ## Disaster recovery with Velero
 

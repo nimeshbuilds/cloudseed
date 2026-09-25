@@ -123,22 +123,24 @@ Use the installed release verifier with the artifact path and a digest obtained 
 cs ops release-verify --params '{"artifact":"/path/cloudseed-linux-amd64","sha256":"REPLACE_WITH_TRUSTED_64_HEX_DIGEST","verify_attestation":true}' --json
 ```
 
-It never executes or extracts the artifact. A mismatch fails; a matching digest without verified provenance remains
-INCOMPLETE. With `gh` installed, attestation verification checks this repository, the release workflow, a version tag
-and a hosted runner. The MCP tool is `cloudseed_ops_release_verify` with the same fields; in the UI choose
+It never executes or extracts the artifact. A checksum mismatch or failed attestation verification returns FAIL.
+A matching digest remains INCOMPLETE when provenance verification is omitted or unavailable. With `gh` installed,
+attestation verification checks this repository, the release workflow, a version tag and a hosted runner. The MCP tool is `cloudseed_ops_release_verify` with the same fields; in the UI choose
 **Operations & readiness → release-verify**. A newly implemented release workflow is not evidence that a signed
 release has already been published.
 
 The full dependency inventory ships as a `.sbom.spdx.json` file. A binary manifest binds the executable and its
 inventory by SHA-256. Each container manifest binds its full inventory to an immutable image reference such as
-`ghcr.io/nimeshbuilds/cloudseed@sha256:...`; compare that digest with the image you intend to use.
+`ghcr.io/nimeshbuilds/cloudseed@sha256:...`. Compare that digest with the selected architecture image
+(`:vX.Y.Z-amd64` or `:vX.Y.Z-arm64`); the combined `:vX.Y.Z` multi-architecture index has a different digest.
 Use the same release-verification operation on the downloaded manifest and SBOM files, with their trusted expected
 checksums, through CLI, MCP or the console. A tagged release signs their file digests; it does not squeeze the full
 inventory into GitHub's 16 MiB embedded-SBOM predicate. Inventories are preserved without truncation, up to a
 128 MiB generation limit. Checksums and manifests for container inventories are included in the release downloads.
 
 A manual build-only run produces inspectable artifacts without publishing or signing a version-tag release.
-Its checksum checks can pass while `release-verify` correctly reports missing release provenance as INCOMPLETE.
+Its checksum-only check remains INCOMPLETE. Requesting attestation verification with a working `gh` CLI returns
+FAIL for these unsigned artifacts, because they have no version-tag release provenance.
 
 The [runtime acceptance guide](../development/acceptance.md) explains what the packaged-runtime CI exercises.
 
