@@ -675,6 +675,24 @@ class ClientConfigTests(unittest.TestCase):
             data = json.loads(path.read_text())
             self.assertNotIn("cloudseed", data["servers"]); self.assertIn("other", data["servers"]); self.assertIn("inputs", data)
 
+    def test_linux_config_dir_follows_an_absolute_xdg_config_home_only(self):
+        # Claude Desktop builds and VS Code on Linux: $XDG_CONFIG_HOME/<app>, else ~/.config/<app>; an empty or relative
+        # value is ignored (XDG spec) instead of resolving against whatever directory cloudseed runs in
+        with _Home() as home, mock.patch.object(mcp.platform, "system", return_value="Linux"):
+            for value in (None, "", "relative/dir"):
+                with mock.patch.dict(os.environ):
+                    if value is None:
+                        os.environ.pop("XDG_CONFIG_HOME", None)
+                    else:
+                        os.environ["XDG_CONFIG_HOME"] = value
+                    self.assertEqual(mcp.CLIENTS["claude-desktop"]["path"](), home / ".config" / "Claude" / "claude_desktop_config.json")
+                    self.assertEqual(mcp.CLIENTS["vscode"]["path"](), home / ".config" / "Code" / "User" / "mcp.json")
+            with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(home / "xdg")}):
+                self.assertEqual(mcp.CLIENTS["claude-desktop"]["path"](), home / "xdg" / "Claude" / "claude_desktop_config.json")
+        with _Home() as home, mock.patch.object(mcp.platform, "system", return_value="Darwin"):
+            self.assertEqual(mcp.CLIENTS["claude-desktop"]["path"](),
+                             home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json")
+
     def test_gemini_comments_and_settings_survive(self):   # mcp#0
         with _Home() as home:
             path = home / ".gemini" / "settings.json"

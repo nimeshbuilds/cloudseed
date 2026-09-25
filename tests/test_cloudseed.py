@@ -883,10 +883,14 @@ class McpDeployTests(unittest.TestCase):
         c.close()
 
     def test_client_wiring_and_guide(self):
+        from unittest import mock
         from cloudseed import mcp
         home = tempfile.mkdtemp(prefix="cs-mcp-clients-")
-        old_home = os.environ.get("HOME")
-        os.environ["HOME"] = home
+        # a throw-away HOME and XDG_CONFIG_HOME (as test_fix_mcp's _Home): on Linux the Claude Desktop and VS Code
+        # configs this test writes follow $XDG_CONFIG_HOME, which CI runners (and many desktops) point at the real
+        # ~/.config; the environment is restored afterwards
+        isolate = mock.patch.dict(os.environ, {"HOME": home, "XDG_CONFIG_HOME": str(Path(home) / ".config")})
+        isolate.start()
         try:
             (Path(home) / ".codex").mkdir(); (Path(home) / ".codex" / "config.toml").write_text('model = "x"\n\n[mcp_servers.other]\ncommand = "y"\n')
             (Path(home) / ".cursor").mkdir(); (Path(home) / ".cursor" / "mcp.json").write_text('{"mcpServers": {"keep": {"command": "z"}}}')
@@ -918,7 +922,7 @@ class McpDeployTests(unittest.TestCase):
             snippets = mcp.client_configs(state)
             self.assertTrue(any("Claude Desktop" in k for k in snippets))
         finally:
-            os.environ["HOME"] = old_home
+            isolate.stop()
 
     def test_toml_strip_and_argv(self):
         from cloudseed import mcp
