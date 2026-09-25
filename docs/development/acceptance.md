@@ -23,7 +23,7 @@ The framework review used the [upstream changelog](https://github.com/hashicorp/
 | CLI, environment selection and configuration | Full standard-library suite; all command help; configuration validation; isolated setup/status/inventory/FinOps/undo/error paths | Existing account policy, quotas and provider API behavior |
 | Terraform | Formatting; validate every root; mocked Terraform suites; CLI renders and validates all four targets | Apply, refresh, drift, recovery and destroy in disposable accounts or VMs |
 | Go VMware provider | Unit and protocol tests; race detector; vet; host cross-builds; failure-path tools simulated in temporary directories | Actual Fusion/Workstation disk expansion, boot, guest IPs, shutdown and cleanup |
-| Ansible | Cloudseed's real private-venv installer; syntax checks for all six playbooks on Python 3.12 and 3.14 | Guest changes across Ubuntu/Debian/Amazon Linux, SSH hardening, reboots and FIPS prerequisites |
+| Ansible | Cloudseed's real private-venv installer; syntax checks for all four playbooks on Python 3.12 and 3.14 | Guest changes across Ubuntu/Debian/Amazon Linux, SSH hardening, reboots and FIPS prerequisites |
 | Container | Native Linux amd64/arm64 Docker builds; every included executable starts; CLI end-to-end and local service scenarios inside the image | Authenticated cloud calls, mounted real user credentials and rootless-engine behavior |
 | Standalone binary | Actual Linux/macOS PyInstaller builds; packaged-data checks; the CLI end-to-end suite targets the executable; real MCP and console scenarios | Signed release distribution and other host/architecture combinations |
 | MCP | HTTP and stdio requests; authentication, resources, tools, token rotation, stop/restart and cleanup | Each third-party client's interactive installation and login |
@@ -63,7 +63,7 @@ The scenario helpers use temporary homes and remove their test resources. The or
 
 ## Live acceptance still required
 
-Before calling a release fully validated against infrastructure, record its commit, host/runtime/tool versions, target account or project, region, environment name, cost limit and cleanup owner. Use disposable targets with explicit authorization. No live cloud account or VMware installation was available for this review.
+Before calling a release fully validated against infrastructure, record its commit, host/runtime/tool versions, target account or project, region, environment name, cost limit and cleanup owner. Use disposable targets with explicit authorization. No live cloud target was selected or provisioned during this review, and the review host has no VMware installation.
 
 1. Create a minimal landing zone. Check its private networks, bastion access, cloud security baseline and remote-state locking. Reapply and confirm no unexpected changes.
 2. Add the cluster. Reach its private API through the supported path, confirm node readiness, scale up/down, and verify a restart preserves access.

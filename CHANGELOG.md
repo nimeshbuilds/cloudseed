@@ -12,12 +12,17 @@ commands or defaults; such changes are called out under **Changed**.
 - Redesigned GitHub Pages with a white-and-blue documentation theme, interactive architecture previews, clearer
   guide entry points, and consistent SVG/PNG branding. Added an end-to-end engineering review and prioritized roadmap.
 - Build strict documentation on pull requests, explicitly install Node for tests, and retain failing CI logs.
+- Upgrade the container to Python 3.14 and the VMware provider to Terraform Plugin Framework 1.19 (Go 1.25 minimum).
+- Test source Python 3.9/3.12/3.14, native amd64/arm64 containers, Linux/macOS standalone binaries, and Ansible installation/playbook syntax in CI. Run provider tests with the Go race detector.
 
 ### Fixed
 
 - MCP stop/restart with long process paths, local server startup with slow DNS, and console job completion metadata ordering.
 - Explicit GCP credential diagnostics, Azure scanner login preflight, and VMware node/provision validation ordering.
 - Host-dependent test fixtures and dry-run scenario assumptions that failed across the Linux/macOS Actions matrix.
+- Preserve packaged assets when detached MCP/console services and console jobs outlive their launching process.
+- Keep generated NIC MAC addresses unknown until creation with the updated Terraform framework.
+- Refuse environment mutations when their lock cannot be acquired or recorded, including unsupported native Windows locking.
 
 ## [0.1.0] - 2026-09-24
 
