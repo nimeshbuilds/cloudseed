@@ -112,12 +112,6 @@ jobs:
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-checksums: dist/cloudseed-${{ matrix.platform }}.SHA256SUMS
-      - name: Attest dependency inventory
-        if: github.event_name == 'push' && github.ref_type == 'tag'
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
-        with:
-          subject-path: dist/cloudseed-${{ matrix.platform }}
-          sbom-path: dist/cloudseed-${{ matrix.platform }}.sbom.spdx.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-${{ matrix.platform }}
@@ -177,6 +171,7 @@ jobs:
       matrix:
         arch: [amd64, arm64]
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: image-${{ matrix.arch }}
@@ -204,13 +199,28 @@ jobs:
           subject-digest: ${{ steps.image.outputs.digest }}
           push-to-registry: true
           create-storage-record: false
+      - name: Bind the full dependency inventory to the immutable image
+        env:
+          ARCH: ${{ matrix.arch }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          python3 scripts/release-manifest.py --revision "$GITHUB_SHA" \
+            --image-reference "ghcr.io/nimeshbuilds/cloudseed@$IMAGE_DIGEST" \
+            --artifact "release-image/container-$ARCH.sbom.spdx.json" \
+            --output "release-image/container-$ARCH.manifest.json" --checksums "release-image/container-$ARCH.SHA256SUMS"
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
-          subject-name: ghcr.io/nimeshbuilds/cloudseed
-          subject-digest: ${{ steps.image.outputs.digest }}
-          sbom-path: release-image/container-${{ matrix.arch }}.sbom.spdx.json
-          push-to-registry: true
-          create-storage-record: false
+          subject-checksums: release-image/container-${{ matrix.arch }}.SHA256SUMS
+      - name: Preserve the full inventory and signed digest binding as release assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-container-${{ matrix.arch }}
+          path: |
+            release-image/container-${{ matrix.arch }}.sbom.spdx.json
+            release-image/container-${{ matrix.arch }}.manifest.json
+            release-image/container-${{ matrix.arch }}.SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
 
   publish:
     if: github.event_name == 'push' && github.ref_type == 'tag'

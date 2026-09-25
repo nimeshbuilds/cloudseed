@@ -15,7 +15,9 @@ commands or defaults; such changes are called out under **Changed**.
 - Regional GKE with explicit node locations and AKS Free/Standard tier plus node zones. Cost previews account for
   GKE node-zone multiplication and mark unsupported pricing incomplete. Profile/import saves never auto-apply.
 - Native OS-keychain credential storage, bounded MCP job/output handling, release integrity/provenance verification
-  and a tested release publication workflow. No cloud account is required for previews; live acceptance is separate.
+  and a build-tested release workflow. Complete SBOM file digests and image-bound manifests preserve inventories
+  larger than GitHub's embedded-attestation limit. Tagged signing/publication requires a separate version release.
+  No cloud account is required for previews; live acceptance is separate.
 - Scenarios 16–19 plus concrete agent/MCP/UI routes on every earlier scenario, a checked command/catalog coverage
   manifest, and expanded Terraform provider-schema tests for production topology.
 

@@ -23,7 +23,7 @@ SHA256 = {
     ("linux", "amd64"): "caeedb81fb0491615f1ebd1761e4145d41ee86dd2cc7bf80669f9f5ad9d6133d",
     ("linux", "arm64"): "c46d5e4c28e12aa4c5becfaa343ef1c7f89045b6b895f2c21d471c62db09c706",
 }
-MAX_SBOM_BYTES = 16 * 1024 * 1024  # actions/attest's SBOM predicate limit
+MAX_SBOM_BYTES = 128 * 1024 * 1024  # Full inventories are attested by file digest, not embedded predicates.
 
 
 def install_syft(folder):
@@ -71,8 +71,9 @@ def main(argv=None):
         report = Path(folder) / "sbom.spdx.json"
         subprocess.run([str(binary), "scan", target, "--output", "spdx-json=" + str(report)],
                        env=dict(os.environ, SYFT_CHECK_FOR_APP_UPDATE="false"), check=True, timeout=600)
-        if not 0 < report.stat().st_size <= MAX_SBOM_BYTES:
-            raise ValueError("SBOM must be nonempty and no larger than the 16 MiB attestation limit. Review the scan scope; do not truncate its inventory.")
+        size = report.stat().st_size
+        if not 0 < size <= MAX_SBOM_BYTES:
+            raise ValueError(f"SBOM is {size} bytes; expected 1 through {MAX_SBOM_BYTES} bytes (128 MiB maximum). Review the scan scope; do not truncate its inventory.")
         contents = report.read_bytes()
         document = json.loads(contents)
         if not isinstance(document, dict) or not str(document.get("spdxVersion", "")).startswith("SPDX-2."):

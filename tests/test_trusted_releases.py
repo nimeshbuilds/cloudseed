@@ -129,11 +129,21 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertIn("docker load -i release-image/container.tar", publish)
         self.assertIn("--verify-tag", publish)
         self.assertIn("subject-checksums:", workflow)
-        self.assertIn("sbom-path:", workflow)
+        self.assertNotIn("sbom-path:", workflow)
         self.assertEqual(workflow.count("python3 scripts/generate-sbom.py"), 2)
         self.assertNotIn("anchore/sbom-action", workflow)
         for platform in ("linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64"):
             self.assertIn(platform, workflow)
+        images = publish.split("  publish:\n", 1)[0]
+        self.assertIn("uses: actions/checkout@", images)
+        self.assertIn('--image-reference "ghcr.io/nimeshbuilds/cloudseed@$IMAGE_DIGEST"', images)
+        self.assertIn("subject-checksums: release-image/container-${{ matrix.arch }}.SHA256SUMS", images)
+        self.assertIn("name: release-container-${{ matrix.arch }}", images)
+        uploads = images.split("name: release-container-${{ matrix.arch }}", 1)[1]
+        self.assertNotIn("container.tar", uploads)
+        self.assertNotIn("release-image/*", uploads)
+        for suffix in ("sbom.spdx.json", "manifest.json", "SHA256SUMS"):
+            self.assertIn("release-image/container-${{ matrix.arch }}." + suffix, uploads)
 
 
 class PinnedSBOMTests(unittest.TestCase):
@@ -194,9 +204,22 @@ class PinnedSBOMTests(unittest.TestCase):
         with mock.patch.object(self.sbom, "install_syft", return_value=self.folder / "verified-syft"), \
                 mock.patch.object(self.sbom.subprocess, "run", side_effect=scan), \
                 mock.patch.object(self.sbom, "MAX_SBOM_BYTES", 10):
-            with self.assertRaisesRegex(ValueError, "do not truncate"):
+            with self.assertRaisesRegex(ValueError, f"SBOM is {len(valid)} bytes") as rejected:
                 self.sbom.main(["--image", "cloudseed:release", "--output", str(output)])
+        self.assertIn("do not truncate", str(rejected.exception))
         self.assertEqual(output.read_bytes(), b"prior complete report")
+
+    def test_inventory_larger_than_embedded_predicate_limit_is_preserved_complete(self):
+        output = self.folder / "full-image.sbom.json"
+        payload = json.dumps({"spdxVersion": "SPDX-2.3", "packages": [{"name": "complete-inventory", "comment": "x" * (16 * 1024 * 1024)}]}).encode()
+        def scan(argv, **kwargs):
+            Path(argv[-1].split("=", 1)[1]).write_bytes(payload)
+        with mock.patch.object(self.sbom, "install_syft", return_value=self.folder / "verified-syft"), \
+                mock.patch.object(self.sbom.subprocess, "run", side_effect=scan):
+            self.sbom.main(["--image", "cloudseed:release", "--output", str(output)])
+        self.assertGreater(output.stat().st_size, 16 * 1024 * 1024)
+        self.assertEqual(self.sbom.MAX_SBOM_BYTES, 128 * 1024 * 1024)
+        self.assertEqual(output.read_bytes(), payload)
 
 
 if __name__ == "__main__":
