@@ -176,6 +176,26 @@ console.log(JSON.stringify({state:jobState(j), status:jobStatusText(j), other:jo
         self.assertEqual(result["other"], "bad")
         self.assertEqual(result["failed"], "bad")
 
+    def test_raw_assessment_jobs_skip_only_recognized_leading_global_options(self):
+        result = self.node(["interrupted", "jobState"], """
+const base = {id:'a', running:false, rc:3, seconds:1};
+const assessments = [
+ ['-y','scan','architecture','aws'], ['--yes','scan','architecture','gcp'],
+ ['-y','--runtime','local','--engine','docker','scan','architecture','azure'],
+ ['--runtime=local','--engine=podman','--yes','scan','architecture','vmware']
+];
+const others = [
+ ['-y','scan','cloud','aws'], ['--runtime','architecture','scan','cloud'],
+ ['--engine','scan','architecture'], ['--runtime=architecture','scan','cloud'],
+ ['ssh','aws','--','scan','architecture'], ['-y','--','scan','architecture'],
+ ['--unknown','scan','architecture'], ['scan','reports','architecture'],
+ ['--runtime'], ['--engine'], []
+];
+console.log(JSON.stringify({assessments:assessments.map(argv=>jobState({...base,argv})),others:others.map(argv=>jobState({...base,argv}))}));
+""", "const INTERRUPTED = new Set();")
+        self.assertEqual(result["assessments"], ["incomplete"] * 4)
+        self.assertEqual(result["others"], ["bad"] * 11)
+
     def test_report_renders_pillars_status_evidence_and_remediation(self):
         prelude = """
 const el=(tag,attrs={},...kids)=>({tag,attrs,kids:kids.flat(Infinity).filter(x=>x!==null&&x!==undefined),append(...xs){this.kids.push(...xs);}});

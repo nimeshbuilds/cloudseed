@@ -259,8 +259,9 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
         "A private API is declared; actual reachability and identity policy were not tested." if status == "PASS" else
         "A public API is declared; production screening requires private access or a separately reviewed exception." if public else
         "The API access boundary requires verification.",
+        "Review the local API listener, VMware network, host firewall and Kubernetes identities." if target == "vmware" else
         "Prefer kubernetes_public_endpoint=false; review required access paths, authorized source ranges and identities.",
-        declared("enable_kubernetes", "kubernetes_public_endpoint"), "HIGH")
+        declared("enable_kubernetes") if target == "vmware" else declared("enable_kubernetes", "kubernetes_public_endpoint"), "HIGH")
 
     if target == "aws":
         az = _integer(_value(cfg, "az_count", 2))

@@ -278,8 +278,24 @@
   const jobStatusText = (j) => j.lost ? 'lost (console server restarted)' : j.running === undefined ? 'loading…' : j.running ? 'running…' : j.rc === 0 ? `finished in ${j.seconds}s`
     : interrupted(j) ? `interrupted after ${j.seconds}s (exit ${j.rc})` : jobState(j) === 'incomplete' ? `incomplete assessment in ${j.seconds}s (exit 3); see Reports` : `exit ${j.rc} after ${j.seconds}s`;
   // one word for a job's state (tab tooltips, the narrow-screen status glyph)
-  const jobState = (j) => (!j ? '' : j.lost ? 'lost' : j.running ? 'running' : j.rc === 0 ? 'ok' : j.rc === undefined || j.rc === null ? '' : interrupted(j) ? 'interrupted'
-    : j.rc === 3 && (j.argv || [])[0] === 'scan' && j.argv[1] === 'architecture' ? 'incomplete' : 'bad');
+  const jobState = (j) => {
+    if (!j) return '';
+    if (j.lost) return 'lost';
+    if (j.running) return 'running';
+    if (j.rc === 0) return 'ok';
+    if (j.rc === undefined || j.rc === null) return '';
+    if (interrupted(j)) return 'interrupted';
+    // Raw console calls prepend -y; only skip recognised leading globals, consuming their values too.
+    // A command or option value that happens to say "scan architecture" cannot identify an assessment.
+    const argv = Array.isArray(j.argv) ? j.argv : [];
+    let i = 0;
+    while (i < argv.length) {
+      if (argv[i] === '-y' || argv[i] === '--yes' || /^--(?:runtime|engine)=/.test(argv[i])) i++;
+      else if (argv[i] === '--runtime' || argv[i] === '--engine') i += 2;
+      else break;
+    }
+    return j.rc === 3 && argv[i] === 'scan' && argv[i + 1] === 'architecture' ? 'incomplete' : 'bad';
+  };
   function renderTabs() {
     const tabs = $('#job-tabs'); tabs.innerHTML = '';
     // repeated runs of one action are told apart by their start time; the tooltip carries the full command

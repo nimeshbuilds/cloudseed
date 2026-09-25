@@ -84,6 +84,13 @@ class ArchitectureTests(unittest.TestCase):
         self.assertEqual(list(self.env.dir.rglob("*")), before_files)
         self.assertEqual(report["verdict"], "INCOMPLETE")
 
+    def test_vmware_api_guidance_does_not_suggest_unsupported_cloud_flags(self):
+        self.cfg["vars"]["enable_kubernetes"] = True
+        finding = self.finding("security.kubernetes_api", "vmware")
+        self.assertEqual(finding["status"], "UNKNOWN")
+        self.assertNotIn("kubernetes_public_endpoint", json.dumps(finding))
+        self.assertIn("host firewall", finding["remediation"])
+
     def test_production_defaults_report_known_topology_gaps(self):
         self.cfg["vars"] = {"enable_kubernetes": True}
         for target, id_ in (("aws", "reliability.aws_egress"), ("gcp", "reliability.gke_location"),
