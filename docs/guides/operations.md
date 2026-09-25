@@ -34,6 +34,26 @@ JSON fields, not a shell string. For example, `cloudseed_ops_profile` takes
 `{"cloud":"aws","env":"prod","profile":"production","confirm":true}` to save a reviewed profile. Omit
 `confirm` for the preview. The tool schema and CLI use the same operation definition.
 
+Each MCP call has a one-hour default server limit. For a longer maintenance window, configure a bounded limit
+of 60–86400 seconds when setting up the server and reconnecting clients. For example, eight hours:
+
+```bash
+CLOUDSEED_MCP_TOOL_TIMEOUT=28800 cs setup mcp
+CLOUDSEED_MCP_TOOL_TIMEOUT=28800 cs mcp connect codex gemini
+```
+
+Setup persists the selected limit in the service and stdio launch environments and writes matching deadlines for
+Codex and Gemini. Supply the same value for later setup, reconnect or restart commands; omitting it selects the
+one-hour default. Restart/reload clients after changing their configuration. Other clients require their own matching
+deadline; for Claude Code, start it with `MCP_TOOL_TIMEOUT=28800000` (milliseconds) for the eight-hour example.
+Operation `timeout_s` values bound individual stages and do not extend the total MCP deadline. If a call times out
+or is cancelled, inspect cluster/provider status and operation artifacts before retrying: a remote upgrade, backup
+or restore can continue after the local process is interrupted, and cleanup may need manual review.
+
+MCP also bounds inputs and resources: HTTP/stdio requests are limited to 16 MiB, batches to 32 entries and 16 MiB
+of replies, individual regular resource files to 256 KiB, and environment listings to 200 entries/2 MiB. Oversized
+or unsupported resource reads fail clearly; split broad requests into smaller reads when a limit is reached.
+
 In the console, select the environment, open **All actions → Operations & readiness**, choose the action and fill
 its named fields. Object inputs such as spec or Terraform plan accept JSON. Environment and cloud are separate fields. Actions that change resources or save configuration
 require the confirmation control. Follow the job in **Activity**, then inspect its output and **Reports → operations**.

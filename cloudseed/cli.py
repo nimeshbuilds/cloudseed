@@ -4430,20 +4430,51 @@ def _managed_pool(cloud, env, cfg: dict, outputs: dict) -> dict:
                     selector=f"eks.amazonaws.com/nodegroup={pool['name']}")
     elif cloud.key == "gcp":
         pool["project"] = v.get("project_id", "")
-        pool["base"] = ["--location", outputs.get("kubernetes_location") or v.get("zone", ""), "--project", pool["project"]]
+        extra = cfg.get("extra_vars") or {}
+        location = outputs.get("kubernetes_location") or (cfg.get("region", "") if extra.get("kubernetes_regional") else v.get("zone", ""))
+        pool["base"] = ["--location", location, "--project", pool["project"]]
         pools = _cloud_cli([binary, "container", "node-pools", "list", "--cluster", cluster, *pool["base"], "--format", "json"],
                            "Listing the GKE node pools", parse=True, show=False, env=pool["env"]) or []
         pool["name"] = _pick_pool([p.get("name", "") for p in pools], cluster, outputs.get("kubernetes_node_pool"))
         spec = next(p for p in pools if p.get("name") == pool["name"])
         auto = spec.get("autoscaling") or {}
+        # GKE's resize count and min/max bounds are PER ZONE. Adding the sizes of all MIGs here would make an
+        # add-one operation on a three-zone, three-node pool resize to four nodes *in each zone* (twelve total).
+        # Total autoscaler bounds are a different API mode and cannot be translated to our per-zone configuration.
+        if auto.get("totalMinNodeCount") or auto.get("totalMaxNodeCount"):
+            raise ui.Abort("This GKE pool uses total autoscaler bounds; cs node requires per-zone min/max bounds. "
+                           "Review the pool's autoscaling mode in GKE before changing it; nothing was resized.")
         pool["migs"] = list(spec.get("instanceGroupUrls") or [])
-        size = 0
+        zone_sizes = {}
         for url in pool["migs"]:
+            if not isinstance(url, str) or not re.search(r"/zones/[^/]+/instanceGroupManagers/[^/]+/?$", url):
+                raise ui.Abort("Cannot verify the GKE pool's instance group zones; nothing was resized.")
             zone, mig = _mig_of(url)
+            if zone in zone_sizes:
+                raise ui.Abort("The GKE pool has multiple instance groups in one zone (possibly an upgrade in progress); "
+                               "wait for it to settle before resizing.")
             d = _cloud_cli([binary, "compute", "instance-groups", "managed", "describe", mig, "--zone", zone, "--project", pool["project"], "--format", "json"],
                            "Reading the node pool's instance group", parse=True, show=False, env=pool["env"]) or {}
-            size += int(d.get("targetSize") or 0)
+            target = d.get("targetSize")
+            if type(target) is not int or target < 0:
+                raise ui.Abort(f"Cannot verify the GKE instance group size in {zone}; nothing was resized.")
+            zone_sizes[zone] = target
+        if not zone_sizes:
+            raise ui.Abort("No live GKE instance groups were reported; cannot verify the number of zones. Nothing was resized.")
+        # Node-pool locations are authoritative when present. Saved explicit locations are also checked so a partial
+        # provider response or out-of-band topology change cannot silently change the multiplier on a requested count.
+        for expected in (spec.get("locations"), extra.get("kubernetes_node_locations")):
+            if expected is not None and expected != []:
+                if not isinstance(expected, list) or any(not isinstance(z, str) for z in expected) or \
+                        len(set(expected)) != len(expected) or set(expected) != set(zone_sizes):
+                    raise ui.Abort("The live GKE instance group zones do not match the node-pool locations. "
+                                   "Refresh and review the topology before resizing; nothing was changed.")
+        if len(set(zone_sizes.values())) != 1:
+            raise ui.Abort("The GKE autoscaler currently has different node counts across zones. A single per-zone "
+                           "count cannot represent that pool safely; wait for it to settle or review it in GKE before resizing.")
+        size = next(iter(zone_sizes.values()))
         pool.update(size=size, min=int(auto.get("minNodeCount") or 0), max=int(auto.get("maxNodeCount") or size),
+                    zone_count=len(zone_sizes), zones=sorted(zone_sizes), total_size=sum(zone_sizes.values()),
                     selector=f"cloud.google.com/gke-nodepool={pool['name']}")
     else:
         pool["base"] = ["--resource-group", outputs.get("resource_group_name", ""), "--cluster-name", cluster] + \
@@ -4464,7 +4495,7 @@ def _mig_of(url: str) -> tuple[str, str]:
 
 
 def _set_pool(pool: dict, size: int, lo: int, hi: int) -> None:
-    """Scale the managed pool to `size` nodes with autoscaler bounds lo..hi (bounds first, so the size is allowed)."""
+    """Scale the managed pool with bounds lo..hi (GKE counts are per zone; other providers use pool totals)."""
     b, c, name, base, penv = pool["tool"], pool["cluster"], pool["name"], pool["base"], pool.get("env")
     if pool["cloud"] == "aws":
         if (size, lo, hi) != (pool["size"], pool["min"], pool["max"]):
@@ -4488,6 +4519,8 @@ def _set_pool(pool: dict, size: int, lo: int, hi: int) -> None:
             _cloud_cli([b, "aks", "nodepool", "update", *base, "--name", name, "--update-cluster-autoscaler",
                         "--min-count", str(lo), "--max-count", str(hi), "-o", "none"], "Updating the AKS autoscaler limits", env=penv)
     pool.update(size=size, min=lo, max=hi)
+    if pool["cloud"] == "gcp":
+        pool["total_size"] = size * pool["zone_count"]
 
 
 def _remove_pool_instance(pool: dict, node: dict, name: str) -> None:
@@ -4521,7 +4554,8 @@ def _remove_pool_instance(pool: dict, node: dict, name: str) -> None:
 def _sync_pool_cfg(cfg: dict, pool: dict) -> None:
     """Keep config.json in step with the live pool so a later apply converges to the same count/min/max. The saved count
     is never 0 (an autoscaler may have emptied a pool whose minimum is 0): every stack requires kubernetes_node_count >= 1
-    (EKS/AKS add-ons need a node), so a later apply would stop at variable validation."""
+    (EKS/AKS add-ons need a node), so a later apply would stop at variable validation. GKE size/min/max remain per-zone
+    values; total_size is for display/readiness only and must never be persisted as kubernetes_node_count."""
     cfg.setdefault("vars", {})["kubernetes_node_count"] = pool["size"]
     if not pool["size"]:   # emptied by the autoscaler: the pool's floor, at least one node
         cfg["vars"]["kubernetes_node_count"] = max(1, int(pool["min"] or 0))
@@ -4544,6 +4578,10 @@ def _node_managed(args, cloud, env, cfg: dict, outputs: dict, kubectl: str, kenv
     pool = _managed_pool(cloud, env, cfg, outputs)
     before = dict(pool)
     if sub == "remove":
+        if cloud.key == "gcp" and pool["zone_count"] > 1:
+            raise ui.Abort("Removing one named node from a multi-zone GKE pool would leave unequal per-zone counts. "
+                           f"Use cs node scale gcp --env {env.name} --count N to set the count in every zone instead; "
+                           "nothing was drained or deleted.")
         name = args.name
         node = _node_json(kubectl, kenv, name)
         if pool["size"] <= 1:
@@ -4585,23 +4623,29 @@ def _node_managed(args, cloud, env, cfg: dict, outputs: dict, kubectl: str, kenv
                 ui.warn(f"AKS scales an autoscaled pool itself: it keeps between {lo} and {hi} node(s), so the pool stays at "
                         f"{target} for now; pass --min {size} to force {size}.")
             size = target
+        units = "node(s) per zone" if cloud.key == "gcp" else "node(s)"
+        total_note = f" across {pool['zone_count']} zone(s), {size * pool['zone_count']} total" if cloud.key == "gcp" else ""
         if (size, lo, hi) == (before["size"], before["min"], before["max"]):
-            ui.ok(f"Node pool {pool['name']} of {env.id} already has {size} node(s) (autoscaler {lo}..{hi}); nothing to change.")
+            ui.ok(f"Node pool {pool['name']} of {env.id} already has {size} {units}{total_note} (autoscaler {lo}..{hi}); nothing to change.")
             return 0
-        ui.panel(f"Node pool {pool['name']} · {env.id}", [("nodes", f"{before['size']} -> {size}"),
-                                                          ("autoscaler", f"min {before['min']} -> {lo}, max {before['max']} -> {hi}")])
-        _approve(f"Scale node pool {pool['name']} of {env.id} to {size} node(s)?", args.auto_approve)
+        rows = [(units, f"{before['size']} -> {size}"),
+                ("autoscaler per zone" if cloud.key == "gcp" else "autoscaler", f"min {before['min']} -> {lo}, max {before['max']} -> {hi}")]
+        if cloud.key == "gcp":
+            rows.extend([("zones", ", ".join(pool["zones"])), ("total nodes", f"{before['total_size']} -> {size * pool['zone_count']}")])
+        ui.panel(f"Node pool {pool['name']} · {env.id}", rows)
+        _approve(f"Scale node pool {pool['name']} of {env.id} to {size} {units}{total_note}?", args.auto_approve)
         _set_pool(pool, size, lo, hi)
-        summary = f"node {sub} on {env.id} (pool {pool['name']} {before['size']} -> {size})"
-        done = f"Node pool {pool['name']}: {size} node(s) (autoscaler {lo}..{hi})."
+        summary = f"node {sub} on {env.id} (pool {pool['name']} {before['size']} -> {size} {units}{total_note})"
+        done = f"Node pool {pool['name']}: {size} {units}{total_note} (autoscaler {lo}..{hi})."
     _sync_pool_cfg(cfg, pool)
     env.save(cfg)
     audit.note(env, f"node-{sub}", {"pool": pool["name"], "from": before["size"], "to": pool["size"], "min": pool["min"], "max": pool["max"]})
     undo.record(env.id, summary, "argv", {"argv": _scale_undo(cloud, env, before)})
     if sub != "remove" and pool["size"] > before["size"]:
-        ready = _wait_ready_nodes(kubectl, kenv, pool["size"], pool["selector"])
-        if ready < pool["size"]:
-            ui.warn(f"{ready} of {pool['size']} node(s) Ready so far; the pool is still growing (cs node list).")
+        want = pool.get("total_size", pool["size"])
+        ready = _wait_ready_nodes(kubectl, kenv, want, pool["selector"])
+        if ready < want:
+            ui.warn(f"{ready} of {want} node(s) Ready so far; the pool is still growing (cs node list).")
     ui.ok(done + "  cs node list")
     return 0
 
@@ -8709,6 +8753,7 @@ def _mcp_put_back(backups: dict, created_token: bool) -> None:
 
 def cmd_mcp_setup(args, settings) -> int:
     """cloudseed setup mcp: deploy the local MCP server, connect clients, print the guide."""
+    mcp.validate_timeout()
     if ui.interactive():
         ui.banner(__version__, "MCP server · every cloudseed feature as a tool for Claude, Codex, Cursor, ...")
     # validate everything that can be wrong BEFORE a running server is stopped or any state is written
@@ -8903,6 +8948,7 @@ def cmd_mcp_setup(args, settings) -> int:
 
 
 def cmd_mcp(args, settings) -> int:
+    mcp.validate_timeout()
     sub = args.mcp_cmd or "status"
     if sub == "setup":
         return cmd_mcp_setup(args, settings)

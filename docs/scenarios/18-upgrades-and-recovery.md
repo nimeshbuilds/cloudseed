@@ -80,7 +80,9 @@ cs ops health aws --env prod --live --json
 
 Apply checks that the plan is fresh and belongs to the selected environment, then repeats preflight. A changed
 configuration, state or cluster identity invalidates the plan. Local upgrades drain safely and verify nodes before
-uncordoning; failed nodes stay available for inspection. Inspect provider-specific post-checks and the recorded
+uncordoning; a failed drained node stays cordoned for inspection. Cloudseed saves the reviewed target version before
+starting the upgrade, so a partial failure cannot leave Terraform configured to request the older version.
+Inspect provider-specific post-checks and the recorded
 recovery instructions if the operation fails. A backup is not an automatic Kubernetes control-plane rollback.
 
 ## Step 4: Rehearse an application restore
@@ -113,13 +115,21 @@ show isolation, data and cleanup coverage before executing either change.”
 returned `plan` path and `confirm:true`. `cloudseed_ops_recovery_plan` and `cloudseed_ops_recovery_test` accept the
 same namespace/recovery parameters as above; the test also needs `confirm:true`.
 
+The MCP server's default total deadline is one hour; your client can stop sooner. For an eight-hour maintenance
+window, run `CLOUDSEED_MCP_TOOL_TIMEOUT=28800 cs setup mcp`, then reconnect clients with that same environment
+setting. The allowed range is 60–86400 seconds. Setup writes matching Codex/Gemini client deadlines; other clients
+need their own setting. See [MCP timeout configuration](../guides/operations.md#choose-an-interface) for exact commands.
+`timeout_s` remains a per-stage bound. After interruption, inspect provider/cluster status and any temporary recovery
+resources before retrying; submitted remote work may still be running and cleanup can need manual review. A partially
+completed upgrade requires inspection and completion of the remaining steps, not an automatic retry of the stale plan.
+
 **UI:** select **aws-prod → All actions → Operations & readiness**. Run drift; enter the upgrade target and backup in their named fields and check **compatibility_reviewed** only after review. Copy its returned plan path into upgrade-apply and confirm only in the
 maintenance window. For recovery-plan/test enter namespace `shop` and set the named recovery fields to the values above; compare the reports
 and inspect cleanup before leaving the job.
 
 ## Verify it worked
 
-A successful upgrade reports the intended control-plane version and Ready nodes, then pins the saved configuration.
+A successful upgrade reports the intended control-plane version, Ready nodes and healthy workload controllers.
 A recovery report must show completed backup/restore, measured objectives, the requested data/volume checks and
 cleanup. Missing data coverage or asynchronous cleanup is a limitation to resolve, not evidence of a complete DR plan.
 

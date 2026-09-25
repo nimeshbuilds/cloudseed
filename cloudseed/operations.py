@@ -174,6 +174,8 @@ def execute(name, cloud, env, cfg, params):
         result.setdefault("kind", name)
         result.setdefault("run", scan.run_stamp() + "-" + uuid4().hex[:8])
         report_path = env.dir / "operations" / (name + "-" + result["run"] + ".json")
+        if report_path.parent.is_symlink():
+            raise ValueError("The operations report directory must not be a symlink")
         result["report"] = str(report_path)
         paths.atomic_write(report_path, json.dumps(result, indent=2, allow_nan=False) + "\n")
     return result
@@ -183,7 +185,7 @@ def exit_code(result):
     verdict = str(result.get("verdict", result.get("status", "INCOMPLETE"))).upper()
     if verdict in ("FAIL", "FAILED", "BLOCKED", "ERROR"):
         return 1
-    return 3 if verdict in ("INCOMPLETE", "UNKNOWN", "UNSUPPORTED") else 0
+    return 0 if verdict in ("PASS", "PLAN") else 3
 
 
 def argv(name, args):

@@ -2055,9 +2055,9 @@
       if (!items.length) { c.append(el('p', { class: 'muted small' }, 'None yet. Run one from ', el('a', { href: '#', onclick: (ev) => { ev.preventDefault(); go('resilience'); } }, 'Resilience'), '.')); return c; }
       const t = el('table', { class: 'reports' }, el('tr', {}, el('th', {}, 'run'), el('th', {}, 'result'), el('th', {}, 'summary'), el('th', {}, el('span', { class: 'sr-only' }, 'open'))));
       for (const it of items) {
-        const kind = runKind(it.name), sm = reportSummary(it);
-        t.append(el('tr', {}, el('td', { title: it.name }, el('span', { class: 'rep-when' }, runLabel(it.name)), kind && !REPORT_KIND[kind] ? el('span', { class: 'chip', title: kind }, SCAN_SHORT[kind] || scanTitle(kind)) : null), el('td', {}, row(it)),
-          el('td', { class: 'small muted' }, Object.entries(sm).slice(0, 4).map(([k, val]) => `${colLabel(k)}: ${String(val).slice(0, 30)}`).join(' · ')), el('td', {}, el('button', { class: 'btn small ghost', 'aria-label': `Open ${title} report of ${runLabel(it.name)}`, onclick: () => showReport(it) }, 'Open'))));
+        const kind = it.operation || runKind(it.name), sm = reportSummary(it), label = it.generated_at ? fmtTime(it.generated_at) : runLabel(it.name);
+        t.append(el('tr', {}, el('td', { title: it.name }, el('span', { class: 'rep-when' }, label), kind && !REPORT_KIND[kind] ? el('span', { class: 'chip', title: kind }, it.operation ? colLabel(kind) : SCAN_SHORT[kind] || scanTitle(kind)) : null), el('td', {}, row(it)),
+          el('td', { class: 'small muted' }, Object.entries(sm).slice(0, 4).map(([k, val]) => `${colLabel(k)}: ${String(val).slice(0, 30)}`).join(' · ')), el('td', {}, el('button', { class: 'btn small ghost', 'aria-label': `Open ${title} report of ${label}`, onclick: () => showReport(it) }, 'Open'))));
       }
       c.append(el('div', { class: 'table-wrap' }, t)); return c;
     };
@@ -2082,6 +2082,7 @@
   const scanTitle = (kind) => SCAN_TITLES[kind] || (/^host-(.+)$/.test(kind) ? `Host ${kind.slice(5).toUpperCase()} (OpenSCAP)` : kind ? kind + ' scan' : 'Report');
   // one wording for a report's verdict, in the list and in its dialog: lower-case words, counts for scans
   const reportChip = (it) => {
+    if (it.operation) return el('span', { class: 'chip ' + verdictClass(it.verdict || 'INCOMPLETE') }, String(it.verdict || 'INCOMPLETE').toLowerCase());
     if (!REPORT_KIND[runKind(it.name)]) { const c = scanChip(it); return el('span', { class: 'chip ' + c.cls, title: c.title }, c.label); }
     const v = it.verdict || '?';
     return el('span', { class: 'chip ' + verdictClass(v), title: v === 'INCONCLUSIVE' ? 'no experiment ran to a verdict (empty or all skipped)' : undefined }, String(v).toLowerCase());
@@ -2106,7 +2107,7 @@
   const reportCell = (k, v) => v === undefined || v === null || v === '' ? '' : (k === 'verdict' || k === 'status') ? cellChip(v) : typeof v === 'boolean' ? el('span', { class: 'chip ' + (v ? 'leaf' : 'rose') }, v ? '✔ yes' : '✖ no')
     : /availability$/.test(k) && typeof v === 'number' && v >= 0 && v <= 1 ? Math.round(100 * v) + '%' : typeof v === 'object' ? JSON.stringify(v) : String(v);
   function showReport(it) {
-    const body = el('div', {}), kind = runKind(it.name), sm = reportSummary(it);
+    const body = el('div', {}), kind = it.operation || runKind(it.name), sm = reportSummary(it);
     body.append(el('div', { class: 'row', style: 'margin-bottom:10px' }, it.verdict || !REPORT_KIND[kind] ? reportChip(it) : null, el('span', { class: 'muted small mono' }, it.name)));
     if (kind === 'architecture') {
       body.append(el('p', { class: 'muted small' }, `Profile: ${it.profile || 'unspecified'}. Assesses saved configuration and evidence; it does not verify live infrastructure. Missing evidence stays unknown.${it.max_age_days ? ` Evidence freshness: ${it.max_age_days} days.` : ''}`));
@@ -2153,7 +2154,7 @@
     if (it.checks && it.checks.length) { body.append(el('h4', {}, 'Checks')); const t = el('table', {}, el('tr', {}, el('th', {}, 'status'), el('th', {}, 'area'), el('th', {}, 'check'), el('th', {}, 'detail'))); for (const c of it.checks) t.append(el('tr', {}, el('td', {}, cellChip(c.status || 'INFO')), el('td', {}, c.area || it.operation || kind), el('td', { class: 'small' }, c.check || c.id), el('td', { class: 'small muted' }, c.detail))); body.append(el('div', { class: 'table-wrap' }, t)); }
     body.append(el('p', { class: 'muted small mono', style: 'margin-top:12px' }, it.path));
     const e = currentEnv();
-    modal(`${REPORT_KIND[kind] || scanTitle(kind)} · ${runLabel(it.name)}${e ? ' · ' + e.id : ''}`, body, { explain: XQ_REPORT[REPORT_KIND[kind] ? kind : 'scan'] });
+    modal(`${it.operation ? colLabel(kind) : REPORT_KIND[kind] || scanTitle(kind)} · ${it.generated_at ? fmtTime(it.generated_at) : runLabel(it.name)}${e ? ' · ' + e.id : ''}`, body, { explain: it.operation ? 'command ops' : XQ_REPORT[REPORT_KIND[kind] ? kind : 'scan'] });
   }
 
   // Agents & MCP. Switches and the MCP enable button read the state when clicked (never a value captured when the page

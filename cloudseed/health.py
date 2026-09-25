@@ -295,11 +295,8 @@ def _health_reads(query, add, now, age):
 
 
 # No shell, service account token, host mount, privilege, or elevated capability is required by this script.
-PROBE_CODE = '''import ipaddress,json,socket,ssl,sys,urllib.request,urllib.error
+PROBE_CODE = '''import http.client,ipaddress,json,socket,ssl,sys
 from urllib.parse import urlsplit
-class NoRedirect(urllib.request.HTTPRedirectHandler):
- def redirect_request(self,*args,**kwargs): return None
-opener=urllib.request.build_opener(NoRedirect)
 results=[]
 try:
  socket.getaddrinfo("kubernetes.default.svc",443)
@@ -308,14 +305,26 @@ except Exception:
  results.append({"check":"dns","ok":False})
 for endpoint in json.loads(sys.argv[1]):
  try:
-  host=urlsplit(endpoint).hostname
-  if not all(ipaddress.ip_address(x[4][0]).is_global for x in socket.getaddrinfo(host,443)): raise ValueError("non-public endpoint")
-  with socket.create_connection((host,443),timeout=8) as raw:
+  parts=urlsplit(endpoint)
+  host=parts.hostname
+  addresses=socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)
+  if not addresses or not all(ipaddress.ip_address(x[4][0]).is_global for x in addresses): raise ValueError("non-public endpoint")
+  raw=None
+  for family,kind,protocol,_,address in addresses:
+   candidate=socket.socket(family,kind,protocol)
+   candidate.settimeout(8)
+   try:
+    candidate.connect(address)
+    raw=candidate
+    break
+   except OSError: candidate.close()
+  if raw is None: raise OSError("no reachable public address")
+  with raw:
    with ssl.create_default_context().wrap_socket(raw,server_hostname=host) as tls:
-    tls.getpeercert()
-  try:
-   with opener.open(endpoint,timeout=8) as response: code=response.status
-  except urllib.error.HTTPError as error: code=error.code
+    connection=http.client.HTTPConnection(host,443,timeout=8)
+    connection.sock=tls
+    connection.request("GET",parts.path or "/",headers={"Host":host,"Connection":"close"})
+    code=connection.getresponse().status
   results.append({"check":"https","endpoint":endpoint,"ok":True,"http_status":code})
  except Exception:
   results.append({"check":"https","endpoint":endpoint,"ok":False})

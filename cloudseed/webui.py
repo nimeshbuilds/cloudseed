@@ -1912,11 +1912,14 @@ def reports(env_id: str) -> dict:
             row["coverage_limits"] = [item for item in _items(data, "coverage_limits", 20) if isinstance(item, str)]
             if kind == "operations":
                 row["operation"] = str(data.get("operation") or data.get("action") or data.get("kind") or "operation")
+                row["generated_at"] = data.get("generated_at") if isinstance(data.get("generated_at"), str) else None
                 row["changes"] = _items(data, "changes", 200)
                 row["notes"] = [item for item in _items(data, "notes", 20) if isinstance(item, str)]
                 for field in ("spec", "cost"):
                     if isinstance(data.get(field), dict):
                         row[field] = data[field]
+                if type(data.get("saved")) is bool:
+                    row["summary"] = dict(sm, saved=data["saved"], changes=len(row["changes"]))
             if kind == "scans" and row["kind"] == "architecture":
                 for k in ("profile", "scope", "framework", "max_age_days"):
                     if isinstance(data.get(k), (str, int, dict, list)):

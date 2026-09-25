@@ -1,5 +1,6 @@
 """Diagnostics distinguish checked evidence from declarations and own every active probe resource."""
 import copy
+import io
 import json
 import os
 import subprocess
@@ -212,11 +213,35 @@ class HealthTests(unittest.TestCase):
             report = self.execute("network", live=True, active=True)
         self.assertEqual(self.finding(report, "network.cleanup")["status"], "UNKNOWN")
 
-    def test_probe_code_does_not_follow_redirects_or_include_credentials(self):
-        compile(health.PROBE_CODE, "probe", "exec")
-        self.assertIn("class NoRedirect", health.PROBE_CODE)
-        self.assertIn("opener.open(endpoint", health.PROBE_CODE)
-        self.assertIn("ipaddress.ip_address(x[4][0]).is_global", health.PROBE_CODE)
+    def test_probe_connects_exact_validated_ip_without_proxy_redirect_or_dns_rebinding(self):
+        import socket
+        raw, tls = mock.MagicMock(), mock.MagicMock()
+        raw.__enter__.return_value, tls.__enter__.return_value = raw, tls
+        tls.makefile.return_value = io.BytesIO(b"HTTP/1.1 302 Found\r\nLocation: https://169.254.169.254/\r\nContent-Length: 0\r\n\r\n")
+        context = mock.Mock()
+        context.wrap_socket.return_value = tls
+        answers = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.215.14", 443))]
+        output = io.StringIO()
+        with mock.patch("socket.getaddrinfo", side_effect=[[], answers]) as resolve, \
+                mock.patch("socket.socket", return_value=raw), mock.patch("ssl.create_default_context", return_value=context), \
+                mock.patch.object(sys, "argv", ["probe", '["https://example.com/v2/"]']), mock.patch.object(sys, "stdout", output), \
+                mock.patch.dict(os.environ, {"HTTPS_PROXY": "http://169.254.169.254:8080"}):
+            exec(compile(health.PROBE_CODE, "probe", "exec"), {})
+        self.assertEqual(resolve.call_args_list, [mock.call("kubernetes.default.svc", 443), mock.call("example.com", 443, type=socket.SOCK_STREAM)])
+        raw.connect.assert_called_once_with(("93.184.215.14", 443))
+        context.wrap_socket.assert_called_once_with(raw, server_hostname="example.com")
+        self.assertEqual(json.loads(output.getvalue())["results"][-1], {"check": "https", "endpoint": "https://example.com/v2/", "ok": True, "http_status": 302})
+        self.assertIn(b"GET /v2/ HTTP/1.1", tls.sendall.call_args.args[0])
+
+    def test_probe_refuses_dns_answer_with_private_address_before_connecting(self):
+        import socket
+        output = io.StringIO()
+        answers = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", 443))]
+        with mock.patch("socket.getaddrinfo", side_effect=[[], answers]), mock.patch("socket.socket") as create, \
+                mock.patch.object(sys, "argv", ["probe", '["https://example.com/"]']), mock.patch.object(sys, "stdout", output):
+            exec(compile(health.PROBE_CODE, "probe", "exec"), {})
+        create.assert_not_called()
+        self.assertFalse(json.loads(output.getvalue())["results"][-1]["ok"])
 
     @unittest.skipIf(os.name != "posix", "POSIX graceful process-group interrupt")
     def test_mutating_child_gets_graceful_interrupt_before_forced_cleanup(self):

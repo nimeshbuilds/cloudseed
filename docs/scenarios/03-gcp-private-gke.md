@@ -168,7 +168,15 @@ cs node scale gcp --env prod --count 3 --max 5
 ```
 
 `node scale` resizes the managed node pool through the GKE API and sets the autoscaler limits; `config.json` follows
-the live pool, so a later `setup` keeps it.
+the live pool, so a later `setup` keeps it. On GKE, `--count`, `--min`, `--max` and `node add --count` are **per zone**.
+The zonal cluster in this walkthrough gets three nodes. A production profile spanning three zones would get nine;
+the preview lists live zones and total nodes before approval, and readiness waits for the total. This matches
+[GKE's resize API](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/resizing-a-cluster).
+
+Cloudseed stops before changing anything if zone discovery is incomplete, zone sizes differ, or the pool uses total
+autoscaler bounds. Wait for an in-progress autoscale/upgrade to settle, or review the pool's configuration in GKE.
+For multi-zone GKE, use `node scale` to set a consistent count across zones; named `node remove` is refused before
+draining because removing just one machine cannot be represented by the saved per-zone count.
 
 ## Use an agent, MCP or the UI
 

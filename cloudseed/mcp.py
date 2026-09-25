@@ -83,15 +83,35 @@ LAUNCHD_LABEL = "io.cloudseed.mcp"
 SYSTEMD_UNIT = "cloudseed-mcp"
 MANAGED_ENV = "CLOUDSEED_MCP_MANAGED"   # set by the launchd/systemd/background service: `mcp serve --http` is not a foreground run
 
-TOOL_TIMEOUT = 3600            # seconds one tool call may run
+TOOL_TIMEOUT_ENV = "CLOUDSEED_MCP_TOOL_TIMEOUT"
+
+
+def validate_timeout() -> int:
+    """Read a bounded deployment setting, without reflecting arbitrary env text."""
+    raw = os.environ.get(TOOL_TIMEOUT_ENV, "3600")
+    if not re.fullmatch(r"[0-9]{2,5}", raw) or not 60 <= int(raw) <= 86400:
+        raise ui.Abort(f"{TOOL_TIMEOUT_ENV} must be an integer from 60 to 86400 seconds (default 3600).", code=2)
+    return int(raw)
+
+
+try:
+    TOOL_TIMEOUT = validate_timeout()  # seconds one tool call may run
+except ui.Abort:
+    # cli imports mcp even for unrelated commands. MCP entry points validate
+    # before side effects; zero also fails closed if one is accidentally missed.
+    TOOL_TIMEOUT = 0
 PROGRESS_EVERY = 10.0          # seconds between progress notifications (when the client sent a progressToken)
 INTERRUPT_GRACE = 120          # seconds Terraform gets to stop gracefully after SIGINT before SIGTERM / SIGKILL
-CLIENT_TIMEOUT_SEC = 3600      # per-call timeout written into client configs that support one (Codex, Gemini)
+CLIENT_TIMEOUT_SEC = TOOL_TIMEOUT  # same deadline in supported client configs (Codex, Gemini)
 MAX_TOOL_WORKERS = 8
 MAX_HTTP_WORKERS = 32
 _TOOL_SLOTS = threading.BoundedSemaphore(MAX_TOOL_WORKERS)
 
 MAX_BODY = 16 * 1024 * 1024    # largest HTTP request body accepted
+MAX_BATCH = 32
+MAX_RESOURCE = 2 * 1024 * 1024
+MAX_RESOURCE_FILE = 256 * 1024
+MAX_RESOURCE_ENVS = 200
 MAX_SESSIONS = 256             # HTTP sessions kept (least recently used are evicted)
 SESSION_TTL = 24 * 3600        # idle HTTP sessions older than this are dropped
 KEEP_BACKUPS = 5               # client-config backups kept per client (plus the first one, which is never pruned)
@@ -1168,12 +1188,26 @@ def resource_list() -> list[dict]:
     return out
 
 
+def _resource_text(path: Path) -> str:
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    with os.fdopen(fd, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ValueError("Resource must be a regular file")
+        data = stream.read(MAX_RESOURCE_FILE + 1)
+    if len(data) > MAX_RESOURCE_FILE:
+        raise ValueError("Resource file exceeds 256 KiB; inspect it with a targeted CLI command")
+    return data.decode("utf-8")
+
+
 def _environments() -> list[dict]:
     envs = []
-    for e in paths.Env.list_all():
+    size = 0
+    for index, e in enumerate(paths.Env.list_all()):
+        if index >= MAX_RESOURCE_ENVS:
+            raise ValueError("Environment resource exceeds 200 entries; use cloudseed_list and targeted inventory calls")
         item: dict = {"id": e.id, "cloud": e.cloud, "env": e.name, "workdir": str(e.dir)}
         try:
-            cfg = e.load()
+            cfg = json.loads(_resource_text(e.config_path))
             if not isinstance(cfg, dict):
                 raise ValueError("not a JSON object")
         except (OSError, ValueError, ui.Abort) as err:   # one broken env must not hide the others
@@ -1181,10 +1215,14 @@ def _environments() -> list[dict]:
             envs.append(item)
             continue
         try:
-            outputs = json.loads((e.dir / "outputs.json").read_text())
+            outputs = json.loads(_resource_text(e.dir / "outputs.json"))
         except (OSError, ValueError):
             outputs = {}
+            item["outputs_note"] = "Saved outputs are unavailable, invalid or exceed the resource size limit"
         item.update({"config": {k: v for k, v in cfg.items() if k not in ("ssh_public_key", "ssh_private_key_path")}, "outputs": outputs})
+        size += len(json.dumps(item).encode("utf-8"))
+        if size > MAX_RESOURCE:
+            raise ValueError("Environment resource exceeds 2 MiB; use targeted inventory calls")
         envs.append(item)
     return envs
 
@@ -1201,7 +1239,7 @@ def read_resource(uri: str) -> dict | None:
     m = re.fullmatch(r"cloudseed://skills/([A-Za-z0-9-]+)", uri)
     p = skills._lookup(m.group(1)) if m else None     # short names too: cloudseed://skills/aws is cloudseed-aws
     if p is not None and (p / "SKILL.md").exists():
-        return {"contents": [{"uri": uri, "mimeType": "text/markdown", "text": (p / "SKILL.md").read_text()}]}
+        return {"contents": [{"uri": uri, "mimeType": "text/markdown", "text": _resource_text(p / "SKILL.md")}]}
     return None
 
 
@@ -1431,7 +1469,10 @@ def dispatch(payload, session: Session, notify=None):
     if isinstance(payload, list):
         if not payload:
             return _err(None, -32600, "invalid request: empty batch")
+        if len(payload) > MAX_BATCH:
+            return _err(None, -32600, "invalid request: at most 32 calls per batch")
         out = []
+        response_size = 0
         for m in payload:
             if isinstance(m, dict) and m.get("method") == "initialize":
                 if m.get("id") is not None:
@@ -1439,6 +1480,9 @@ def dispatch(payload, session: Session, notify=None):
                 continue
             r = handle(m, session, notify)
             if r is not None:
+                response_size += len(json.dumps(r).encode("utf-8"))
+                if response_size > MAX_BODY:
+                    return _err(None, -32600, "Batch response too large; request fewer resources per batch")
                 out.append(r)
         return out or None
     return handle(payload, session, notify)
@@ -1645,6 +1689,7 @@ def serve() -> int:
     """stdio JSON-RPC loop (newline-delimited messages). Tool calls run on worker threads so pings, cancellations and
     other requests are read and answered while a long call runs (_Ordered: order is kept only while it costs next to
     nothing)."""
+    validate_timeout()
     if not enabled():
         sys.stderr.write("cloudseed MCP is disabled. Run: cs setup mcp   (or: cs enable mcp)\n")
         return 2
@@ -1681,13 +1726,21 @@ def serve() -> int:
         # holds the credentials in plain text); the log line used to sit between the two, a window a quick SIGTERM hit
         _exit_on_signals()
         _log("stdio server started")
-        for raw in inp:
+        while True:
+            raw = inp.readline(MAX_BODY + 1)
+            if not raw:
+                break
+            if len(raw) > MAX_BODY:
+                while raw and not raw.endswith(b"\n"):
+                    raw = inp.readline(MAX_BODY + 1)
+                write(_err(None, -32600, "Message exceeds the request size limit"))
+                continue
             raw = raw.strip()
             if not raw:
                 continue
             try:
                 payload = json.loads(raw)
-            except ValueError:   # also UnicodeDecodeError
+            except (ValueError, RecursionError):   # also UnicodeDecodeError
                 write(_err(None, -32700, "parse error: not valid JSON"))
                 continue
             if isinstance(payload, dict) and payload.get("id") is None:     # notification (cancel, initialized): now
@@ -1971,7 +2024,7 @@ class _Handler(BaseHTTPRequestHandler):
             if not body.strip():
                 raise ValueError("empty body")
             payload = json.loads(body.decode("utf-8"))
-        except ValueError as e:
+        except (ValueError, RecursionError) as e:
             self._json(400, {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": f"parse error: {e}"}})
             return
         if not isinstance(payload, (dict, list)):
@@ -2114,6 +2167,11 @@ def serve_http(host: str, port: int, auth: bool = True) -> int:
     start as configured (MCP disabled, a non-local address) exits 0, so launchd (KeepAlive: SuccessfulExit false) and
     systemd (Restart=on-failure) do not restart it forever; a port that is busy right now exits 1 and is retried."""
     managed = _managed()
+    try:
+        validate_timeout()
+    except ui.Abort as exc:
+        _say(exc.msg, managed)
+        return 0 if managed else 2
     if not enabled():
         _say("cloudseed MCP is disabled. Run: cs setup mcp   (or: cs enable mcp)", managed)
         return 0 if managed else 2
@@ -2289,7 +2347,9 @@ def _serve_argv(state: dict) -> list[str]:
 
 def _service_env() -> dict:
     from . import creds, deps
-    env = {"PATH": deps.path_env()["PATH"], "HOME": str(Path.home()), "NO_COLOR": "1", "LANG": os.environ.get("LANG", "en_US.UTF-8")}
+    timeout = validate_timeout()
+    env = {"PATH": deps.path_env()["PATH"], "HOME": str(Path.home()), "NO_COLOR": "1", "LANG": os.environ.get("LANG", "en_US.UTF-8"),
+           TOOL_TIMEOUT_ENV: str(timeout)}
     if paths.IS_BUNDLE:
         # A detached server outlives this CLI. Give it its own extraction directory;
         # PyInstaller otherwise reuses ours and loses every asset when we exit.
@@ -2557,6 +2617,7 @@ def _warn_taking_over(path: Path, home_of) -> None:
 def start(state: dict) -> str:
     """Start the http server as a user service (launchd/systemd) or a detached background process. Returns the kind.
     Service definitions of this home that do not match that kind are removed, so no second server starts at login."""
+    validate_timeout()
     MCP_DIR.mkdir(parents=True, exist_ok=True)
     kind = wanted = state.get("service") or _service_kind()
     argv = _serve_argv(state)
@@ -2743,7 +2804,7 @@ def _stdio_env() -> dict:
     """Environment pinned into every stdio registration: GUI apps (and Codex, which forwards only an allow-list of
     variables) start the server without the shell's PATH / CLOUDSEED_HOME."""
     from . import deps
-    env = {"PATH": deps.path_env()["PATH"]}
+    env = {"PATH": deps.path_env()["PATH"], TOOL_TIMEOUT_ENV: str(validate_timeout())}
     if os.environ.get("CLOUDSEED_HOME"):
         env["CLOUDSEED_HOME"] = str(paths.HOME.expanduser().resolve())
     return env
@@ -2761,6 +2822,7 @@ def stdio_entry(client: str) -> dict:
 
 
 def http_entry(client: str, state: dict) -> dict:
+    validate_timeout()
     c = CLIENTS[client]
     entry: dict = {c.get("url_key", "url"): url(state)}
     if state.get("auth", "token") == "token":
@@ -2956,6 +3018,7 @@ def _write_json_file(path: Path, data: dict) -> None:
 
 
 def _toml_section(state: dict | None, transport: str) -> str:
+    validate_timeout()
     if transport == "http" and state:
         lines = [f"[mcp_servers.{SERVER_NAME}]", f"url = {json.dumps(url(state))}"]
         if state.get("auth", "token") == "token":
@@ -3110,6 +3173,7 @@ def _claude_stdio_argv() -> list[str]:
 def connect(client: str, transport: str, state: dict | None) -> str:
     """Register the cloudseed server with a client. Returns a one-line description of what was written.
     Config files are backed up first, written 0600 and atomically; a file that does not parse is never touched."""
+    validate_timeout()
     c = CLIENTS[client]
     if transport not in c["transports"]:
         transport = c["transports"][0]
@@ -3419,9 +3483,12 @@ def guide_lines(state: dict | None, wired: dict[str, str] | None = None, live: b
         ("Any client", "first ask it to read the resource cloudseed://skills/cloudseed - the operating manual - then talk normally."),
         ("How it works", "ask how anything works ('how does the VPN work?', 'what does single_nat_gateway change on AWS?'): the agent "
                          "reads cloudseed://explain/<query> or calls cloudseed_explain with format=json - the page `cs explain` prints."),
-        ("Long calls", "setup/apply/destroy/platform install can run for many minutes. Codex and Gemini entries get a 1-hour tool timeout; "
-                       "for Claude Code start it with MCP_TOOL_TIMEOUT=3600000 if long calls time out. Cancelling a call in the client "
-                       "interrupts the command (Terraform stops gracefully and releases its lock)."),
+        ("Long calls", f"Server limit: {TOOL_TIMEOUT} seconds per call, also written into Codex and Gemini entries. "
+                       "Set CLOUDSEED_MCP_TOOL_TIMEOUT=28800 when running cs setup mcp and reconnecting clients for an 8-hour limit "
+                       "(allowed: 60..86400 seconds; default: 3600). Other clients need their own matching deadline; "
+                       f"for Claude Code, start it with MCP_TOOL_TIMEOUT={CLIENT_TIMEOUT_SEC * 1000}. Stage timeout_s values do not extend "
+                       "the total deadline. Cancellation/timeout interrupts the local command; remote work can continue and recovery "
+                       "cleanup can be incomplete. Inspect provider status and owned artifacts before retrying."),
     ]
     sections.append(("3. Verify the connection", how))
 

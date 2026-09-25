@@ -64,7 +64,7 @@ class OperationContractTests(unittest.TestCase):
                 operations.validate('acceptance', {'max_budget_usd': number})
         with self.assertRaises(ValueError):
             operations.validate('spec-import', {'spec': {'value': 'x' * (1024 * 1024)}})
-        for status, code in [('PASS', 0), ('PLAN', 0), ('BLOCKED', 1), ('FAIL', 1), ('UNKNOWN', 3), ('INCOMPLETE', 3)]:
+        for status, code in [('PASS', 0), ('PLAN', 0), ('BLOCKED', 1), ('FAIL', 1), ('UNKNOWN', 3), ('INCOMPLETE', 3), (None, 3), ('unexpected', 3)]:
             self.assertEqual(operations.exit_code({'verdict': status}), code)
 
     def test_stale_config_rejected_inside_environment_lock(self):

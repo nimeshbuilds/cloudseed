@@ -50,7 +50,7 @@ class CaptureSecurityTests(unittest.TestCase):
         self.assertIn("safe: done", out)
 
     def test_key_spanning_chunks_does_not_leak_in_tail(self):
-        code = "import sys;sys.stdout.write('-----BEGIN PRIVATE KEY-----\\n');sys.stdout.write('secretkeyfragment\\n'*250);sys.stdout.write('-----END PRIVATE KEY-----\\n')"
+        code = "import sys;sys.stdout.write('-'*5+'BEGIN PRIVATE KEY'+'-'*5+'\\n');sys.stdout.write('secretkeyfragment\\n'*250);sys.stdout.write('-'*5+'END PRIVATE KEY'+'-'*5+'\\n')"
         rc, out, _ = self.collect(code)
         self.assertEqual(rc, 0)
         self.assertNotIn("secretkeyfragment", out)
@@ -82,6 +82,56 @@ class CaptureSecurityTests(unittest.TestCase):
         rc, out, err = self.collect("import secrets;print(len(secrets.token_hex(4)))")
         self.assertEqual(rc, 0, err)
         self.assertEqual(out.strip(), "8")
+
+
+class MCPTimeoutTests(unittest.TestCase):
+    def child(self, value, argv):
+        with tempfile.TemporaryDirectory() as folder:
+            environment = dict(os.environ, CLOUDSEED_HOME=folder, NO_COLOR="1",
+                               PYTHONPATH=str(Path(__file__).resolve().parents[1]))
+            environment.pop("CLOUDSEED_SESSION", None)
+            environment.pop("CLOUDSEED_AGENT", None)
+            if value is None:
+                environment.pop("CLOUDSEED_MCP_TOOL_TIMEOUT", None)
+            else:
+                environment["CLOUDSEED_MCP_TOOL_TIMEOUT"] = value
+            return subprocess.run([sys.executable, *argv], env=environment, capture_output=True, text=True, timeout=15)
+
+    def test_configured_deadline_survives_service_and_stdio_launches(self):
+        code = """import json
+from cloudseed import mcp
+print(json.dumps({'server':mcp.TOOL_TIMEOUT,'client':mcp.CLIENT_TIMEOUT_SEC,
+ 'service':mcp._service_env()[mcp.TOOL_TIMEOUT_ENV],
+ 'stdio':mcp.stdio_entry('gemini'), 'codex':mcp._toml_section(None,'stdio')}))
+"""
+        result = self.child("28800", ["-c", code])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["server"], 28800)
+        self.assertEqual(data["client"], 28800)
+        self.assertEqual(data["service"], "28800")
+        self.assertEqual(data["stdio"]["env"]["CLOUDSEED_MCP_TOOL_TIMEOUT"], "28800")
+        self.assertEqual(data["stdio"]["timeout"], 28800000)
+        self.assertIn("tool_timeout_sec = 28800", data["codex"])
+        self.assertIn('CLOUDSEED_MCP_TOOL_TIMEOUT = "28800"', data["codex"])
+
+    def test_default_and_extreme_valid_deadlines_remain_bounded(self):
+        for value, expected in ((None, 3600), ("60", 60), ("86400", 86400)):
+            with self.subTest(value=value):
+                result = self.child(value, ["-c", "from cloudseed import mcp; print(mcp.TOOL_TIMEOUT, mcp.validate_timeout())"])
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), f"{expected} {expected}")
+
+    def test_invalid_deadlines_fail_cleanly_without_breaking_unrelated_commands(self):
+        for value in ("", "59", "86401", "-1", "inf", "3600.5", "arbitrary-secret-text"):
+            with self.subTest(value=value):
+                result = self.child(value, ["-m", "cloudseed", "mcp", "config"])
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("CLOUDSEED_MCP_TOOL_TIMEOUT must be an integer from 60 to 86400", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertNotIn("arbitrary-secret-text", result.stderr)
+        result = self.child("invalid", ["-m", "cloudseed", "--version"])
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 class CredentialScopeTests(unittest.TestCase):

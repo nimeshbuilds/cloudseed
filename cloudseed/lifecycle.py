@@ -70,11 +70,19 @@ def bounded_run(argv, *, env=None, cwd=None, timeout=120, input=None):
     rc = None
     try:
         if input is not None:
-            try:
-                child.stdin.write(input.encode() if isinstance(input, str) else input)
-                child.stdin.close()
-            except BrokenPipeError:
-                pass
+            def feed():
+                try:
+                    child.stdin.write(input.encode() if isinstance(input, str) else input)
+                except (BrokenPipeError, OSError):
+                    pass
+                finally:
+                    try:
+                        child.stdin.close()
+                    except (BrokenPipeError, OSError):
+                        pass
+            writer = threading.Thread(target=feed, daemon=True)
+            threads.append(writer)
+            writer.start()  # A child which never reads stdin must still obey the deadline.
         while child.poll() is None:
             if overflow.is_set() or time.monotonic() >= deadline:
                 rc = 125 if overflow.is_set() else 124

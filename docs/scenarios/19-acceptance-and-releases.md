@@ -104,6 +104,14 @@ usable. Keychain storage protects data at rest; it does not isolate code running
 SDK key files and old undo copies have their own lifecycle. Use the explicit credential clear/forget flow when
 retiring those copies; do not print or search them.
 
+Use this backend on the host with its native keychain service available and unlocked. The native Cloudseed bundle
+includes the Python `keyring` dependency. Source installations need the optional `keyring` package installed in
+the same Python environment that runs Cloudseed (for example, `python3 -m pip install 'keyring==25.7.0'` in that
+environment). Linux also requires a running desktop Secret Service; installing the package alone is insufficient.
+The Cloudseed container does not include access to the host's desktop keychain, so use the file backend there or
+run the keychain-backed command on the host. Cloudseed does not fall back to plaintext if the selected native
+keychain becomes unavailable.
+
 ## Step 5: Verify release evidence
 
 Use the release manifest, SHA-256 checksums, dependency inventory and provenance shipped with the runtime you

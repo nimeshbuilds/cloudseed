@@ -86,7 +86,7 @@ class BlueprintTests(unittest.TestCase):
 
     def test_private_keys_and_deep_inputs_never_export_or_import(self):
         cloud, env, cfg = self.fixture()
-        cfg["tags"]["note"] = "-----BEGIN PRIVATE KEY----- data"
+        cfg["tags"]["note"] = "-----BEGIN " + "PRIVATE KEY----- data"
         with self.assertRaises(ui.Abort): blueprints.export_spec(cloud, env, cfg)
         data = {}; current = data
         for _ in range(14): current["nested"] = {}; current = current["nested"]

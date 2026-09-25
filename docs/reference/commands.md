@@ -616,6 +616,11 @@ Scales the cluster of the current environment.
                        or the count when larger). config.json follows the live pool, so a later apply keeps it -
                        except on GKE, where an apply raises a --min below the count back to the count (the GKE
                        autoscaler never goes below kubernetes_node_count).
+  GKE counts           --count, --min, --max and add's increment are PER ZONE. A three-zone pool scaled to --count 2
+                       has six total nodes; the preview shows the verified zones and total, and readiness waits for
+                       all six. Missing/partial topology, unequal live zone counts and total autoscaler bounds stop
+                       before changes. Named remove is supported only for a single-zone pool; use scale for a
+                       multi-zone pool so its saved per-zone configuration remains consistent.
   vmware               add creates the VM(s) with Terraform, then Ansible joins them to the cluster automatically
                        (RKE2 agent/server or kubeadm join, depending on the distro). remove drains the node,
                        deletes it from the cluster and, when it is the highest-numbered node, deletes its VM.

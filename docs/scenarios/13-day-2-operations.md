@@ -73,6 +73,11 @@ size and autoscaler limits:
 cs node scale aws --env prod --count 3 --max 6
 ```
 
+GKE uses **per-zone** counts for `add`, `scale`, `--min` and `--max`: `--count 2` across three verified zones means six
+nodes in total. The preview and readiness check include that total. Incomplete topology or unequal live zone sizes
+stop before mutations. Use `scale` for multi-zone GKE; named `remove` is limited to a single-zone pool so removing
+one machine cannot leave the saved per-zone count inconsistent. The same rules apply through agents, MCP and UI.
+
 ## Step 3: Change a setting, then undo it
 
 ```bash

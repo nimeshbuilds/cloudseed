@@ -231,6 +231,16 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(huge.returncode, 125)
         self.assertLessEqual(len(huge.stdout) + len(huge.stderr), 1000)
 
+    def test_stdin_writer_cannot_bypass_subprocess_deadline(self):
+        payload = "x" * (2 * 1024 * 1024)
+        started = lc.time.monotonic()
+        result = lc.bounded_run([sys.executable, "-c", "import time;time.sleep(10)"], input=payload, timeout=.1)
+        self.assertEqual(result.returncode, 124)
+        self.assertLess(lc.time.monotonic() - started, 4)
+        echoed = lc.bounded_run([sys.executable, "-c", "import sys;print(len(sys.stdin.read()))"], input=payload, timeout=2)
+        self.assertEqual(echoed.returncode, 0)
+        self.assertEqual(echoed.stdout.strip(), str(len(payload)))
+
     def test_rke2_no_force_drain_and_failed_node_stays_cordoned(self):
         outputs = {"kubernetes_control_plane_ips": ["10.1.0.10"], "kubernetes_worker_ips": []}
         (self.env.dir / "outputs.json").write_text(json.dumps(outputs))
