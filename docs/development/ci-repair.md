@@ -37,10 +37,14 @@ The Pages workflow builds documentation in strict mode on pull requests. Pull re
 
 ## Verification
 
-Final local suite verification is in progress. Targeted checks already passed for MCP lifecycle, credential diagnostics, local server startup, manifest rendering, help reflow, OpenCost forwarding, Azure scan authentication, and terminal rendering.
+A complete local run executed **3,431 tests in 265.6 seconds**, with **23 skips**. It found two regressions from the accompanying branding changes: the new wordmarks lacked the existing explicit tagline-width geometry, and the repository-layout guide omitted the new asset generator. Both were corrected without removing assertions. A subsequent **38-test focused run passed**, covering web styling/asset geometry and the installation/layout guide. The complete run was not repeated after those two asset/documentation corrections; it is not reported as an entirely green full-suite run.
 
-All five scenario scripts that failed in the original run now pass locally. The console/FinOps scenario also passes its 66 checks, including API authentication, origin rejection, a Terraform dry run, job output, token rotation, restart, foreground serving, and cleanup.
+All original runtime failures passed in that complete run, including MCP lifecycle, credential diagnostics, local server startup, manifest rendering, help reflow, OpenCost forwarding, Azure scan authentication, and terminal rendering. The new deterministic adopted-job persistence regression also passed. Skips cover unavailable optional libraries/tools, Python-version-specific checks, signal-handler constraints, and explicitly enabled browser/Terraform suites.
 
-`actionlint`, Python compilation, changed shell-script syntax checks, and `git diff --check` pass.
+All five scenario scripts that failed in the original run now pass locally. The console/FinOps scenario also passes its **66 checks**, including API authentication, origin rejection, a Terraform dry run, job output, token rotation, restart, foreground serving, and cleanup.
 
-Local verification uses macOS arm64, Python 3.9.6, Terraform 1.16.4, and Go 1.27.1. Linux and the hosted Python 3.12 combinations still require a new GitHub Actions run. Cloud authentication, paid cloud resources, real VMware VMs, and operating-system login services require separate live acceptance testing.
+`actionlint`, Python compilation, changed shell-script syntax checks, and `git diff --check` pass. The first pull-request run also passed its [strict documentation build](https://github.com/nimeshbuilds/cloudseed/actions/runs/36087996333) and [Terraform and Go jobs](https://github.com/nimeshbuilds/cloudseed/actions/runs/36087996384). Follow the final hosted Linux/macOS matrix and its logs on [pull request #3](https://github.com/nimeshbuilds/cloudseed/pull/3).
+
+Documentation verification includes a strict MkDocs build and a **53-page internal-link check with no broken targets**. Browser checks cover desktop and 390-pixel mobile layouts, light/dark themes, keyboard-operated cloud tabs, screenshot selection, copy feedback, the mobile navigation drawer, and search. The browser console reported no errors during these checks.
+
+Local verification uses macOS arm64, Python 3.9.6, Terraform 1.16.4, and Go 1.27.1. Cloud authentication, paid cloud resources, real VMware VMs, and operating-system login services require separate live acceptance testing.

@@ -22,8 +22,9 @@ def svg(width: int, height: int, title: str, content: str) -> str:
             f'{content}\n</svg>\n')
 
 
-def text(x, y, value, size, color=INK, weight=400, spacing=0, anchor="start"):
-    return (f'<text x="{x}" y="{y}" font-family="{FONT}" font-size="{size}" '
+def text(x, y, value, size, color=INK, weight=400, spacing=0, anchor="start", text_length=None):
+    length = f' textLength="{text_length}" lengthAdjust="spacingAndGlyphs"' if text_length is not None else ""
+    return (f'<text x="{x}" y="{y}"{length} font-family="{FONT}" font-size="{size}" '
             f'font-weight="{weight}" letter-spacing="{spacing}" fill="{color}" '
             f'text-anchor="{anchor}">{html.escape(value)}</text>')
 
@@ -43,7 +44,7 @@ def wordmark(dark=False):
     ink, muted = ("#f8fafc", "#c3cee0") if dark else (INK, MUTED)
     return svg(720, 160, "cloudseed — Your cloud. A stronger foundation.", "\n".join([
         mark(8, 8, 144), text(182, 87, "cloudseed", 68, ink, 700, -2.8),
-        text(184, 127, "Your cloud. A stronger foundation.", 23, muted),
+        text(184, 128, "Your cloud. A stronger foundation.", 23, muted, text_length=360),
     ]))
 
 

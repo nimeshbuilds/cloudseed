@@ -9,5 +9,5 @@
 <circle cx="256" cy="380" r="19" fill="#fff"/>
 </g>
 <text x="182" y="87" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="68" font-weight="700" letter-spacing="-2.8" fill="#f8fafc" text-anchor="start">cloudseed</text>
-<text x="184" y="127" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="23" font-weight="400" letter-spacing="0" fill="#c3cee0" text-anchor="start">Your cloud. A stronger foundation.</text>
+<text x="184" y="128" textLength="360" lengthAdjust="spacingAndGlyphs" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="23" font-weight="400" letter-spacing="0" fill="#c3cee0" text-anchor="start">Your cloud. A stronger foundation.</text>
 </svg>
