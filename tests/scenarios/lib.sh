@@ -18,6 +18,7 @@
 #                               one per run so providers are downloaded once. Default: inside the throw-away dir.
 #   SCN_KEEP_TMP=1              keep the throw-away directory for inspection
 #   SCN_UI_PORT / SCN_MCP_PORT  ports for scenario 15 / 14 (defaults 7985 / 7984)
+#   SCN_BINARY                 absolute path to a packaged cloudseed executable to exercise
 
 set -euo pipefail
 
@@ -80,9 +81,9 @@ scn_begin() {
   export GOFLAGS="${GOFLAGS:+$GOFLAGS }-modcacherw"   # a read-only module cache would make the cleanup fail
   export NO_COLOR=1 COLUMNS=120 PYTHONDONTWRITEBYTECODE=1
 
-  # `cs` and `cloudseed` are this checkout's, whatever else is on PATH
-  ln -s "$SCN_REPO/bin/cloudseed" "$SCN_TMP/bin/cloudseed"
-  ln -s "$SCN_REPO/bin/cloudseed" "$SCN_TMP/bin/cs"
+  # `cs` and `cloudseed` use the selected runtime, whatever else is on PATH.
+  ln -s "${SCN_BINARY:-$SCN_REPO/bin/cloudseed}" "$SCN_TMP/bin/cloudseed"
+  ln -s "${SCN_BINARY:-$SCN_REPO/bin/cloudseed}" "$SCN_TMP/bin/cs"
   export PATH="$SCN_TMP/bin:$PATH"
   cd "$SCN_TMP/work"
 
