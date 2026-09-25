@@ -119,6 +119,22 @@ class PostManifestTests(unittest.TestCase):
         self.assertIn('karpenter.sh/discovery: "c1"', karp)
         self.assertIn('role: "knr"', karp)
 
+    def test_the_metallb_pool_check_is_only_a_warning(self):
+        """_warn_pool_move asks the cluster for the current pool first: a kubectl that cannot run (not installed, a
+        wrong path) must not stop the install - the apply after it reports the real problem."""
+        c = ctx("vmware", "rke2")
+        err = io.StringIO()
+        no_kubectl = str(Path(c.workdir) / "no-such-dir" / "kubectl")
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(err):
+            pl._warn_pool_move(c, no_kubectl, "10.100.0.240-10.100.0.250")
+        self.assertEqual(err.getvalue(), "")
+        fake = Path(c.workdir) / "fake-kubectl"
+        fake.write_text("#!/bin/sh\necho 10.100.0.200-10.100.0.210\n")
+        fake.chmod(0o755)
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(err):
+            pl._warn_pool_move(c, str(fake), "10.100.0.240-10.100.0.250")
+        self.assertIn("MetalLB pool moves from 10.100.0.200-10.100.0.210 to 10.100.0.240-10.100.0.250", err.getvalue())
+
     def test_strimzi_dev_cluster_uses_the_served_v1_api(self):
         kafka = pl.POST_MANIFESTS["kafka-cluster"]
         self.assertEqual(kafka.count("apiVersion: kafka.strimzi.io/v1\n"), 2)
