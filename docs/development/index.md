@@ -16,6 +16,7 @@ This is a source and test review, not a new certification of live AWS, GCP, Azur
 | [Application runtime audit](runtime-audit.md) | CLI dispatch, environment state, rendering, dependencies, credentials, local console, MCP, AI agents, Kubernetes access, platform installation, disaster recovery, chaos, scans, VPN, FinOps, undo and audit |
 | [Infrastructure audit](infrastructure-audit.md) | All four targets and seven Terraform roots, ten Ansible roles, Go VMware provider, local/container/bundle runtimes, availability defaults, state backends and lifecycle risks |
 | [CI diagnosis and repairs](ci-repair.md) | Failed run evidence, root causes, regression fixes and verification results |
+| [Runtime acceptance coverage](acceptance.md) | Dependency review, source/container/binary checks, and the remaining live infrastructure acceptance requirements |
 | [Command reference](../reference/commands.md) | Generated CLI command surface |
 | [Platform catalog](../reference/platform-catalog.md) | Every catalog entry, group and dependency |
 | [MCP reference](../reference/mcp-tools.md) | Tool schemas, resources and prompts |
@@ -48,12 +49,14 @@ The workflows explicitly install Node for JavaScript checks, retain failure logs
 
 The Pages overhaul adds a white-and-blue documentation theme, an interactive four-target architecture preview, a concise workflow, console screenshot navigation, clearer guide entry points, and refreshed vector branding. It retains search, keyboard navigation, dark mode and the generated reference. Architecture previews are labeled illustrations; console images remain repository demo screenshots.
 
+The follow-up dependency review adds real container/binary acceptance checks and repairs issues they exposed: detached binary services losing assets, framework-dependent NIC planning, VMware cleanup/capacity reporting, unavailable environment locking, and slow console readers retaining unbounded output. See [acceptance coverage](acceptance.md) for the evidence and live-test boundaries.
+
 ## What to add next
 
 | Priority | Work | Concrete completion criteria |
 |---|---|---|
-| **1 — Lifecycle integrity** | VMware deletion and disk-growth failure handling; honest undo semantics | Failed cleanup keeps recoverable Terraform state; reported disk capacity matches successful operations; restore/recreate limitations are explicit and covered by regression tests. |
-| **1 — Agent and server boundaries** | Separate built-in agent guarantees from external adapters; bound subprocess output while streaming | Each adapter documents its effective permissions; bounded output capture cannot grow indefinitely; cancellation and large-output behavior have tests. |
+| **1 — Lifecycle acceptance** | Live validation of the repaired VMware lifecycle; honest undo semantics | Verify the failure-path regressions against real Fusion/Workstation guests; restore/recreate limitations remain explicit and tested. |
+| **1 — Agent and server boundaries** | Separate built-in agent guarantees from external adapters; bound MCP subprocess output while streaming | Each adapter documents its effective permissions; MCP capture cannot grow indefinitely. Console subscriber backlog is now bounded; MCP subprocess capture remains separate follow-up work. |
 | **2 — Environment health report** | A shared `health --json` contract for CLI, console and MCP | One report shows configuration drift, reachability, cluster/node readiness, platform health, backup age, last scan and validation timestamp; missing evidence is shown as unknown. |
 | **2 — Live release evidence** | Opt-in cloud acceptance runs and a dedicated VMware runner | Apply, access, platform install, backup/restore and destroy are exercised with cleanup checks; reports identify commit, versions, target and cost; dry runs remain clearly labeled. |
 | **2 — Reproducible releases** | Signed bundles, checksums, SBOMs and a tested tool compatibility manifest | A release can be rebuilt from pinned inputs; downloaded tools and images have integrity checks; supported host combinations pass smoke tests. |

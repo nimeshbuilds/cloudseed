@@ -533,10 +533,15 @@ class SweepTests(unittest.TestCase):
             (b / f"{name}.vmx").write_text("x")
         (self.d / "thesis.docx").write_text("precious")
         self.calls = []
+        self.running = {str(self.d / "user-win11.vmwarevm" / "user-win11.vmx"),
+                        str(self.d / "cloudseed-a-bastion.vmwarevm" / "cloudseed-a-bastion.vmx")}
 
     def _run(self, cmd, **kw):
         self.calls.append(cmd)
-        out = f"Total running VMs: 2\n{self.d / 'user-win11.vmwarevm' / 'user-win11.vmx'}\n{self.d / 'cloudseed-a-bastion.vmwarevm' / 'cloudseed-a-bastion.vmx'}\n"
+        if "stop" in cmd:
+            stopped = os.path.realpath(cmd[cmd.index("stop") + 1])
+            self.running = {p for p in self.running if os.path.realpath(p) != stopped}
+        out = f"Total running VMs: {len(self.running)}\n" + "\n".join(sorted(self.running)) + "\n"
         return subprocess.CompletedProcess(cmd, 0, out if "list" in cmd else "", "")
 
     def test_only_this_environments_vms_are_removed(self):
@@ -548,7 +553,7 @@ class SweepTests(unittest.TestCase):
         self.assertEqual(left, ["cloudseed-a-2-bastion.vmwarevm", "cloudseed-b-cp1.vmwarevm", "thesis.docx", "user-win11.vmwarevm"])
         stopped = [c for c in self.calls if "stop" in c]
         self.assertEqual(len(stopped), 1)
-        self.assertIn("cloudseed-a-bastion.vmx", stopped[0][2])   # the user's running VM was never stopped
+        self.assertIn("cloudseed-a-bastion.vmx", stopped[0][4])   # the user's running VM was never stopped
 
     def test_no_identity_removes_nothing(self):
         with mock.patch.object(localvm.subprocess, "run", self._run):

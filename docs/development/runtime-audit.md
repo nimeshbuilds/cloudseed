@@ -170,7 +170,7 @@ Read APIs include state, action definitions, reports, platform status, bounded e
 
 The console uses a private token, constant-time comparison, loopback host checks, Origin checks, a CSP, no-store responses, request size limits, and resolved-path containment for static assets and allowed report files. Token rotation is recognized by a running server. Startup supports user launchd/systemd definitions and background fallback, scoped to the selected Cloudseed home.
 
-Jobs use their own process group and private metadata/log/exit-code files. Running jobs can survive the UI server restarting; restored jobs are correlated with live processes. Same-environment operations are prevented from overlapping. Displayed arguments and streamed output are redacted. The in-memory displayed log is bounded to head/tail lines, although subscriber queues need a separate bound, noted below.
+Jobs use their own process group and private metadata/log/exit-code files. Running jobs can survive the UI server restarting; restored jobs are correlated with live processes. Same-environment operations are prevented from overlapping. Displayed arguments and streamed output are redacted. The in-memory displayed log is bounded to head/tail lines; SSE subscribers replay that bounded history using coalesced notifications.
 
 ### MCP
 
@@ -249,15 +249,17 @@ Completion now holds the job lock through the metadata write, and `running` read
 
 ### Open: output and concurrency budgets are incomplete
 
-In `mcp._spawn`, every chunk of child output is appended to a list and joined/redacted after exit; `MAX_OUTPUT` only clips the final response. A long Terraform/kubectl command can consume much more memory than the advertised returned-output limit. MCP tool workers and HTTP request threads also need an explicit concurrency budget. In `webui.Job.push` / `_stream`, the displayed history is bounded but each SSE subscriber has an unbounded queue.
+In `mcp._spawn`, every chunk of child output is appended to a list and joined/redacted after exit; `MAX_OUTPUT` only clips the final response. A long Terraform/kubectl command can consume much more memory than the advertised returned-output limit. MCP tool workers and HTTP request threads also need an explicit concurrency budget.
 
-Recommended fix: reuse a bounded head/tail capture for MCP, spill durable logs with byte/retention limits, put bounded queues or resumable offsets behind SSE, and use a semaphore plus overload responses for expensive operations. Verify with a noisy synthetic child and a stalled subscriber; do not use real cloud operations for this test.
+The separate console subscriber issue is fixed: `webui.Job.push` / `_stream` use coalesced wakeups and the existing bounded history instead of unbounded per-client queues. A blocked-reader regression demonstrates bounded retained payloads, nonblocking producers/completion, stable replay IDs and an explicit omission marker. Disconnect cleanup is also covered.
 
-### Open: environment locking silently falls back to no locking
+Remaining recommendation: reuse a bounded head/tail capture for MCP, spill durable logs with byte/retention limits, and use a semaphore plus overload responses for expensive operations. Verify MCP capture with a noisy synthetic child; do not use real cloud operations for this test.
 
-`paths.Env._acquire` returns `None` when `fcntl` is unavailable, opening the lock file fails, or a filesystem rejects flock. This includes the Windows path. Mutating operations then proceed unlocked even though the normal CLI/UI/MCP design relies on serialization.
+### Fixed: environment locking silently fell back to no locking
 
-Recommended fix: implement a cross-platform lock primitive and make inability to acquire a supported mutation lock an explicit error. Test two independent subprocesses against one temporary environment on every supported OS. Terraform backend locks alone do not protect configuration, local VM files, provisioning, or platform state.
+`paths.Env._acquire` now aborts before an environment-changing command starts if platform locking is unavailable, the lock directory or file cannot be opened, the filesystem rejects flock, or lock-holder metadata cannot be written. Failed acquisition closes its file handle; it never advertises an inherited lock. Existing process contention, thread re-entry and verified parent-process inheritance continue to work.
+
+Regression tests cover filesystem/permission failures, metadata writes, handle release, and missing platform support. Existing tests use independent subprocesses to verify contention, crash recovery and inherited locking. Discovery and cached configuration remain available without locking. Native Windows environment changes are explicitly unsupported pending a locking and Ansible control-node implementation; provider cross-compilation is not proof of native Windows support.
 
 ### Open: external-agent safety needs accurately scoped claims
 

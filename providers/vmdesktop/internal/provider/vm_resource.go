@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -213,42 +212,33 @@ const incompleteMarker = ".cloudseed-incomplete"
 // clearBundlePath makes dir free for a new VM. A running VM there is refused; the leftovers of a failed create are
 // removed; anything else is moved aside (<name>.replaced-<time>.vmwarevm, next to it) with a warning - never deleted.
 func clearBundlePath(h *vmware.Host, dir, name string, diags *diag.Diagnostics) bool {
-	if _, err := os.Lstat(dir); os.IsNotExist(err) {
-		return true
-	}
-	// every .vmx in the bundle counts (a VM of its own may have been renamed), not only the one Create would write
-	vmxs, _ := filepath.Glob(filepath.Join(dir, "*.vmx"))
-	if vmx := filepath.Join(dir, name+".vmx"); !slices.Contains(vmxs, vmx) {
-		vmxs = append(vmxs, vmx)
-	}
-	var running []string
-	var listErr error
-	for _, v := range vmxs {
-		on, err := h.IsRunning(v)
-		if err != nil {
-			listErr = err
-			break
+	if _, err := os.Lstat(dir); err != nil {
+		if os.IsNotExist(err) {
+			return true
 		}
-		if on {
-			running = append(running, v)
-		}
+		diags.AddError("checking the VM at "+dir, err.Error()+"; nothing was changed. Check folder access and retry.")
+		return false
 	}
-	if _, err := os.Stat(filepath.Join(dir, incompleteMarker)); err == nil { // our own create that failed (or was killed)
-		for _, v := range running {
-			_, _ = h.Vmrun("stop", v, "hard")
-		}
-		if err := os.RemoveAll(dir); err != nil {
-			diags.AddError("clearing a failed create", "Could not remove "+dir+", left by a create that failed: "+err.Error())
-			return false
-		}
-		return true
-	}
+	// Query VMware itself so renamed or missing VMX files still count.
+	running, listErr := h.RunningVMsIn(dir)
 	if listErr != nil { // cannot tell whether that VM runs: never move a running VM's files from under it
 		diags.AddError("checking the VM at "+dir,
 			"A VM bundle that is not in the Terraform state is in the way, and whether it is running could not be checked ("+
 				listErr.Error()+"). Nothing was changed: make sure `vmrun list` works (VMware installed and not updating), "+
 				"then apply again.")
 		return false
+	}
+	if _, err := os.Stat(filepath.Join(dir, incompleteMarker)); err == nil { // our own create that failed (or was killed)
+		for _, v := range running {
+			if !stopForRemoval(h, v, diags) {
+				return false
+			}
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			diags.AddError("clearing a failed create", "Could not remove "+dir+", left by a create that failed: "+err.Error())
+			return false
+		}
+		return true
 	}
 	if len(running) > 0 {
 		diags.AddError("a VM is running at "+dir,
@@ -302,8 +292,22 @@ func (r *vmResource) Create(ctx context.Context, req resource.CreateRequest, res
 		resp.Diagnostics.AddError("cloning base disk", err.Error())
 		return
 	}
-	if err := h.VdiskManager("-x", fmt.Sprintf("%dGB", plan.DiskGB.ValueInt64()), disk); err != nil {
-		resp.Diagnostics.AddWarning("disk expand failed", err.Error()+" (continuing with the base size)")
+	requestedDiskGB := plan.DiskGB.ValueInt64()
+	growErr := h.VdiskManager("-x", fmt.Sprintf("%dGB", requestedDiskGB), disk)
+	actualDiskGB, capacityErr := vmware.DiskCapacityGB(disk)
+	if capacityErr != nil {
+		plan.DiskGB = types.Int64Null()
+		resp.Diagnostics.AddError("reading disk capacity", capacityErr.Error())
+	} else {
+		plan.DiskGB = types.Int64Value(actualDiskGB)
+	}
+	if growErr != nil {
+		resp.Diagnostics.AddError("disk expand failed", growErr.Error()+"\n\nThe VM will be recorded in state without being started. "+
+			"Resolve the disk error and apply again; Terraform can replace this incomplete VM safely.")
+	} else if capacityErr == nil && actualDiskGB != requestedDiskGB {
+		resp.Diagnostics.AddError("disk capacity differs from the request",
+			fmt.Sprintf("Requested %d GiB, but the disk has %d whole GiB. The VM will be recorded in state without being started. "+
+				"Check the base image and disk tool, then apply again.", requestedDiskGB, actualDiskGB))
 	}
 
 	spec := vmware.VMSpec{
@@ -348,20 +352,38 @@ func (r *vmResource) Create(ctx context.Context, req resource.CreateRequest, res
 	}
 	plan.ID = types.StringValue(vmx)
 	plan.VMXPath = types.StringValue(vmx)
+	// Once a VMX exists, keep its identity on every exit, including disk and start
+	// failures. The marker belongs only to untracked debris, not a stateful VM.
+	defer func() {
+		stateDiags := resp.State.Set(ctx, &plan)
+		resp.Diagnostics.Append(stateDiags...)
+		if !stateDiags.HasError() {
+			if err := os.Remove(filepath.Join(dir, incompleteMarker)); err != nil && !os.IsNotExist(err) {
+				resp.Diagnostics.AddWarning("removing incomplete marker", err.Error())
+			}
+		}
+	}()
+	if resp.Diagnostics.HasError() {
+		plan.Running = types.BoolValue(false)
+		r.fillIPs(&plan)
+		return
+	}
 
 	if plan.Running.ValueBool() {
 		if _, err := h.Vmrun("start", vmx, "nogui"); err != nil {
 			resp.Diagnostics.AddError("starting VM", err.Error())
+			if running, statusErr := h.IsRunning(vmx); statusErr == nil {
+				plan.Running = types.BoolValue(running)
+			} else {
+				plan.Running = types.BoolNull()
+				resp.Diagnostics.AddError("checking VM after start failed", statusErr.Error())
+			}
+			r.fillIPs(&plan)
 			return
 		}
 		r.waitForIP(ctx, &plan, &resp.Diagnostics)
 	} else {
 		r.fillIPs(&plan)
-	}
-	// Always record the VM (even when the wait was cut short): it exists now, and leaving it out of state would orphan it.
-	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
-	if !resp.Diagnostics.HasError() {
-		_ = os.Remove(filepath.Join(dir, incompleteMarker))
 	}
 }
 
@@ -454,6 +476,14 @@ func (r *vmResource) Read(ctx context.Context, req resource.ReadRequest, resp *r
 					"they then leave the state.")
 			return
 		}
+		if _, bundleErr := os.Stat(filepath.Dir(vmx)); !errors.Is(bundleErr, fs.ErrNotExist) {
+			// A failed delete can remove the VMX before failing to remove a disk.
+			// Preserve state so destroy can retry cleanup instead of orphaning it.
+			resp.Diagnostics.AddWarning("VM configuration missing",
+				vmx+" is missing but its bundle remains or cannot be inspected. The VM stays in state; "+
+					"restore the configuration to use the VM, or retry destroy to clean up the bundle.")
+			return
+		}
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -463,10 +493,21 @@ func (r *vmResource) Read(ctx context.Context, req resource.ReadRequest, resp *r
 	if v, err := strconv.ParseInt(kv["memsize"], 10, 64); err == nil {
 		state.MemoryMB = types.Int64Value(v)
 	}
-	running, err := r.client.Host.IsRunning(vmx)
-	if err == nil {
-		state.Running = types.BoolValue(running)
+	capacity, err := vmware.DiskCapacityGB(filepath.Join(filepath.Dir(vmx), "disk.vmdk"))
+	if err != nil {
+		// Refresh also runs before destroy/replacement. Preserve the last known
+		// capacity and allow those operations to clean up a damaged disk.
+		resp.Diagnostics.AddWarning("reading disk capacity", err.Error()+"; the VM and its last known capacity stay in state. "+
+			"Restore disk access before applying changes, or destroy/replace the VM to remove the damaged bundle.")
+	} else {
+		state.DiskGB = types.Int64Value(capacity)
 	}
+	running, err := r.client.Host.IsRunning(vmx)
+	if err != nil {
+		resp.Diagnostics.AddError("checking VM power state", err.Error()+"; the VM stays in state. Restore vmrun access and retry.")
+		return
+	}
+	state.Running = types.BoolValue(running)
 	r.fillIPs(&state)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -486,7 +527,11 @@ func (r *vmResource) Update(ctx context.Context, req resource.UpdateRequest, res
 			plan.Networks[i].MAC = state.Networks[i].MAC
 		}
 	}
-	running, _ := h.IsRunning(vmx)
+	running, err := h.IsRunning(vmx)
+	if err != nil {
+		resp.Diagnostics.AddError("checking VM power state", err.Error()+"; no VM settings were changed. Restore vmrun access and retry.")
+		return
+	}
 	sizeChanged := plan.CPUs.ValueInt64() != state.CPUs.ValueInt64() || plan.MemoryMB.ValueInt64() != state.MemoryMB.ValueInt64()
 	diskGrows := plan.DiskGB.ValueInt64() > state.DiskGB.ValueInt64()
 	if running && (sizeChanged || diskGrows || !plan.Running.ValueBool()) {
@@ -495,6 +540,9 @@ func (r *vmResource) Update(ctx context.Context, req resource.UpdateRequest, res
 				resp.Diagnostics.AddError("stopping VM", err2.Error())
 				return
 			}
+		}
+		if !verifyStopped(h, vmx, &resp.Diagnostics) {
+			return
 		}
 		running = false
 	}
@@ -507,19 +555,33 @@ func (r *vmResource) Update(ctx context.Context, req resource.UpdateRequest, res
 	}
 	if diskGrows {
 		disk := filepath.Join(filepath.Dir(vmx), "disk.vmdk")
-		if err := h.VdiskManager("-x", fmt.Sprintf("%dGB", plan.DiskGB.ValueInt64()), disk); err != nil {
-			// Record what really happened (the disk keeps its size). The VM is still powered back on below when it
-			// should run, so a failed grow never leaves it off.
+		requestedDiskGB := plan.DiskGB.ValueInt64()
+		if err := h.VdiskManager("-x", fmt.Sprintf("%dGB", requestedDiskGB), disk); err != nil {
 			plan.DiskGB = state.DiskGB
 			resp.Diagnostics.AddError("growing the disk",
-				err.Error()+"\n\nThe disk keeps its old size. A VM with snapshots cannot be grown: delete its snapshots and apply again.")
+				err.Error()+"\n\nA VM with snapshots cannot be grown: delete its snapshots and apply again.")
+		}
+		if capacity, err := vmware.DiskCapacityGB(disk); err != nil {
+			plan.DiskGB = state.DiskGB
+			resp.Diagnostics.AddError("reading disk capacity", err.Error()+"; restore disk access and refresh state before retrying.")
+		} else {
+			plan.DiskGB = types.Int64Value(capacity)
+			if capacity != requestedDiskGB && !resp.Diagnostics.HasError() {
+				resp.Diagnostics.AddError("disk capacity differs from the request",
+					fmt.Sprintf("Requested %d GiB, but the disk has %d whole GiB. Check the disk tool and retry.", requestedDiskGB, capacity))
+			}
 		}
 	}
 	if plan.Running.ValueBool() && !running {
 		if _, err := h.Vmrun("start", vmx, "nogui"); err != nil {
 			resp.Diagnostics.AddError("starting VM", err.Error())
+			if running, statusErr := h.IsRunning(vmx); statusErr == nil {
+				plan.Running = types.BoolValue(running)
+			} else {
+				plan.Running = types.BoolNull()
+				resp.Diagnostics.AddError("checking VM after start failed", statusErr.Error())
+			}
 			r.fillIPs(&plan)
-			plan.Running = types.BoolValue(false)
 			resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 			return
 		}
@@ -538,13 +600,69 @@ func (r *vmResource) Delete(ctx context.Context, req resource.DeleteRequest, res
 	}
 	h := r.client.Host
 	vmx := state.VMXPath.ValueString()
-	if running, _ := h.IsRunning(vmx); running {
-		if _, err := h.Vmrun("stop", vmx, "hard"); err != nil {
-			resp.Diagnostics.AddWarning("stop failed", err.Error())
+	dir := filepath.Dir(vmx)
+	if vmx == "" || dir == "." || dir == string(filepath.Separator) {
+		resp.Diagnostics.AddError("VM path missing", "The VM stays in state: a valid vmx_path is required before deleting its bundle.")
+		return
+	}
+	if _, err := os.Lstat(dir); err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			resp.Diagnostics.AddError("checking VM bundle", err.Error()+"; the VM stays in state. Check folder access and retry.")
+			return
 		}
+		storage := filepath.Dir(dir)
+		if !exists(storage) && (!exists(filepath.Dir(storage)) || isMountParent(filepath.Dir(storage))) {
+			resp.Diagnostics.AddError("VM directory not found", storage+" may be on an unmounted volume. The VM stays in state. Mount the volume and retry.")
+		}
+		return // an absent bundle on accessible storage is already deleted
 	}
-	if _, err := h.Vmrun("deleteVM", vmx); err != nil {
-		resp.Diagnostics.AddWarning("deleteVM failed", err.Error()+"; removing the directory directly")
+	inside, err := h.RunningVMsIn(dir)
+	if err != nil {
+		resp.Diagnostics.AddError("checking VM bundle power state", err.Error()+"; the VM stays in state and no files were removed. Restore vmrun access and retry.")
+		return
 	}
-	_ = os.RemoveAll(state.vmDir())
+	if len(inside) > 1 || (len(inside) == 1 && !vmware.SameVMXPath(inside[0], vmx)) {
+		resp.Diagnostics.AddError("another VM is running in the bundle",
+			"VMware reports a running VM with a different VMX path in "+dir+". No files were removed. "+
+				"Stop the renamed or additional VM, then retry destroy.")
+		return
+	}
+	if len(inside) == 1 && !stopForRemoval(h, vmx, &resp.Diagnostics) {
+		return
+	}
+	if _, err := os.Stat(vmx); err == nil {
+		if _, err := h.Vmrun("deleteVM", vmx); err != nil {
+			resp.Diagnostics.AddError("deleting VM", err.Error()+"; the VM stays in state. No direct filesystem cleanup was attempted. Resolve the VMware error and retry destroy.")
+			return
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		resp.Diagnostics.AddError("checking VM configuration", err.Error()+"; the VM stays in state. Check folder access and retry destroy.")
+		return
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		resp.Diagnostics.AddError("removing VM bundle", err.Error()+"; the VM stays in state. Check folder permissions and retry destroy to finish cleanup.")
+	}
+}
+
+// stopForRemoval never authorizes filesystem deletion based only on a successful
+// stop command: verify the VM is absent from the running list as well.
+func stopForRemoval(h *vmware.Host, vmx string, diags *diag.Diagnostics) bool {
+	if _, err := h.Vmrun("stop", vmx, "hard"); err != nil {
+		diags.AddError("stopping VM", err.Error()+"; the VM's files were not removed. Stop the VM and retry.")
+		return false
+	}
+	return verifyStopped(h, vmx, diags)
+}
+
+func verifyStopped(h *vmware.Host, vmx string, diags *diag.Diagnostics) bool {
+	running, err := h.IsRunning(vmx)
+	if err != nil || running {
+		detail := "VMware still reports the VM as running"
+		if err != nil {
+			detail = err.Error()
+		}
+		diags.AddError("verifying VM stopped", detail+"; the VM's files were not removed. Check vmrun and retry.")
+		return false
+	}
+	return true
 }

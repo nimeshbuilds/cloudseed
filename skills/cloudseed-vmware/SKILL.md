@@ -1,14 +1,15 @@
 ---
 name: cloudseed-vmware
-description: Local virtual machines with the cloudseed CLI on VMware Fusion Pro (macOS) or Workstation Pro (Windows/Linux) - what `cloudseed setup vmware` builds, host/arch detection, guest OS choices, variables, outputs and gotchas. Use with the cloudseed skill when the user wants VMs on their own machine instead of a cloud.
+description: Local virtual machines with the cloudseed CLI on VMware Fusion Pro (macOS) or Workstation Pro (Linux; Windows detection only) - what `cloudseed setup vmware` builds, host/arch detection, guest OS choices, variables, outputs and gotchas. Use with the cloudseed skill when the user wants VMs on their own machine instead of a cloud.
 ---
 
 # cloudseed on VMware Desktop (local)
 
 `cloudseed setup vmware --env <env>` builds on the local machine:
 
-- **Host detection**: Fusion Pro on macOS, Workstation Pro on Linux (and Windows, experimental: Ansible has no native
-  Windows control node); host arch decides guest arch (Apple Silicon -> arm64 guests only, Intel/AMD -> amd64).
+- **Host detection**: Fusion Pro on macOS, Workstation Pro on Linux. Windows detection is experimental;
+  native environment changes are refused because supported locking and a native Ansible control node are unavailable.
+  Host arch decides guest arch (Apple Silicon -> arm64 guests only, Intel/AMD -> amd64).
   Fusion Pro 13 / Workstation Pro 17 or newer: older releases are refused for new environments. A `VMWARE_HOME` that
   does not hold vmrun is reported by name. `cloudseed doctor vmware` shows what was found.
 - **Private network**: by default VMware's built-in host-only vmnet (vmnet1 on Fusion) is adopted as it is: its

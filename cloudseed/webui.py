@@ -20,7 +20,6 @@ import collections
 import json
 import os
 import plistlib
-import queue
 import re
 import shlex
 import shutil
@@ -651,7 +650,8 @@ class Job:
         self.killed = False            # the third interrupt's SIGKILL was delivered by a console (not "lost")
         self.lost = False
         self.meta_lock = threading.Lock()   # the follow thread and a request (interrupt) both write the meta file
-        self.subscribers: list[queue.Queue] = []
+        # A slow browser gets one pending wakeup, not a second unbounded copy of the job's output.
+        self.subscribers: list[threading.Event] = []
         self.lock = threading.Lock()
         self._loaded = True            # False for a finished job restored from disk until its log is read
         self._load_lock = threading.Lock()
@@ -697,8 +697,8 @@ class Job:
             else:
                 self.tail.append(item)
             subs = list(self.subscribers)
-        for q in subs:
-            q.put(item)
+        for changed in subs:
+            changed.set()
 
     def finish(self, rc: int, lost: bool = False) -> None:
         with self.lock:
@@ -711,8 +711,8 @@ class Job:
             # Publish completion only after its durable record is written. Status readers (and pruning) must not
             # observe a finished job while a restart would still restore rc=null, especially after an adopted kill.
             self.save_meta()
-        for q in subs:
-            q.put(None)
+        for changed in subs:
+            changed.set()
 
     def _snapshot(self) -> list[tuple[int, str]]:
         """(event id, line) pairs kept in memory; a marker line stands in for what was dropped from the middle."""
@@ -2364,50 +2364,46 @@ class _Handler(BaseHTTPRequestHandler):
             last = int(self.headers.get("Last-Event-ID") or -1)
         except ValueError:
             last = -1
-        q: queue.Queue = queue.Queue()
+        changed = threading.Event()
         with job.lock:
-            backlog = job._snapshot()
-            done = job.rc is not None
-            if not done:
-                job.subscribers.append(q)
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream")
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Connection", "close")
-        self.end_headers()
-        self.close_connection = True
+            if job.rc is None:
+                job.subscribers.append(changed)
+        changed.set()   # replay existing output even if the job has already finished
         try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.close_connection = True
             self.wfile.write(b"retry: 3000\n\n")
-            for seq, line in backlog:
-                if seq > last:
-                    self.wfile.write(f"id: {seq}\ndata: {json.dumps(line)}\n\n".encode())
-            self.wfile.flush()
-            if done:
-                self.wfile.write(f"event: done\ndata: {json.dumps(job.to_dict(tail=0), default=str)}\n\n".encode())
-                self.wfile.flush()
-                return
             while True:
-                try:
-                    item = q.get(timeout=15)
-                except queue.Empty:
+                if not changed.wait(timeout=15):
                     self.wfile.write(b": keep-alive\n\n")
                     self.wfile.flush()
                     continue
-                if item is None:
+                # Clear before reading the history: updates racing with the snapshot are either included in it
+                # or leave another wakeup pending. Never hold the job lock while writing to a slow socket.
+                changed.clear()
+                with job.lock:
+                    backlog = job._snapshot()
+                    done = job.rc is not None
+                for seq, line in backlog:
+                    if seq > last:
+                        self.wfile.write(f"id: {seq}\ndata: {json.dumps(line)}\n\n".encode())
+                        last = seq
+                self.wfile.flush()
+                if done:
                     self.wfile.write(f"event: done\ndata: {json.dumps(job.to_dict(tail=0), default=str)}\n\n".encode())
                     self.wfile.flush()
                     break
-                seq, line = item
-                if seq > last:
-                    self.wfile.write(f"id: {seq}\ndata: {json.dumps(line)}\n\n".encode())
-                    self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, OSError):
             pass
         finally:
             with job.lock:
-                if q in job.subscribers:
-                    job.subscribers.remove(q)
+                if changed in job.subscribers:
+                    job.subscribers.remove(changed)
 
 
 # ---------------------------------------------------------------- credentials and the current environment

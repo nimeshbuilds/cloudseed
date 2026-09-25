@@ -6,6 +6,7 @@ package provider
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -38,14 +39,21 @@ list)
 "; }; done < "$FAKE_DIR/running"
   fi
   echo "Total running VMs: $n"; printf '%s' "$lines" ;;
-start) printf '%s\n' "$2" >> "$FAKE_DIR/running" ;;
+start)
+  if [ -n "$FAKE_START_FAIL" ]; then echo "Error: Cannot start VM"; exit 1; fi
+  printf '%s\n' "$2" >> "$FAKE_DIR/running" ;;
 stop)
+  if [ -n "$FAKE_STOP_FAIL" ]; then echo "Error: Cannot stop VM"; exit 1; fi
+  if [ -n "$FAKE_STOP_NOOP" ]; then exit 0; fi
   new=""
   if [ -f "$FAKE_DIR/running" ]; then
     while IFS= read -r l; do [ "$l" = "$2" ] || new="$new$l
 "; done < "$FAKE_DIR/running"
   fi
   printf '%s' "$new" > "$FAKE_DIR/running" ;;
+deleteVM)
+  if [ -n "$FAKE_DELETE_FAIL" ]; then echo "Error: Cannot delete VM"; exit 1; fi
+  if [ -n "$FAKE_DELETE_REMOVE_VMX" ]; then rm "$2"; fi ;;
 getGuestIPAddress) echo "10.0.0.9" ;;
 esac
 exit 0
@@ -54,8 +62,14 @@ exit 0
 const fakeVdisk = `#!/bin/sh
 echo "vdisk $*" >> "$FAKE_LOG"
 case "$1" in
--r) : > "$5" ;;
--x) if [ -n "$FAKE_VDISK_FAIL" ]; then echo "Failed to expand the disk: the virtual disk has snapshots"; exit 1; fi ;;
+-r) cp "$2" "$5" ;;
+-x)
+  if [ -n "$FAKE_VDISK_FAIL" ]; then echo "Failed to expand the disk: the virtual disk has snapshots"; exit 1; fi
+  capacity=$((${2%GB} * 2097152)); bytes=""
+  for shift in 0 8 16 24 32 40 48 56; do
+    bytes="$bytes$(printf '\\%03o' $(((capacity >> shift) & 255)))"
+  done
+  printf '%b' "$bytes" | dd of="$3" bs=1 seek=12 conv=notrunc 2>/dev/null ;;
 esac
 exit 0
 `
@@ -112,6 +126,9 @@ func newHarness(t *testing.T) *harness {
 	t.Setenv("FAKE_LOG", filepath.Join(dir, "calls.log"))
 	t.Setenv("FAKE_VDISK_FAIL", "")
 	t.Setenv("FAKE_LIST_FAIL", "")
+	for _, key := range []string{"FAKE_START_FAIL", "FAKE_STOP_FAIL", "FAKE_STOP_NOOP", "FAKE_DELETE_FAIL", "FAKE_DELETE_REMOVE_VMX"} {
+		t.Setenv(key, "")
+	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+"/bin") // no ISO tool: the built-in writer makes the seed
 	host, err := vmware.Detect("", "")
 	if err != nil {
@@ -294,13 +311,24 @@ func vmPlan(h *harness, base string) vmModel {
 	}
 }
 
+func writeDisk(t *testing.T, path string, gib int64) {
+	t.Helper()
+	var header [512]byte
+	binary.LittleEndian.PutUint32(header[:4], 0x564d444b)
+	binary.LittleEndian.PutUint32(header[4:8], 1)
+	binary.LittleEndian.PutUint64(header[12:20], uint64(gib)*(1<<21))
+	if err := os.WriteFile(path, header[:], 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestVMLifecycle(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
 	r := &vmResource{client: h.client}
 	empty := schemaOf(t, r)
 	base := filepath.Join(h.dir, "base.vmdk")
-	os.WriteFile(base, []byte("base"), 0o644)
+	writeDisk(t, base, 3)
 	plan := vmPlan(h, base)
 	leftover := filepath.Join(h.dir, "vms", "cs-dev-vm1.vmwarevm")
 	os.MkdirAll(leftover, 0o755)

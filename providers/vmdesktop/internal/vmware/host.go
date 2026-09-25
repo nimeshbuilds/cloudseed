@@ -198,21 +198,57 @@ func (h *Host) VdiskManager(args ...string) error {
 // written by older versions for a relative `path`) and symlinked directories (/tmp -> /private/tmp) are compared by
 // their absolute, resolved form.
 func (h *Host) IsRunning(vmx string) (bool, error) {
-	out, err := h.Vmrun("list")
+	paths, err := h.runningVMs()
 	if err != nil {
 		return false, err
 	}
 	want := canonicalPath(vmx)
-	for _, line := range strings.Split(out, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+	for _, line := range paths {
 		if line == vmx || canonicalPath(line) == want {
 			return true, nil
 		}
 	}
 	return false, nil
+}
+
+// RunningVMsIn includes renamed or removed VMX files still held by VMware. A
+// filesystem glob alone cannot establish that all VMs in a bundle are stopped.
+func (h *Host) RunningVMsIn(dir string) ([]string, error) {
+	paths, err := h.runningVMs()
+	if err != nil {
+		return nil, err
+	}
+	var found []string
+	want := canonicalPath(dir)
+	for _, vmx := range paths {
+		if canonicalPath(filepath.Dir(vmx)) == want {
+			found = append(found, vmx)
+		}
+	}
+	return found, nil
+}
+
+func (h *Host) runningVMs() ([]string, error) {
+	out, err := h.Vmrun("list")
+	if err != nil {
+		return nil, err
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if !strings.HasPrefix(lines[0], "Total running VMs: ") {
+		return nil, fmt.Errorf("vmrun returned an unrecognized running-VM list")
+	}
+	header := strings.TrimPrefix(strings.TrimSpace(lines[0]), "Total running VMs: ")
+	count, err := strconv.Atoi(header)
+	if err != nil || count < 0 || count != len(lines)-1 {
+		return nil, fmt.Errorf("vmrun returned an incomplete or unrecognized running-VM list")
+	}
+	for i := 1; i < len(lines); i++ {
+		lines[i] = strings.TrimSpace(lines[i])
+		if lines[i] == "" {
+			return nil, fmt.Errorf("vmrun returned an empty VM path")
+		}
+	}
+	return lines[1:], nil
 }
 
 func canonicalPath(p string) string {
@@ -224,3 +260,7 @@ func canonicalPath(p string) string {
 	}
 	return filepath.Clean(p)
 }
+
+// SameVMXPath compares the paths VMware reports with recorded resource paths,
+// including relative paths from older state and symlinked storage directories.
+func SameVMXPath(a, b string) bool { return canonicalPath(a) == canonicalPath(b) }

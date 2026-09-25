@@ -98,8 +98,8 @@ cloudseed is deliberately focused. Things it does **not** do today:
   node that is already installed: upgrading a running RKE2 or kubeadm cluster is up to you.
 - **Team collaboration.** Remote state gives locking, but an environment's configuration and SSH keys live in the
   working directory on the machine that created it. Sharing environments across people is not a built-in workflow.
-- **Windows as a first-class host.** The VMware target on Windows is experimental (Ansible has no native Windows
-  control node).
+- **Windows as a first-class host.** VMware detection is experimental. Native Windows environment changes are refused
+  because supported environment locking and a native Ansible control node are unavailable.
 - **Public load balancers for apps.** Gateways get private load balancers; reach them over the VPN or the bastion.
 
 ## Supported versions
@@ -109,7 +109,7 @@ cloudseed is deliberately focused. Things it does **not** do today:
 | Python | **3.9 or newer** (standard library only) |
 | Terraform | **1.10 or newer** (S3 native state locking) |
 | Terraform providers | `hashicorp/aws` ~> 6, `hashicorp/google` 6.x and 7.x, `hashicorp/azurerm` >= 4.65 and < 5 |
-| Host OS | macOS and Linux; Windows experimental for the VMware target |
+| Host OS | macOS and Linux; native Windows environment changes unsupported |
 | VMware | Fusion Pro 13+ (macOS, Intel and Apple silicon), Workstation Pro 17+ (Linux); older releases are refused for new environments |
 | VMware guests | Ubuntu 24.04 (default), Ubuntu 22.04, Debian 12 (amd64 and arm64) |
 | Cloud bastions | Amazon Linux 2023 (AWS), Debian 12 (GCP), Ubuntu 24.04 (Azure); Ubuntu Pro FIPS images in FIPS mode |
