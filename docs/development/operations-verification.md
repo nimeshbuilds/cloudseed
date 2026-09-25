@@ -42,6 +42,12 @@ those markers at runtime so repository secret scanning remains strict. Packaged-
 implementation passed independently. See the [PR checks](https://github.com/nimeshbuilds/cloudseed/pull/7/checks)
 for results at the final commit; a result from an earlier commit is not substituted for those checks.
 
+The first build-only trusted-release run found that the complete container inventories exceed GitHub's 16 MiB
+embedded-SBOM predicate limit after their runtime tests pass. The release workflow preserves the complete inventory
+as a downloadable file, signs its digest, and binds it to the immutable container image in a signed manifest. This
+keeps all dependency evidence instead of truncating it to satisfy the embedded-predicate limit. Tagged publication
+and signing still require an authorized version release; manual runs exercise builds and metadata only.
+
 ## Reproduce without cloud accounts
 
 Use the documented development toolchain: Python, Node, Go and Terraform. Keep test state separate from actual

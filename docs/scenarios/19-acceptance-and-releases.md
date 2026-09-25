@@ -129,6 +129,17 @@ and a hosted runner. The MCP tool is `cloudseed_ops_release_verify` with the sam
 **Operations & readiness → release-verify**. A newly implemented release workflow is not evidence that a signed
 release has already been published.
 
+The full dependency inventory ships as a `.sbom.spdx.json` file. A binary manifest binds the executable and its
+inventory by SHA-256. Each container manifest binds its full inventory to an immutable image reference such as
+`ghcr.io/nimeshbuilds/cloudseed@sha256:...`; compare that digest with the image you intend to use.
+Use the same release-verification operation on the downloaded manifest and SBOM files, with their trusted expected
+checksums, through CLI, MCP or the console. A tagged release signs their file digests; it does not squeeze the full
+inventory into GitHub's 16 MiB embedded-SBOM predicate. Inventories are preserved without truncation, up to a
+128 MiB generation limit. Checksums and manifests for container inventories are included in the release downloads.
+
+A manual build-only run produces inspectable artifacts without publishing or signing a version-tag release.
+Its checksum checks can pass while `release-verify` correctly reports missing release provenance as INCOMPLETE.
+
 The [runtime acceptance guide](../development/acceptance.md) explains what the packaged-runtime CI exercises.
 
 ## Use an agent, MCP or the UI
