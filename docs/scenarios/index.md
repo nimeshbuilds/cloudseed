@@ -332,6 +332,7 @@ from the pages and checked by `tests/test_scenarios_docs.py`, so they are always
 | `cs scan stig` | [10](10-compliance-scans.md) |
 | `cs scan cloud` | [04](04-azure-private-aks.md) · [10](10-compliance-scans.md) |
 | `cs scan fips` | [10](10-compliance-scans.md) · [11](11-fips-140-mode.md) |
+| `cs scan architecture` | [10](10-compliance-scans.md) |
 | `cs scan all` | [10](10-compliance-scans.md) |
 | `cs scan reports` | [10](10-compliance-scans.md) · [11](11-fips-140-mode.md) |
 

@@ -18,7 +18,7 @@ import time
 import uuid
 from pathlib import Path
 
-from . import __version__, agents, audit, chaos, clouds, container, creds, deps, dr, explain, finops, headliner, help as helpmod, managed, mcp, netutil, paths, platform as platformmod, provision as prov, scan, secrets, services, skills, troubleshoot, ui, undo, webui
+from . import __version__, agents, architecture, audit, chaos, clouds, container, creds, deps, dr, explain, finops, headliner, help as helpmod, managed, mcp, netutil, paths, platform as platformmod, provision as prov, scan, secrets, services, skills, troubleshoot, ui, undo, webui
 from .clouds.base import as_bool
 from .tf import Terraform, TerraformError
 
@@ -4304,6 +4304,13 @@ def _non_negative_int(value: str) -> int:
     return n
 
 
+def _architecture_days(value: str) -> int:
+    n = _positive_int(value)
+    if n > 3650:
+        raise argparse.ArgumentTypeError("at most 3650 days")
+    return n
+
+
 def _finops_days(value: str) -> int:
     n = _positive_int(value)
     if n > 365:
@@ -5919,14 +5926,65 @@ def _scan_outputs(env, made: list) -> list[str]:
     return list(dict.fromkeys(out))
 
 
+def _scan_files_env(args, settings):
+    """Local scan inputs as saved: no tool preparation, replacement answers or cloud-side registration."""
+    with _json_stdout(args):
+        _resolve_plain_env(args, settings, f"scan {args.scan_cmd}")
+        cloud = clouds.get(args.cloud)
+        name = args.env or _pick_env_name(args, cloud)
+        env = paths.Env(cloud.key, name)
+        if not env.exists() and args.env and name.startswith(cloud.key + "-"):
+            alternate = paths.Env(cloud.key, name[len(cloud.key) + 1:])
+            if alternate.exists():
+                env = alternate
+        if not env.exists():
+            raise _missing_env(args, cloud, name)
+        cfg = env.load()
+        _check_owner(env, cfg)
+        audit.attach(env)
+    return cloud, env, cfg
+
+
+def _scan_architecture(args, settings) -> int:
+    """Assess the saved configuration as-is, without preparing tools, filling answers or registering cloud access."""
+    profile = args.profile or "production"
+    if profile not in ("lab", "production"):
+        raise ui.Abort("scan architecture --profile must be lab or production.", code=2)
+    if args.host or args.framework:
+        raise ui.Abort("scan architecture does not use --host or --framework; it selects guidance for the environment's cloud.", code=2)
+    cloud, env, cfg = _scan_files_env(args, settings)
+    made = []
+    claimed = []
+    try:
+        with scan.collect() as claimed:
+            made.append(architecture.run(cloud, env, cfg, profile=profile,
+                                         max_age_days=getattr(args, "max_age_days", None) or 30,
+                                         json_output=getattr(args, "json", False)))
+    finally:
+        with _json_stdout(args):
+            produced = _scan_outputs(env, made + list(claimed))
+            if produced:
+                undo.record(env.id, f"scan architecture on {env.id}", "delete-paths", {"paths": produced}, minor=True)
+    verdict = _report_verdict(made[0])
+    return {"PASS": 0, "FAIL": 1}.get(verdict, 3)
+
+
 def cmd_scan(args, settings) -> int:
     """Exits 1 when a verdict is FAIL (or, for `all`, a scan could not run), like `cs chaos run` and `cs dr test`."""
     sub = args.scan_cmd
+    if sub == "architecture":
+        return _scan_architecture(args, settings)
+    if getattr(args, "json", False) or getattr(args, "max_age_days", None) is not None:
+        raise ui.Abort("--json and --max-age-days are available for scan architecture only.", code=2)
     if sub == "reports" and getattr(args, "last", None) is not None and args.last < 1:   # 0 would read as "none yet"
         raise ui.Abort(f"--last must be 1 or more (got {args.last}).", code=2)
     # a --host typo stops here (exit 2), before any environment, kubeconfig or tunnel work; bastion/vpn/k8s in any
     # spelling (comma-separated, repeated, any case)
     hosts = scan.parse_hosts(args.host)
+    if sub == "reports":
+        _cloud, env, _cfg = _scan_files_env(args, settings)
+        scan.show_reports(env, args.last)
+        return 0
     cluster_kinds = {"cis", "kube", "images"}
     ctx = None
     cluster_problem = None
@@ -5945,9 +6003,6 @@ def cmd_scan(args, settings) -> int:
                 ui.warn(f"Cluster checks skipped (the cluster of {env.id} is not reachable: {cluster_problem})")
             else:
                 ctx = platformmod.Cluster(cloud, env, cfg, outputs, kc)
-    if sub == "reports":
-        scan.show_reports(env, args.last)
-        return 0
     made: list = []
     claimed: list = []   # every output this run created (scan.collect): also the partial ones of a scan that failed
     errors: list = []
@@ -10880,14 +10935,16 @@ def build_parser() -> argparse.ArgumentParser:
     drp.add_argument("--auto-approve", action="store_true", help="restore / schedule / test without asking")
     drp.post_parse = _dr_post
 
-    sc = sub.add_parser("scan", help="security & compliance scans: cs scan cis | kube | images | host | stig | cloud | fips | all | reports")
-    sc.add_argument("scan_cmd", choices=["cis", "kube", "images", "host", "stig", "cloud", "fips", "all", "reports"])
+    sc = sub.add_parser("scan", help="security, compliance & architecture scans: cs scan cis | kube | images | host | stig | cloud | fips | architecture | all | reports")
+    sc.add_argument("scan_cmd", choices=["cis", "kube", "images", "host", "stig", "cloud", "fips", "architecture", "all", "reports"])
     sc.add_argument("cloud", nargs="?", choices=CLOUD_KEYS)
     sc.add_argument("-e", "--env", default=None, help=ENV_HELP)
     sc.add_argument("--host", action="append", help="host/stig/all: bastion, vpn, k8s (repeatable; default all reachable)")
-    sc.add_argument("--profile", help="host: cis (default) | stig | a full XCCDF profile id")
+    sc.add_argument("--profile", help="host: cis (default) | stig | a full XCCDF profile id; architecture: production (default) | lab")
     sc.add_argument("--framework", help="kube: kubescape frameworks (default nsa,mitre) · cloud: prowler compliance id (default newest CIS)")
     sc.add_argument("--last", type=_positive_int, default=10, help="reports: how many (default 10)")
+    sc.add_argument("--max-age-days", type=_architecture_days, default=None, help="architecture: saved evidence freshness, 1..3650 days (default 30)")
+    sc.add_argument("--json", action="store_true", help="architecture: print the complete assessment as JSON")
 
     # Pass-through commands: argparse never interprets their arguments (see _CmdParser.passthrough).
     for svc in ("databricks", "snowflake"):
@@ -11186,7 +11243,8 @@ def _dispatch(argv: list[str]) -> int:
         # troubleshoot / inventory / undo --list only read local files (troubleshoot reports missing tools itself), and
         # undo --drop only edits the undo journal: none of them needs Terraform or the hypervisor
         reads_only = args.cmd in ("troubleshoot", "inventory") or \
-            (args.cmd == "undo" and (getattr(args, "list", False) or getattr(args, "drop", False)))
+            (args.cmd == "undo" and (getattr(args, "list", False) or getattr(args, "drop", False))) or \
+            (args.cmd == "scan" and args.scan_cmd in ("architecture", "reports"))
         if args.cmd == "finops":
             # estimate is offline pure Python; cloud / k8s / report never run Terraform (they report a missing aws/az
             # CLI or kubeconfig per view): only a container user is sent into the container, for its CLIs and mounts

@@ -50,3 +50,12 @@ Complete list with descriptions: `cloudseed help outputs gcp`.
 - The default network is left in place (importing it is out of scope); recommend deleting it manually for a clean project.
 - Labels on every resource: `project`, `environment`, `owner`, `managedby`, `cloudseedenv`, `cloudseedenvid` (reconcile reads them) plus `--tag K=V`.
 - Credentials: `gcloud auth application-default login` or `GOOGLE_APPLICATION_CREDENTIALS`. Never handle key files yourself.
+
+## Well-Architected assessment
+
+Run `cloudseed scan architecture gcp --env prod --profile production --max-age-days 30 --json` to assess
+saved configuration and local evidence without cloud queries, provisioning or tool installation. The profile
+selects assessment policy, not deployment settings. Reports distinguish definite failures from missing, stale
+or manual-review evidence: PASS exits 0, FAIL 1, INCOMPLETE 3; invalid arguments exit 2. Read the
+cloudseed-architecture skill for evidence limits and next steps. `scan all` excludes this assessment.
+GCP findings map to its six Well-Architected pillars; this scoped assessment is not provider certification.

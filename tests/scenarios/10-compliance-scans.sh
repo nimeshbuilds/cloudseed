@@ -73,6 +73,16 @@ ok cs scan reports --last 5
 step "6. The cloud account"
 skip "cs scan cloud aws --env prod (prowler against a real AWS account)"
 
+step "7. Local Well-Architected assessment"
+if [[ "$SCN_LIVE" == "1" ]]; then
+  any cs scan architecture vmware --env lab --profile lab
+else
+  rc 3 cs scan architecture vmware --env lab --profile lab
+fi
+has "Well-Architected screening"
+has "INCOMPLETE|FAIL"
+check "architecture evidence is saved" bash -c "ls \"$CLOUDSEED_HOME\"/envs/vmware-lab/scans/architecture-*.json"
+
 step "Verify it worked"
 ok cs scan reports
 # the fips report of step 5 (in live mode `scan all` wrote five newer ones, so it is not among the last five)

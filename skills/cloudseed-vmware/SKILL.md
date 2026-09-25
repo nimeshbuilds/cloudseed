@@ -114,3 +114,12 @@ Complete list with defaults, generated from the Terraform: `cloudseed help varia
 - Workload VMs have no public address: reach them via `cloudseed ssh vmware --env <env>` then ssh to their private IP,
   or an SSH ProxyJump through the bastion.
 - Never copy `~/.cloudseed` (keys/state) into a VM; only the repository is synced by `provision`.
+
+## Well-Architected assessment
+
+Run `cloudseed scan architecture vmware --env lab --profile lab --max-age-days 30 --json` to assess
+saved configuration and local evidence without cloud queries, provisioning or tool installation. The profile
+selects assessment policy, not deployment settings. Reports distinguish definite failures from missing, stale
+or manual-review evidence: PASS exits 0, FAIL 1, INCOMPLETE 3; invalid arguments exit 2. Read the
+cloudseed-architecture skill for evidence limits and next steps. `scan all` excludes this assessment.
+VMware checks are local infrastructure best practices, not an official cloud framework or certification.

@@ -157,11 +157,11 @@ class Pages(unittest.TestCase):
         page = _flat(h.COMMANDS["mcp"])
         self.assertIn(f"{len(mcp.TOOLS)} tools", page)
         for part in ("update-ip", "provision", "vpn add-user/revoke/provision", "status/test/list/get/describe",
-                     "every kind except fips and reports", "input schema", "cs undo --global", "MCP_TOOL_TIMEOUT=3600000",
+                     "every kind except architecture, fips and reports", "input schema", "cs undo --global", "MCP_TOOL_TIMEOUT=3600000",
                      "1-hour tool timeout"):
             self.assertIn(part, page, part)
         readme = _flat(_read(MANUAL))
-        for part in ("MCP_TOOL_TIMEOUT=3600000", "every kind except `fips` and `reports`", "schema", "update-ip, provision"):
+        for part in ("MCP_TOOL_TIMEOUT=3600000", "every kind except `architecture`, `fips` and `reports`", "schema", "update-ip, provision"):
             self.assertIn(part, readme, part)
 
     def test_undo_and_creds_pages(self):

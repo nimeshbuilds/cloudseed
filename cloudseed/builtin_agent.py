@@ -268,7 +268,7 @@ _PASSTHROUGH = ("kubectl", "helm", "k9s", "databricks", "snowflake", "ssh", "age
 _SKILL_WORDS = skills.TASK_WORDS   # (kept under the old name)
 
 # What needs the user's approval, in words the model is given (keep in step with _approval_reason).
-APPROVAL_TEXT = ("any --auto-approve, --purge/--purge-state, provision, scans (all but fips and reports), vpn "
+APPROVAL_TEXT = ("any --auto-approve, --purge/--purge-state, provision, scans (all but architecture, fips and reports), vpn "
                  "add-user/provision/revoke/connect/disconnect, platform install/ui, chaos run/stop, dr "
                  "backup/schedule/test, mutating kubectl/helm (and options that point them at another server, identity or "
                  "local file), helm template/lint, reading cluster secrets, and databricks/snowflake commands other than "
@@ -676,7 +676,7 @@ def _approval_reason(ns: argparse.Namespace | None) -> str | None:
         return f"vpn {ns.vpn_cmd} changes this machine's network; it may also install the OpenVPN client"
     if cmd == "provision":
         return "provision runs Ansible as root on the environment's hosts"
-    if cmd == "scan" and getattr(ns, "scan_cmd", None) not in ("fips", "reports"):
+    if cmd == "scan" and getattr(ns, "scan_cmd", None) not in ("architecture", "fips", "reports"):
         return f"scan {getattr(ns, 'scan_cmd', None) or 'all'} runs cluster jobs or Ansible as root on the hosts"
     if cmd in _SUB_GATES:
         attr, verbs = _SUB_GATES[cmd]

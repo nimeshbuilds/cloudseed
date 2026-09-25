@@ -795,13 +795,17 @@ TOOLS: dict[str, dict] = {
                      "required": ["action"], "confirm_when": "backup, restore, schedule and test need confirm=true (status, backups, describe and logs do not)",
                      "destructive_when": lambda a: a.get("action") not in _DR_READ_ONLY,
                      "argv": _dr_argv},
-    "cloudseed_scan": {"description": "Security/compliance scans with saved reports: cis (kube-bench), kube (kubescape NSA/MITRE), images (trivy), host (OpenSCAP CIS), stig (DISA STIG), cloud (prowler CIS), fips (FIPS 140 verification), all, reports.",
-                       "schema": _p(kind={"type": "string", "enum": ["cis", "kube", "images", "host", "stig", "cloud", "fips", "all", "reports"]}, cloud=S_CLOUD, env=S_ENV,
-                                    profile={"type": "string", "enum": ["cis", "stig"]}, framework={"type": "string"}, hosts={"type": "string", "pattern": SCAN_HOSTS, "description": "host/stig/all: comma-separated: bastion,vpn,k8s (default: every reachable host)"}, confirm=S_CONFIRM),
-                       "required": ["kind"], "confirm_when": "every kind except fips and reports runs cluster jobs or Ansible on hosts and needs confirm=true; a scanner "
+    "cloudseed_scan": {"description": "Scans with saved reports: architecture (AWS/Azure/GCP Well-Architected screening, common guidance for VMware; local configuration and saved evidence only, no live cloud checks), cis (kube-bench), kube (kubescape NSA/MITRE), images (trivy), host (OpenSCAP CIS), stig (DISA STIG), cloud (prowler CIS), fips (FIPS 140 verification), all (security scans only), reports. Architecture returns PASS, FAIL, or INCOMPLETE when required evidence is missing or stale.",
+                       "schema": _p(kind={"type": "string", "enum": ["architecture", "cis", "kube", "images", "host", "stig", "cloud", "fips", "all", "reports"]}, cloud=S_CLOUD, env=S_ENV,
+                                    profile={"type": "string", "enum": ["production", "lab", "cis", "stig"], "description": "architecture: production (default) or lab; host/all: cis (default) or stig"},
+                                    max_age_days=_count("architecture: maximum age of saved evidence in days (default 30)", minimum=1, maximum=3650),
+                                    json={"type": "boolean", "description": "architecture: return the full assessment as JSON"},
+                                    framework={"type": "string"}, hosts={"type": "string", "pattern": SCAN_HOSTS, "description": "host/stig/all: comma-separated: bastion,vpn,k8s (default: every reachable host)"}, confirm=S_CONFIRM),
+                       "required": ["kind"], "confirm_when": "every kind except architecture, fips and reports runs cluster jobs or Ansible on hosts and needs confirm=true; a scanner "
                                                              "missing on this machine is never installed by an MCP call (it stops with the install command for the user)",
-                       "destructive_when": lambda a: a.get("kind") not in ("fips", "reports"),
+                       "destructive_when": lambda a: a.get("kind") not in ("architecture", "fips", "reports"), "json_stdout": True,
                        "argv": lambda a: ["scan", a["kind"]] + _opt_cloud(a) + _opt(a, "env", "--env") + _opt(a, "profile", "--profile") + _opt(a, "framework", "--framework")
+                                + _opt(a, "max_age_days", "--max-age-days") + (["--json"] if _on(a, "json") else [])
                                 + (["--host", ",".join(h for h in re.split(r"[\s,]+", a["hosts"]) if h)] if a.get("hosts") else []) + ["-y"]},
     "cloudseed_undo": {"description": "Undo the newest state-changing action of an environment (fifteen kept per environment, at most five of one kind): restores the previous configuration and re-applies, uninstalls what was installed, revokes, deletes backups... "
                                       "list=true shows the history with entry ids; pass cloud (+ env), or the id of the newest entry of an environment. drop=true discards that entry "
@@ -1067,7 +1071,8 @@ def _spawn(name: str, argv: list[str], env: dict, call: _Call | None = None, pro
     if split:
         out, err = texts[0].strip(), texts[1].strip()
         parsed = _NO_JSON
-        if not failed and len(out) <= MAX_JSON_OUTPUT:
+        assessment = name == "cloudseed_scan" and argv[:2] == ["scan", "architecture"] and proc.returncode in (1, 3)
+        if (not failed or assessment) and not timed_out and not cancelled and len(out) <= MAX_JSON_OUTPUT:
             try:
                 parsed = json.loads(out)
             except ValueError:
@@ -1075,8 +1080,8 @@ def _spawn(name: str, argv: list[str], env: dict, call: _Call | None = None, pro
         if parsed is not _NO_JSON:
             # the JSON on its own (a client parses it as it is), then the command line and the notes it printed
             res = {"content": [{"type": "text", "text": out},
-                               {"type": "text", "text": f"{shown}\nexit code: 0" + (f"\nnotes (stderr):\n{_clip(err)}" if err else "")}],
-                   "isError": False}
+                               {"type": "text", "text": f"{shown}\nexit code: {proc.returncode}" + (f"\nnotes (stderr):\n{_clip(err)}" if err else "")}],
+                   "isError": failed}
             if isinstance(parsed, dict):
                 res["structuredContent"] = parsed
             return res
@@ -3259,7 +3264,7 @@ TOOL_GROUPS = [
     ("Kubernetes & platform", f"cloudseed_k8s · cloudseed_node · cloudseed_platform ({' '.join(catalog.GROUPS)}) · cloudseed_kubectl · cloudseed_helm"),
     ("Access & services", "cloudseed_ssh · cloudseed_vpn · cloudseed_managed (databricks / snowflake)"),
     ("Cost & diagnosis", "cloudseed_finops (estimate / cloud bill / OpenCost) · cloudseed_troubleshoot · cloudseed_explain · cloudseed_help · cloudseed_skill"),
-    ("Resilience & compliance", "cloudseed_dr (backup / restore / drill) · cloudseed_chaos (experiments with verdicts) · cloudseed_scan (CIS / STIG / vulnerabilities / cloud / FIPS)"),
+    ("Resilience & compliance", "cloudseed_dr (backup / restore / drill) · cloudseed_chaos (experiments with verdicts) · cloudseed_scan (Well-Architected / CIS / STIG / vulnerabilities / cloud / FIPS)"),
     ("Undo & tear down", "cloudseed_undo (revert the last action, 5 deep) · cloudseed_destroy (targets / purge_state / purge)"),
 ]
 
@@ -3358,7 +3363,7 @@ def guide_lines(state: dict | None, wired: dict[str, str] | None = None, live: b
 
     sections.append(("5. Safety model (what the agent can and cannot do)", [
         "Read-only tools (list, status, output, plan, inventory, troubleshoot, finops, explain, help, kubectl get/describe/logs, helm "
-        "list/status, scan fips ...) run immediately. Reading Secrets (kubectl get secret, kubectl get --raw other than the health "
+        "list/status, scan architecture, scan fips ...) run immediately. Reading Secrets (kubectl get secret, kubectl get --raw other than the health "
         "endpoints) or release values (helm get values/all/manifest/hooks, helm status -o json/yaml, helm template/lint) is not: those "
         "can print passwords, so they need confirm=true like a change. So does a kubectl/helm option that points the tool at another "
         "server, identity or local file (--server, --kubeconfig, --context, --token, --as, get -f <url>, -o *-file ...).",

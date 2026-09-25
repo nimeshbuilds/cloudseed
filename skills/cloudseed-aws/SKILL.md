@@ -57,3 +57,12 @@ Complete list with descriptions: `cloudseed help outputs aws`.
 - With EKS, destroy first deletes what controllers created outside Terraform state (Karpenter NodePools and their instances, Gateway/Ingress/LoadBalancer NLBs, PVC-templated StatefulSets and Delete-policy EBS volumes); the cluster must be reachable (VPN or the bastion tunnel), otherwise it tells you what to delete by hand before the VPC deletion fails.
 - Credentials: `aws configure`, `aws sso login`, or `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` env vars. Never handle the values yourself.
 - Cost drivers: NAT gateway (hourly + per GB), bastion, EKS control plane + nodes, VPN host, CloudTrail/GuardDuty, AWS Config (with Security Hub). Destroying the env removes what Terraform created.
+
+## Well-Architected assessment
+
+Run `cloudseed scan architecture aws --env prod --profile production --max-age-days 30 --json` to assess
+saved configuration and local evidence without cloud queries, provisioning or tool installation. The profile
+selects assessment policy, not deployment settings. Reports distinguish definite failures from missing, stale
+or manual-review evidence: PASS exits 0, FAIL 1, INCOMPLETE 3; invalid arguments exit 2. Read the
+cloudseed-architecture skill for evidence limits and next steps. `scan all` excludes this assessment.
+AWS findings map to its six Well-Architected pillars; this scoped assessment is not provider certification.

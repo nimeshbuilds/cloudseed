@@ -42,12 +42,16 @@ The left rail holds ten views; the number keys `1` to `0` switch between them.
 | **Create** (2) | The environment wizard: pick a cloud, answer the basics, set options, review and run. A live preview shows the exact command it will run. |
 | **Environments** (3) | Each environment's card with Manage: Plan, Change settings, Update my IP, Re-provision, SSH command, Kubernetes, VPN user, Inventory, Cost, Use in terminal, Destroy. |
 | **Platform** (4) | The whole catalog by group, with filters: install, plan or uninstall a group or a single item, read the status from the cluster, expose UIs, list and add nodes, run kubectl and helm. |
-| **Resilience** (5) | Disaster recovery (DR drill, backup now, restore, schedules), chaos engineering (suites, your own workload, stop all) and security scans (everything, CIS, NSA / MITRE, vulnerabilities, host CIS, STIG, cloud CIS, FIPS). |
+| **Resilience** (5) | Disaster recovery (DR drill, backup now, restore, schedules), chaos engineering (suites, your own workload, stop all), security scans (everything, CIS, NSA / MITRE, vulnerabilities, host CIS, STIG, cloud CIS, FIPS), and Well-Architected assessments with profile and evidence age controls. |
 | **All actions** (6) | Every action as a card with a form: search it, fill it in, run it. The cards say whether an action is read-only or changes things. |
 | **Reports** (7) | The DR drill, chaos and scan reports of the selected environment with their verdicts, plus the logs of its setup, apply and destroy runs. |
 | **Agents & MCP** (8) | Turn agentic mode and the headliner brief on or off, pick the agent and model, run a task; deploy the MCP server, connect or disconnect each detected client, self-test, read the connection guide. |
 | **Credentials** (9) | The local credential vault: set, replace or remove cloud keys and API tokens (masked, never shown back). |
 | **Help** (0) | The CLI's help topics and the Explain search. |
+
+The architecture assessment uses the same [`cs scan architecture`](well-architected.md) engine as the CLI and MCP.
+It reads saved configuration and evidence without cloud access or infrastructure changes. Its reports distinguish
+`PASS`, `FAIL` and `INCOMPLETE`; missing, stale or manual-review evidence never silently passes.
 
 The top bar holds the **⌘K search**, the **environment selector** (the environment the Platform, Resilience and
 Reports views act on), **Undo**, the theme switch and the **Activity** drawer.

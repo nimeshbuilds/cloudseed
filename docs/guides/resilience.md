@@ -135,6 +135,7 @@ suites, *My workload*, *Stop all*, and every scan. Reports appear under **Report
 ## Related
 
 - [Security, scans and FIPS](security-and-fips.md): CIS, STIG, vulnerability, cloud and FIPS scans
+- [Well-Architected assessments](well-architected.md): saved configuration, recovery evidence and explicit unknowns
 - Scenarios: [backups you can trust](../scenarios/08-backups-you-can-trust.md),
   [chaos engineering](../scenarios/09-chaos-engineering.md)
 - `cs help dr`, `cs help chaos`, `cs explain dr`, `cs explain chaos`

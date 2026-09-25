@@ -5,6 +5,10 @@ description: "cloudseed's security model, CIS, STIG, vulnerability, cloud and FI
 
 # Security, scans and FIPS
 
+For architecture across reliability, operations, performance, cost and sustainability as well as security, use the
+separate [Well-Architected assessment](well-architected.md): `cs scan architecture`. It evaluates saved configuration
+and local evidence, reports unknowns explicitly, and is excluded from the `scan all` security suite below.
+
 Secure defaults are the point of cloudseed. Every environment follows the same rules, every scan saves a report with
 a verdict, and FIPS 140 mode is one switch for the whole environment.
 

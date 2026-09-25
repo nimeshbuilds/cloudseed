@@ -78,6 +78,10 @@ the core `cloudseed` driver plus `aws`, `gcp`, `azure`, `vmware`, `destroy`, `pl
 `architecture`. They tell an agent how to act safely: plan first, restate what a destroy removes, never read credential
 files, hand human-only commands back to you.
 
+The architecture skill also drives [Well-Architected assessments](well-architected.md) with `cs scan architecture`.
+Ask an agent to assess an existing environment and explain both findings and unknown evidence; the assessment is
+local and does not need infrastructure-change approval. It shares the CLI, MCP and console report format.
+
 ```bash
 cs skill list                                # the skills and where each agent keeps them
 cs skill show destroy                        # print one
@@ -97,7 +101,7 @@ The built-in agent can only run `cloudseed` commands: no shell, no file access.
 - **Refused**, because they change your machine or need a terminal: `ssh`, `k9s`, `install`,
   `deps install|image|bundle|runtime`, `mcp`, `ui`, `creds`, `use`, `enable`, `disable`, `model`, `skill install` and
   `agentic`. The agent gets exit code 2 and the command for you to run.
-- **Paused for your approval**: anything with `--auto-approve` or `--purge`, `provision`, scans (all but `fips` and
+- **Paused for your approval**: anything with `--auto-approve` or `--purge`, `provision`, scans (all but `architecture`, `fips` and
   `reports`), VPN user and connection changes, platform install and UI exposure, chaos runs, DR backups, schedules and
   drills, mutating `kubectl` / `helm`, reading cluster secrets, and Databricks / Snowflake commands other than status
   and test.

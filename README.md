@@ -36,6 +36,9 @@ and Ansible that you own and can read.
   time. Chaos suites and CIS / STIG scans end in PASS or FAIL.
 - **Drive it your way.** Use the CLI, a local web console, an MCP server for Claude Code, Cursor, Codex or VS Code, or
   an AI agent that waits for your approval before it changes anything.
+- **Assess architectural readiness.** `cs scan architecture` checks saved configuration and evidence against
+  provider guidance, with production/lab policies and explicit unknowns. Use it from the CLI, console, MCP or skills.
+  [Well-Architected guide](https://nimeshbuilds.github.io/cloudseed/guides/well-architected/).
 
 The CLI needs only Python 3.9+ and its standard library. No telemetry. Apache-2.0.
 
@@ -127,9 +130,9 @@ time skew, each with a steady-state hypothesis and a PASS / FAIL / INCONCLUSIVE 
 <tr>
 <td valign="top">
 
-**Compliance scans**<br>
+**Security and architecture scans**<br>
 `cs scan <type>`: `cis` (kube-bench), `kube` (kubescape), `images` (trivy), `host` and `stig` (OpenSCAP CIS and DISA
-STIG profiles), `cloud` (prowler) and `fips`, with saved reports.
+STIG profiles), `cloud` (prowler), `fips` and `architecture` (local Well-Architected assessment), with saved reports.
 
 </td>
 <td valign="top">

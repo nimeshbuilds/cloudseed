@@ -50,3 +50,12 @@ Complete list with descriptions: `cloudseed help outputs azure`.
 - Credentials: `az login` (the Azure CLI must then be installed: Terraform reads that login through it; a login under `AZURE_CONFIG_DIR` is honoured) or the `ARM_CLIENT_ID`/`ARM_CLIENT_SECRET`/`ARM_TENANT_ID`/`ARM_SUBSCRIPTION_ID` env vars (service principal). A system-assigned managed identity needs only `ARM_USE_MSI=true`; OIDC needs `ARM_CLIENT_ID` plus `ARM_USE_OIDC=true` (an OIDC token alone does nothing). Never handle the values yourself.
 - Tag names are case-insensitive: `--tag environment=x` sets `Environment` (and `--tag Environment=...` reaches every resource), a later run's spelling replaces a saved one, and two spellings in one run are refused.
 - `--region` is checked against the Azure cloud `ARM_ENVIRONMENT` selects: `usgov*` / `usdod*` locations need `ARM_ENVIRONMENT=usgovernment`, `china*` need `ARM_ENVIRONMENT=china` (then also `az cloud set` and `az login`), and the default location follows it (`eastus`, `usgovvirginia` or `chinanorth3`). When `az` is logged in to that cloud its location list decides (an unknown location is refused, with a did-you-mean); otherwise an unknown location only gets a warning, so a location newer than cloudseed still works.
+
+## Well-Architected assessment
+
+Run `cloudseed scan architecture azure --env prod --profile production --max-age-days 30 --json` to assess
+saved configuration and local evidence without cloud queries, provisioning or tool installation. The profile
+selects assessment policy, not deployment settings. Reports distinguish definite failures from missing, stale
+or manual-review evidence: PASS exits 0, FAIL 1, INCOMPLETE 3; invalid arguments exit 2. Read the
+cloudseed-architecture skill for evidence limits and next steps. `scan all` excludes this assessment.
+Azure maps to five Well-Architected pillars; sustainability is separate additional guidance.
