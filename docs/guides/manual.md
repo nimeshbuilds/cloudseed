@@ -64,9 +64,9 @@ they never overlap.
 NIC, acting as gateway; cloud-init bootstrapped and Ansible-hardened like a cloud bastion) and optional private
 workload VMs (cloud-init bootstrapped; they are not Ansible-hardened, but VMs created by this version turn on
 unattended security updates themselves). Kubernetes nodes are hardened by the Kubernetes play and deliberately not
-auto-updated. cloudseed detects Fusion Pro 13+ (macOS) or Workstation Pro 17+ (Linux; Windows is experimental, since
-Ansible has no native Windows control node; older releases are refused for new environments) and the host
-architecture, downloads the matching official cloud image (Ubuntu 24.04/22.04, Debian 12 - Debian's `generic` image,
+auto-updated. cloudseed detects Fusion Pro 13+ (macOS) or Workstation Pro 17+ (Linux; older releases are refused for
+new environments). Windows detection is experimental; native environment changes are unsupported because locking
+and a native Ansible control node are unavailable. Cloudseed detects the host architecture, downloads the matching official cloud image (Ubuntu 24.04/22.04, Debian 12 - Debian's `generic` image,
 since the `genericcloud` kernel has no AHCI driver for the seed ISO; qcow2 converted with qemu-img), and drives
 everything through **its own Terraform provider**
 (`providers/vmdesktop`, Go; built once into `~/.cloudseed/providers`, which needs Go >= 1.24: `cloudseed doctor`

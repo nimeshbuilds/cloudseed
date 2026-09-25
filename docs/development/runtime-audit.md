@@ -253,11 +253,11 @@ In `mcp._spawn`, every chunk of child output is appended to a list and joined/re
 
 Recommended fix: reuse a bounded head/tail capture for MCP, spill durable logs with byte/retention limits, put bounded queues or resumable offsets behind SSE, and use a semaphore plus overload responses for expensive operations. Verify with a noisy synthetic child and a stalled subscriber; do not use real cloud operations for this test.
 
-### Open: environment locking silently falls back to no locking
+### Fixed: environment locking silently fell back to no locking
 
-`paths.Env._acquire` returns `None` when `fcntl` is unavailable, opening the lock file fails, or a filesystem rejects flock. This includes the Windows path. Mutating operations then proceed unlocked even though the normal CLI/UI/MCP design relies on serialization.
+`paths.Env._acquire` now aborts before an environment-changing command starts if platform locking is unavailable, the lock directory or file cannot be opened, the filesystem rejects flock, or lock-holder metadata cannot be written. Failed acquisition closes its file handle; it never advertises an inherited lock. Existing process contention, thread re-entry and verified parent-process inheritance continue to work.
 
-Recommended fix: implement a cross-platform lock primitive and make inability to acquire a supported mutation lock an explicit error. Test two independent subprocesses against one temporary environment on every supported OS. Terraform backend locks alone do not protect configuration, local VM files, provisioning, or platform state.
+Regression tests cover filesystem/permission failures, metadata writes, handle release, and missing platform support. Existing tests use independent subprocesses to verify contention, crash recovery and inherited locking. Discovery and cached configuration remain available without locking. Native Windows environment changes are explicitly unsupported pending a locking and Ansible control-node implementation; provider cross-compilation is not proof of native Windows support.
 
 ### Open: external-agent safety needs accurately scoped claims
 

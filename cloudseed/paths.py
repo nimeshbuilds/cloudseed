@@ -21,7 +21,7 @@ from . import ui
 
 try:
     import fcntl
-except ImportError:  # Windows: no flock; Env.lock() then does not lock
+except ImportError:  # Native Windows has no flock; environment mutations are refused.
     fcntl = None  # type: ignore[assignment]
 
 IS_BUNDLE = bool(getattr(sys, "frozen", False)) and hasattr(sys, "_MEIPASS")
@@ -510,7 +510,8 @@ class Env:
 
         flock-based, so a crashed run never leaves it held. Re-entrant within the thread that holds it, and for
         cloudseed processes that run starts (they inherit CLOUDSEED_ENV_LOCKS). The lock file lives in cloudseed's
-        home, not the working directory, so it also covers a first setup whose directory does not exist yet."""
+        home, not the working directory, so it also covers a first setup whose directory does not exist yet.
+        Inability to create, acquire or record this lock aborts the command before entering the mutation body."""
         me = threading.get_ident()
         with _LOCKS_GUARD:
             held = _LOCKS.get(self.id)
@@ -526,7 +527,7 @@ class Env:
                     held["depth"] -= 1
             return
         fh = self._acquire(action, wait)
-        if fh is None:                            # cannot lock here (no flock, read-only home) or the parent holds it
+        if fh is None:                            # a verified parent process already holds the lock
             yield self
             return
         with _LOCKS_GUARD:
@@ -555,12 +556,14 @@ class Env:
 
     def _acquire(self, action: str, wait: float):
         if fcntl is None:
-            return None
+            raise ui.Abort(f"Cannot lock {self.id}: this platform has no supported environment locking. "
+                           "Run environment-changing commands from macOS or Linux; native Windows mutation is unsupported.")
         try:
             self.lock_path().parent.mkdir(parents=True, exist_ok=True)
             fh = open(self.lock_path(), "a+")
-        except OSError:
-            return None
+        except OSError as e:
+            raise ui.Abort(f"Cannot open the environment lock for {self.id} at {self.lock_path()}: {e}. "
+                           "Check the lock directory's permissions and available space before retrying.") from e
         deadline = time.monotonic() + max(0.0, float(wait or 0))
         while True:
             try:
@@ -569,7 +572,8 @@ class Env:
             except OSError as e:
                 if e.errno not in (errno.EAGAIN, errno.EACCES, errno.EWOULDBLOCK):
                     fh.close()
-                    return None                   # a filesystem without flock: run unlocked rather than not at all
+                    raise ui.Abort(f"Cannot acquire the environment lock for {self.id} at {self.lock_path()}: {e}. "
+                                   "Use a writable filesystem that supports file locking before retrying.") from e
             holder = self.lock_holder()
             if holder.get("pid") not in (None, os.getpid()) and _inherited_locks().get(self.id) == holder.get("pid"):
                 fh.close()
@@ -588,6 +592,8 @@ class Env:
             fh.write(json.dumps({"pid": os.getpid(), "action": action or " ".join(sys.argv[1:3]) or "",
                                  "since": datetime.now(timezone.utc).isoformat(timespec="seconds")}) + "\n")
             fh.flush()
-        except OSError:
-            pass
+        except OSError as e:
+            fh.close()
+            raise ui.Abort(f"Cannot record the environment lock for {self.id} at {self.lock_path()}: {e}. "
+                           "Check the lock directory's permissions and available space before retrying.") from e
         return fh

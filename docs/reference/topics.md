@@ -152,8 +152,8 @@ After `setup` applies, `provision` copies this repo to the bastion and VPN host 
 Same shape as a cloud environment, on your own machine:
 
 ```text
-  - VMware Fusion Pro 13+ (macOS, Intel or Apple Silicon) or Workstation Pro 17+ (Linux; Windows is experimental:
-    Ansible has no native Windows control node) - both free; older releases are refused for new environments.
+  - VMware Fusion Pro 13+ (macOS, Intel or Apple Silicon) or Workstation Pro 17+ (Linux; Windows detection is
+    experimental, and native environment changes are unsupported: no locking or native Ansible control node) - both free; older releases are refused for new environments.
     cloudseed detects which one is installed (VMWARE_HOME when set: a wrong one is reported by name), its version, and
     the host architecture, and picks matching guest images (arm64 guests on Apple Silicon, amd64 elsewhere).
   - A bastion VM with two NICs: NAT (reachable from your machine) and a private host-only network it

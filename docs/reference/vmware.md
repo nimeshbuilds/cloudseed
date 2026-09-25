@@ -17,8 +17,9 @@ What `cloudseed setup vmware` builds, every variable you can set with `--var`, a
 
 `cloudseed setup vmware --env <env>` builds on the local machine:
 
-- **Host detection**: Fusion Pro on macOS, Workstation Pro on Linux (and Windows, experimental: Ansible has no native
-  Windows control node); host arch decides guest arch (Apple Silicon -> arm64 guests only, Intel/AMD -> amd64).
+- **Host detection**: Fusion Pro on macOS, Workstation Pro on Linux. Windows detection is experimental;
+  native Windows environment changes are refused because environment locking and a native Ansible control node are
+  unavailable. Host arch decides guest arch (Apple Silicon -> arm64 guests only, Intel/AMD -> amd64).
   Fusion Pro 13 / Workstation Pro 17 or newer: older releases are refused for new environments. A `VMWARE_HOME` that
   does not hold vmrun is reported by name. `cloudseed doctor vmware` shows what was found.
 - **Private network**: by default VMware's built-in host-only vmnet (vmnet1 on Fusion) is adopted as it is: its

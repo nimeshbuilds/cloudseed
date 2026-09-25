@@ -94,7 +94,7 @@ FEATURES: dict[str, dict] = {
         "commands": ["cs setup <cloud> --var enable_vpn=true", "cs vpn add-user|users|revoke|connect|disconnect|status <cloud> --env X [name]"],
     },
     "vmware": {
-        "what": "Local target on Fusion Pro 13+ / Workstation Pro 17+ (older releases are refused for new environments; Windows: experimental) "
+        "what": "Local target on Fusion Pro 13+ / Workstation Pro 17+ (older releases are refused for new environments; Windows: experimental detection only; native environment changes are unsupported) "
                 "through cloudseed's own Terraform provider (providers/vmdesktop, "
                 "Go): the private network adopts VMware's built-in host-only vmnet (its subnet and DHCP setting; VMs use fixed IPs below the DHCP pool: "
                 "bastion .2, workloads .10+, control planes .20-.39, workers .40-.99; .100-.127 are kept for MetalLB's LoadBalancer pool) unless --cidr "

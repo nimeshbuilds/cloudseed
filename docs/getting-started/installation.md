@@ -13,7 +13,7 @@ and only after you agree.
 
 | | Requirement | Notes |
 |---|---|---|
-| Operating system | macOS or Linux | The VMware target also runs on Windows with Workstation Pro, as an experimental option (Ansible has no native Windows control node). |
+| Operating system | macOS or Linux | Native Windows environment-changing commands are unsupported: the environment lock requires POSIX file locking, and Ansible has no native Windows control node. Discovery and cached configuration remain available. |
 | Python | **3.9 or newer** | The launcher checks the version and tells you how to upgrade. Nothing is `pip install`ed for the core CLI. |
 | Terraform | **1.10 or newer** | Required for every target (S3 native state locking needs 1.10). cloudseed installs it for you: `cloudseed install terraform`. |
 | OpenSSH | `ssh` and `ssh-keygen` | Preinstalled on macOS and most Linux distributions. |

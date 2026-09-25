@@ -40,8 +40,9 @@ environment health report, and reproducible release evidence alongside the items
   mode today.
 - **More local hypervisors**: the VMware target is built on cloudseed's own Terraform provider; the same approach
   could cover other desktop hypervisors if there is demand.
-- **Windows hosts**: VMware Workstation on Windows is experimental today because Ansible has no native Windows control
-  node; a supported path (for example through WSL) is being explored.
+- **Windows hosts**: VMware Workstation detection is experimental. Native Windows environment-changing commands are
+  refused until a supported environment lock and Ansible control-node path exist. A supported path (for example
+  through WSL) is being explored; it is not currently verified.
 
 ## Not planned
 
