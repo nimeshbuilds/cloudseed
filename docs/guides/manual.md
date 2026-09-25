@@ -155,6 +155,12 @@ when Kubernetes is turned on, and only warns for a cluster that already runs the
   non-FIPS environments), `all` (FIPS verification only on FIPS environments). `--host bastion,vpn,k8s` picks the hosts
   (comma-separated; an unknown value exits 2). Reports under `<workdir>/scans/`, raw tool output
   under `<workdir>/scans/raw/`; `cs scan` exits 1 when a verdict is FAIL or `scan all` could not run a scan.
+- **Well-Architected assessment** (`cs scan architecture <cloud> --env NAME --profile production --max-age-days 30 --json`):
+  evaluates saved configuration and local evidence, with provider pillar mappings, findings and remediation.
+  `--profile lab` relaxes production availability expectations. No cloud queries, installations or infrastructure
+  changes; reports go under `<workdir>/scans/`. PASS exits 0, FAIL 1, INCOMPLETE 3 for missing/stale/manual evidence,
+  invalid arguments 2. This scoped assessment is not live verification or certification. It is explicit and excluded
+  from `scan all`. See [Well-Architected assessments](well-architected.md) for the CLI, MCP, console and skill workflows.
 - **FIPS 140 mode** (`--var fips_mode=true` at creation): FIPS endpoints for AWS APIs and the S3 backend, Bottlerocket
   FIPS AMIs on EKS, `fips_enabled` AKS node pools, COS on GKE, Ubuntu Pro FIPS images for the GCP/Azure bastion and VPN
   host, AL2023 `fips-mode-setup` on the AWS bastion, Ubuntu Pro `fips-updates` on the AWS VPN host and on VMware
@@ -234,6 +240,7 @@ cloudseed dr status|backup|restore|backups|schedule|test [name] [<cloud> --env N
 cloudseed dr describe|logs backup|restore <name> [--details] [<cloud> --env N]      # Velero's view of one backup / restore
 cloudseed chaos run|list|status|stop|report [<cloud> --env N]      # Chaos Mesh experiments with verdicts
 cloudseed scan cis|kube|images|host|stig|cloud|fips|all|reports [<cloud> --env N]   # compliance + vulnerability scans
+cloudseed scan architecture [<cloud> --env N] [--profile production|lab] [--max-age-days 30] [--json]
 cloudseed undo [<cloud> --env <name> | --global | --id ID] [--drop] [--list]   # revert (or drop) the previous action
 cloudseed creds list|set|unset|clear  ·  cloudseed enable|disable agentic|headliner|mcp|ui
 cloudseed list | doctor [cloud] | explain [name] [--json] | help [command|topic]
@@ -314,7 +321,7 @@ cloudseed disable agentic
   and `mcp` are refused, and so are `ssh`, `k9s` (they need your terminal) and `mcp serve`; their read-only forms work
   (`creds list`, `model`, `use list`, `install list`, `ui status|logs`, `mcp status|guide|tools|config|test|logs`,
   `deps status`, `skill list|show`). Commands that change things
-  pause for your approval: any `--auto-approve`, `--purge*`, `provision`, scans (all but `fips` and `reports`), vpn
+  pause for your approval: any `--auto-approve`, `--purge*`, `provision`, scans (all but `architecture`, `fips` and `reports`), vpn
   add-user/provision/revoke/connect/disconnect, platform install/ui, chaos run/stop, dr backup/schedule/test, mutating
   kubectl/helm (including options that point them at another server, identity or local file), helm template/lint,
   reading cluster secrets (`kubectl get secret` / `--raw`, `helm get values|all|manifest|hooks`,
@@ -329,6 +336,7 @@ cloudseed disable agentic
 - **Skills**: `skills/` holds `SKILL.md` files in the Agent Skills format used by Claude Code, Codex, Gemini CLI and
   others: `cloudseed` (the driver) plus `cloudseed-aws`, `-gcp`, `-azure`, `-vmware`, `-destroy`, `-platform` (env,
   nodes, catalog, DR, chaos, scans), `-finops`, `-managed` (Databricks/Snowflake) and `-architecture`
+  (Well-Architected assessments and implementation questions)
   (`cloudseed skill list` shows them, `cloudseed skill show <name>` prints one).
   `cloudseed skill install [names] [--agent claude|codex|gemini|grok] [--project] [--dir PATH]` copies them (all
   bundled skills without names; short names such as `aws`, `vmware`, `destroy` or `platform` work too) where the agent
@@ -393,7 +401,7 @@ ansible/                   playbooks bastion.yml, vpn.yml, kubernetes.yml, scan.
                            roles: common, hardening, tools, fips, openscap, openvpn, tailscale, k8s_common, rke2, kubeadm
 bin/cloudseed              launcher (also the PyInstaller entry point)
 cloudseed/                 CLI package (stdlib only): cli, help, explain, clouds/{aws,gcp,azure,vmware}, tf, reconcile,
-                           deps, container, provision, localvm, services, platform, managed, finops, dr, chaos, scan,
+                           deps, container, provision, localvm, services, platform, managed, finops, dr, chaos, scan, architecture,
                            troubleshoot, audit, undo, creds, secrets, skills, agents, builtin_agent, headliner, mcp,
                            webui + web/ (console assets), netutil, paths, ui
 terraform/<cloud>/         stack module: main.tf + modules/{network,bastion,security-baseline,kubernetes,vpn}
@@ -543,7 +551,7 @@ troubleshoot, teardown).
   `destructiveHint` and refuses to run without `confirm=true`, so the agent has to ask you first: setup with apply,
   apply, destroy, update-ip, provision, node add/remove/scale, platform install/uninstall/ui, vpn
   add-user/revoke/provision, ssh commands, install, mutating kubectl/helm, databricks/snowflake commands other than
-  status/test/list/get/describe, scans (every kind except `fips` and `reports`), dr backup/restore/schedule/test, chaos
+  status/test/list/get/describe, scans (every kind except `architecture`, `fips` and `reports`), dr backup/restore/schedule/test, chaos
   run/stop and undo (`--drop` included). Reading Kubernetes Secrets or helm release values
   (`helm get values|all|manifest|hooks`, `helm status -o json|yaml`) needs `confirm=true` too: they can print
   passwords. Global actions

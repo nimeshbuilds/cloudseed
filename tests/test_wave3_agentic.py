@@ -111,7 +111,7 @@ class ApprovalRuleTests(unittest.TestCase):
                   "scan images", "scan cloud aws", "scan all", "vpn revoke aws bob", "vpn connect aws"):
             with self.subTest(cmd=c):
                 self.assertTrue(builtin_agent.is_destructive(shlex.split(c)))
-        for c in ("scan fips aws", "scan reports aws", "vpn users aws", "vpn status aws"):
+        for c in ("scan architecture aws", "scan fips aws", "scan reports aws", "vpn users aws", "vpn status aws"):
             with self.subTest(cmd=c):
                 self.assertFalse(builtin_agent.is_destructive(shlex.split(c)))
         self.assertIn("certificate", _reason("vpn add-user aws bob"))
@@ -191,7 +191,7 @@ class ApprovalRuleTests(unittest.TestCase):
 
     def test_system_prompt_states_the_rules(self):
         sp = builtin_agent.system_prompt("destroy the aws dev env")
-        for part in ("provision", "scans (all but fips and reports)", "vpn add-user", "run the preview first",
+        for part in ("provision", "scans (all but architecture, fips and reports)", "vpn add-user", "run the preview first",
                      "without a terminal they are refused", builtin_agent.PREVIEW_TEXT):
             self.assertIn(part, sp)
         self.assertIn('<skill name="cloudseed-destroy">', sp)

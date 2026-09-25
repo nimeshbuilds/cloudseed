@@ -5,14 +5,14 @@ description: "Compliance scans with cloudseed: CIS Kubernetes Benchmark (kube-be
 
 # 10 · Compliance scans
 
-**Outcome:** every scan cloudseed knows run against your cluster and hosts: the CIS Kubernetes Benchmark
+**Outcome:** the security scan suite runs against your cluster and hosts: the CIS Kubernetes Benchmark
 (kube-bench, the right profile per distro), NSA + MITRE ATT&CK posture (kubescape), vulnerabilities in running images
 (trivy), OpenSCAP CIS and DISA STIG profiles on the bastion and the nodes, and FIPS 140 verification; each with a
 verdict, JSON and Markdown reports, and an exit code your CI can use.
 
 !!! success "Verified live on VMware Fusion 13.6"
     [`tests/scenarios/10-compliance-scans.sh`](https://github.com/nimeshbuilds/cloudseed/blob/main/tests/scenarios/10-compliance-scans.sh)
-    runs every scan below against the scenario 05 cluster and its hosts with `CLOUDSEED_LIVE=1`. Without it, it runs
+    runs the security scans below against the scenario 05 cluster and its hosts with `CLOUDSEED_LIVE=1`. Without it, it runs
     the FIPS verification and the reports list offline and checks that the cluster and host scans say there is
     nothing to scan yet. `scan cloud` needs cloud credentials (see [04](04-azure-private-aks.md)).
 
@@ -116,7 +116,7 @@ cs scan reports --last 5
 [11](11-fips-140-mode.md)), followed by how many of its checks would fail. On the deployed lab it checks more than the
 configuration and the SSH key: every host over SSH (kernel FIPS mode, the OpenSSL FIPS provider, sshd's algorithms,
 Ubuntu Pro FIPS), the cluster's nodes and each installed platform item's FIPS class, so most checks fail and the count
-depends on what you have installed. `scan all` runs everything applicable and prints a summary; it exits 1 when a
+depends on what you have installed. `scan all` runs applicable security scans and prints a summary; it exits 1 when a
 verdict is FAIL or a scan could not run.
 
 ??? example "Expected output of `cs scan fips vmware --env lab` on a non-FIPS environment (abbreviated)"
@@ -144,6 +144,21 @@ cs scan cloud aws --env prod
 prowler runs the newest CIS benchmark for the provider against the account, project or subscription of a cloud
 environment (in an AWS FIPS environment, only its region, through the FIPS endpoints). `--framework` picks another
 prowler compliance id.
+
+## Step 7: Assess architecture using local evidence
+
+```bash
+cs scan architecture vmware --env lab --profile lab --max-age-days 30 --json
+```
+
+This separate assessment reads saved configuration and local evidence without querying the cluster or cloud,
+installing tools or changing infrastructure. Cloud environments use `aws`, `gcp` or `azure` with the appropriate
+`--env`; the default profile is `production`. VMware uses local best practices, not an official cloud framework.
+
+Expect explicit findings and unknown evidence: `PASS` exits 0, `FAIL` exits 1, and missing, stale or manual-review
+evidence gives `INCOMPLETE` / exit 3 when there are no definite failures. An assessment is not live verification.
+It is excluded from `scan all`. The earlier scenario script exercises security scans; architecture has its own
+automated tests. See the [Well-Architected guide](../guides/well-architected.md) for MCP, console and skill access.
 
 ## Verify it worked
 

@@ -56,6 +56,7 @@ call it yourself.
 | Disaster recovery | `cloudseed dr status\|backups\|backup [name]\|restore <backup>\|schedule <name> --cron "0 2 * * *"\|test\|describe\|logs backup\|restore <name> [--cloud <cloud>] [--env dev]` (Velero; cron in UTC; `cs platform install velero` creates the bucket + identity in the cloud first) |
 | Chaos engineering | `cloudseed chaos run [basic\|network\|stress\|full\|<experiment>...] [--target ns/deploy] [--cloud <cloud>] [--env dev]`, `cloudseed chaos list\|status\|stop\|report` (PASS/FAIL report per experiment) |
 | Security scans | `cloudseed scan cis\|kube\|images\|host\|stig\|cloud\|fips\|all [<cloud> --env dev]`, `cloudseed scan reports` (kube-bench, kubescape, trivy, OpenSCAP CIS/STIG, prowler, FIPS verifier) |
+| Well-Architected assessment | `cloudseed scan architecture <cloud> --env prod --profile production --max-age-days 30 --json` (local configuration and saved evidence; `--profile lab` for a lab; see cloudseed-architecture skill) |
 | FIPS mode | `cloudseed setup <cloud> --env dev --var fips_mode=true` (new envs only; RSA-4096 SSH keys; VMware, and AWS with a VPN host, need `UBUNTU_PRO_TOKEN`; kubeadm/tailscale/ed25519 refused), verify with `cloudseed scan fips` |
 | Undo | `cloudseed undo [<cloud> --env dev] [--auto-approve]`, `cloudseed undo --list`, `cloudseed undo --id ID` (that entry, once it is the newest of its environment), `cloudseed undo --id ID --drop` (discard a step that can never succeed). Fifteen undo points per env (at most five of one kind; reports and scans have five more of their own); after that destroy and start over. Global entries (settings, agents, MCP, UI, credentials: `cloudseed undo --global`) are the user's only - you cannot undo them |
 | Web console | `cloudseed ui status\|logs` (read-only). Human-only - give the user the command: `cloudseed enable ui` (local, token-protected console with every action as a button), `cloudseed ui [open\|start\|stop\|restart\|token]`, `cloudseed disable ui` |
@@ -106,6 +107,12 @@ data is `cloudseed_explain` with `format=json` or the resource `cloudseed://expl
 console, so quote it when you explain something to them.
 
 ## Workflow
+
+For an architecture assessment, use `cloudseed scan architecture` directly on the selected saved environment.
+It queries no clouds and installs no tools; it saves reports. PASS / exit 0 covers the assessed checks only,
+FAIL / 1 means definite findings, INCOMPLETE / 3 means missing/stale/manual evidence, and invalid arguments exit 2.
+Do not treat INCOMPLETE as success or run infrastructure changes to make an assessment pass. `scan all` remains
+the security suite; the architecture assessment must be requested explicitly.
 
 1. Run `cloudseed list` and `cloudseed doctor <cloud>` to learn what exists and whether credentials are present.
    If credentials are missing, tell the user the login command printed by doctor — do not attempt to obtain credentials yourself.

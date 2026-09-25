@@ -183,7 +183,7 @@ FEATURES: dict[str, dict] = {
                      "arguments checked against each tool's input schema before anything runs",
                      "confirm=true for destructive tools: setup apply, apply, destroy, update-ip, provision, node, platform install/uninstall/ui, vpn "
                      "add-user/revoke/provision, ssh commands, install, mutating kubectl/helm, databricks/snowflake beyond status/test/list/get/describe, "
-                     "scans other than fips/reports, dr, chaos, undo; reading Kubernetes Secrets or helm get values|all|manifest|hooks too",
+                     "scans other than architecture/fips/reports, dr, chaos, undo; reading Kubernetes Secrets or helm get values|all|manifest|hooks too",
                      "meta commands (agentic, enable/disable, use, model, mcp, ui, creds) are not tools; global actions are undone by the user only "
                      "(cs undo --global or the web console), never through cloudseed_undo",
                      "long calls: 1-hour tool timeout written for Codex / Gemini CLI; Claude Code: MCP_TOOL_TIMEOUT=3600000"],
@@ -242,14 +242,32 @@ FEATURES: dict[str, dict] = {
                 "(operator reports or one-off), OpenSCAP + SCAP Security Guide over SSH (CIS / DISA STIG per host OS), prowler (cloud CIS), and a "
                 "cloudseed FIPS verifier (N/A on non-FIPS environments); `cs scan all` runs what applies (FIPS only on FIPS environments). "
                 "STIG content exists for Ubuntu 24.04, Ubuntu 22.04 (Ubuntu Pro) and RHEL 8/9: the AL2023 and Debian 12 bastions report n/a. "
-                "Exit 1 when a verdict is FAIL or `scan all` could not run a scan.",
-        "files": ["cloudseed/scan.py", "ansible/scan.yml + roles/openscap"],
+                "Exit 1 when a verdict is FAIL or `scan all` could not run a scan. `cs scan architecture` separately assesses saved "
+                "configuration and local evidence against Well-Architected guidance; it never queries or changes cloud resources.",
+        "files": ["cloudseed/scan.py", "cloudseed/architecture.py", "ansible/scan.yml + roles/openscap"],
         "state": ["<workdir>/scans/<kind>-<run>.json/.md", "<workdir>/scans/raw/ (raw tool output)", "<workdir>/scans/openscap-<run>/<host>/report.html",
                   "~/.cloudseed/venv-prowler",
                   "kubescape / trivy: found on PATH, else installed with Homebrew, else into ~/.cloudseed/bin",
                   "scanners (kubescape, trivy, prowler) are installed only on the user's own run: agent and MCP sessions stop "
                   "with the install command instead"],
-        "commands": ["cs scan all", "cs scan cis", "cs scan kube", "cs scan images", "cs scan host --profile stig", "cs scan stig", "cs scan cloud", "cs scan fips", "cs scan reports"],
+        "commands": ["cs scan all", "cs scan cis", "cs scan kube", "cs scan images", "cs scan host --profile stig", "cs scan stig", "cs scan cloud", "cs scan fips", "cs scan architecture --profile production --json", "cs scan reports"],
+    },
+    "architecture": {
+        "what": "A local Well-Architected assessment for an existing environment, using saved configuration and evidence. "
+                "AWS and GCP map to six pillars; Azure maps to five pillars with sustainability as separate guidance. "
+                "VMware uses local infrastructure best practices, not an official cloud framework. Production is the default "
+                "assessment profile; lab relaxes production availability expectations without converting unknown evidence to a pass. "
+                "No cloud API queries, provisioning or scanner installation. Configuration describes intent, not verified deployed state.",
+        "files": ["cloudseed/architecture.py", "cloudseed/scan.py", "skills/cloudseed-architecture/SKILL.md"],
+        "state": ["<workdir>/config.json and saved local evidence are inputs",
+                  "<workdir>/scans/architecture-<run>.json/.md are the assessment reports"],
+        "controls": ["Evidence freshness defaults to 30 days (--max-age-days)",
+                     "Missing, stale and manual-review evidence remains unknown, never a silent pass",
+                     "PASS exits 0; definite findings give FAIL / 1; otherwise unresolved evidence gives INCOMPLETE / 3; invalid arguments exit 2",
+                     "Provider guidance mapping is scoped; this is not provider certification or a complete organisational review",
+                     "Available through the CLI, cloudseed_scan MCP tool, console scan form and bundled architecture skill"],
+        "commands": ["cs scan architecture aws --env prod --profile production --max-age-days 30 --json",
+                     "cs scan architecture vmware --env lab --profile lab", "cs scan reports", "cs skill show architecture"],
     },
     "undo": {
         "what": "A journal (~/.cloudseed/undo.json, 0600) of the last fifteen state-changing actions per environment and fifteen global ones, "
@@ -369,7 +387,8 @@ TITLES: dict[str, str] = {
     "fips": "FIPS 140 mode",
     "chaos": "Chaos engineering: experiments with a verdict",
     "dr": "Disaster recovery: Velero backups, restores and drills",
-    "scan": "Security scans: CIS, NSA / MITRE, images, STIG, cloud, FIPS",
+    "scan": "Scans: security, compliance and Well-Architected assessments",
+    "architecture": "Well-Architected: configuration and saved-evidence assessment",
     "undo": "Undo: a journal of inverse actions",
     "ui": "Web console: the local UI",
     "audit": "Audit trail: logs, inventory and crash logs",
@@ -397,7 +416,8 @@ SUMMARIES: dict[str, str] = {
     "feature fips": "fips_mode=true builds the whole environment for FIPS 140: endpoints, images, hosts, algorithms and a gated platform catalog.",
     "feature chaos": "Chaos Mesh experiments against a canary or your Deployment, with an availability hypothesis and a PASS / FAIL report.",
     "feature dr": "Velero backups to storage the stack creates, restores, schedules, and automated drills that measure the recovery time.",
-    "feature scan": "One command per scanner (kube-bench, kubescape, trivy, OpenSCAP STIG, prowler, FIPS) with saved reports and a verdict.",
+    "feature scan": "Security scanners and a separate local Well-Architected assessment, with saved reports and explicit verdicts.",
+    "feature architecture": "Assess saved configuration and evidence against provider guidance; missing evidence remains unknown and no cloud resources are changed.",
     "feature undo": "A journal of the last fifteen actions per environment (and fifteen global ones, at most five of one kind) with their inverse: cs undo reverts the newest.",
     "feature ui": "A local, token-protected web console where every cloudseed capability is a form and a button, and a \"?\" explains each one.",
     "feature audit": "Every command writes an audit line and a redacted log; inventory.json tracks resources and changes; troubleshoot reads them.",

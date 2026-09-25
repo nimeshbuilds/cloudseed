@@ -171,6 +171,7 @@ nav:
       - Kubernetes platform: guides/platform.md
       - Resilience, chaos and scans: guides/resilience.md
       - Security and FIPS: guides/security-and-fips.md
+      - Well-Architected assessments: guides/well-architected.md
       - VPN access: guides/vpn.md
       - FinOps: guides/finops.md
       - Undo and audit trail: guides/undo-and-audit.md

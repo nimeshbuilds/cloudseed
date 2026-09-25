@@ -256,7 +256,7 @@
     const body = line.replace(/^\s*(?:[│|┃]\s*)?/, '');
     let cls = '';
     if (/^(✖|\[exit code|\[lost)/.test(body) || /^(Error\b|ERROR\b|Traceback\b)/.test(body)) cls = 'bad';
-    else if (/^(▲|\[interrupted)/.test(body) || /^Warning\b/.test(body)) cls = 'warn';
+    else if (/^(▲|\[interrupted|\[incomplete)/.test(body) || /^(Warning|INCOMPLETE|UNKNOWN)\b/.test(body)) cls = 'warn';
     else if (/^(✔|\[done\])/.test(body)) cls = 'ok';
     else if (/^\$ /.test(body)) cls = 'cmd';
     else if (/^[○–]/.test(body) || /\bnot (installed|ready|running|found|healthy|connected|logged in)\b/i.test(body)) cls = 'dim';
@@ -276,17 +276,34 @@
   // a job the user interrupted (from this page, or as the server reports it) ended on purpose: "interrupted", not "failed"
   const interrupted = (j) => !!j && !j.running && j.rc !== 0 && (!!j.interrupted || INTERRUPTED.has(j.id) || j.rc === 130);
   const jobStatusText = (j) => j.lost ? 'lost (console server restarted)' : j.running === undefined ? 'loading…' : j.running ? 'running…' : j.rc === 0 ? `finished in ${j.seconds}s`
-    : interrupted(j) ? `interrupted after ${j.seconds}s (exit ${j.rc})` : `exit ${j.rc} after ${j.seconds}s`;
+    : interrupted(j) ? `interrupted after ${j.seconds}s (exit ${j.rc})` : jobState(j) === 'incomplete' ? `incomplete assessment in ${j.seconds}s (exit 3); see Reports` : `exit ${j.rc} after ${j.seconds}s`;
   // one word for a job's state (tab tooltips, the narrow-screen status glyph)
-  const jobState = (j) => (!j ? '' : j.lost ? 'lost' : j.running ? 'running' : j.rc === 0 ? 'ok' : j.rc === undefined || j.rc === null ? '' : interrupted(j) ? 'interrupted' : 'bad');
+  const jobState = (j) => {
+    if (!j) return '';
+    if (j.lost) return 'lost';
+    if (j.running) return 'running';
+    if (j.rc === 0) return 'ok';
+    if (j.rc === undefined || j.rc === null) return '';
+    if (interrupted(j)) return 'interrupted';
+    // Raw console calls prepend -y; only skip recognised leading globals, consuming their values too.
+    // A command or option value that happens to say "scan architecture" cannot identify an assessment.
+    const argv = Array.isArray(j.argv) ? j.argv : [];
+    let i = 0;
+    while (i < argv.length) {
+      if (argv[i] === '-y' || argv[i] === '--yes' || /^--(?:runtime|engine)=/.test(argv[i])) i++;
+      else if (argv[i] === '--runtime' || argv[i] === '--engine') i += 2;
+      else break;
+    }
+    return j.rc === 3 && argv[i] === 'scan' && argv[i + 1] === 'architecture' ? 'incomplete' : 'bad';
+  };
   function renderTabs() {
     const tabs = $('#job-tabs'); tabs.innerHTML = '';
     // repeated runs of one action are told apart by their start time; the tooltip carries the full command
     for (const j of Array.from(jobs.values()).slice(-8).reverse()) {
       const at = jobTime(j), k = jobState(j);
-      const st = { lost: 'lost (console server restarted)', running: 'running', ok: 'finished', interrupted: `interrupted (exit ${j.rc})`, bad: `failed (exit ${j.rc})` }[k] || '';
+      const st = { lost: 'lost (console server restarted)', running: 'running', ok: 'finished', incomplete: 'incomplete assessment (exit 3)', interrupted: `interrupted (exit ${j.rc})`, bad: `failed (exit ${j.rc})` }[k] || '';
       tabs.append(el('a', { class: j.id === activeJob ? 'active' : '', 'aria-current': j.id === activeJob ? 'true' : null, title: `${j.argv ? jobCmd(j) : j.label}\nstarted ${at.toLocaleString()}${st ? ' · ' + st : ''}`, onclick: () => showJob(j.id) },
-        el('span', { class: 'dot ' + (k === 'running' ? 'run' : k), 'aria-hidden': 'true' }), j.label + (j.lost ? ' (lost)' : k === 'interrupted' ? ' (interrupted)' : ''),
+        el('span', { class: 'dot ' + (k === 'running' ? 'run' : k), 'aria-hidden': 'true' }), j.label + (j.lost ? ' (lost)' : k === 'interrupted' ? ' (interrupted)' : k === 'incomplete' ? ' (incomplete)' : ''),
         el('span', { class: 't' }, at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }))));
     }
     const running = Array.from(jobs.values()).filter((j) => j.running).length;
@@ -318,6 +335,7 @@
     announced.add(j.id);
     if (j.lost) toast(`✖ ${j.label}: lost (the console server restarted)`, 'bad', 6000);
     else if (interrupted(j)) toast(`▲ ${j.label} interrupted (exit ${j.rc})`, 'warn');
+    else if (jobState(j) === 'incomplete') toast(`▲ ${j.label}: incomplete evidence; see Reports`, 'warn');
     else toast(j.rc === 0 ? `✔ ${j.label} finished` : `✖ ${j.label} failed (exit ${j.rc})`, j.rc === 0 ? 'ok' : 'bad');
     PLATFORM_STATUS = {};
     const done = JOB_DONE.get(j.id); if (done) { JOB_DONE.delete(j.id); try { done(j); } catch (err) { console.error(err); } }
@@ -336,7 +354,7 @@
   function jobHeader(id) { $('#job-output').innerHTML = ''; const j = jobs.get(id) || {}; const cmd = $('#job-cmd'); cmd.textContent = j.argv ? '$ ' + jobCmd(j) : ''; cmd.title = cmd.textContent; }
   function jobFinished(data) {
     const j = trackJob(data.id, { ...data, running: false, lost: !!data.lost });   // the server's lost flag (rc -1) is kept
-    if (j.id === activeJob) { $('#job-status').textContent = jobStatusText(j); const out = $('#job-output'); out.append(colorize(j.lost ? ENDED_UNKNOWN_LINE : j.rc === 0 ? '[done]' : interrupted(j) ? `[interrupted (exit code ${j.rc})]` : `[exit code ${j.rc}]`)); out.scrollTop = out.scrollHeight; }
+    if (j.id === activeJob) { $('#job-status').textContent = jobStatusText(j); const out = $('#job-output'); out.append(colorize(j.lost ? ENDED_UNKNOWN_LINE : j.rc === 0 ? '[done]' : interrupted(j) ? `[interrupted (exit code ${j.rc})]` : jobState(j) === 'incomplete' ? '[incomplete assessment: required evidence is missing or stale; see Reports (exit code 3)]' : `[exit code ${j.rc}]`)); out.scrollTop = out.scrollHeight; }
     renderTabs();
     if (announce(j)) scheduleRefresh();
   }
@@ -544,6 +562,8 @@
     cloudseed_platform: { set: { lines: true, description: 'helm --set overrides, one key=value per line (a list like hosts={a,b} stays one value; put mode= on a line of its own)' } },
     cloudseed_destroy: { purge: { description: 'also remove the local environment directory; config.json and the SSH keys stay in the undo history, VPN keys, logs and reports do not' } },
     cloudseed_managed: { profile: { description: "blank = the profile of the environment selected at the top (else the 'default' one)" } },
+    cloudseed_scan: { profile: { when: { kind: ['architecture', 'host', 'all'] } }, max_age_days: { when: { kind: ['architecture'] }, label: 'Evidence freshness (days)' },
+      json: { when: { kind: ['architecture'] }, label: 'JSON output' }, framework: { when: { kind: ['kube', 'cloud'] } }, hosts: { when: { kind: ['host', 'stig', 'all'] } } },
     // fields that apply to some actions only (`when`: shown for those values; `need`: required for those values)
     cloudseed_skill: { agent: { when: { action: ['install'] } }, dir: { when: { action: ['install'] } }, name: { when: { action: ['install', 'show'] }, need: { action: ['show'] } } },
     cloudseed_vpn: { name: { need: { action: ['add-user', 'revoke'] } } },
@@ -555,6 +575,7 @@
   const fieldLabel = (a, name) => { const prop = ((a.schema || {}).properties || {})[name] || {}, ui = (FORM_UI[a.name] || {})[name] || {}; return ui.label || prop.label || KEY_LABELS[name] || prop.title || humanKey(name); };
   // does a `when` / `need` rule hold for the values of the form's other fields ({action: ['install']}: its action is install)
   const ruleHolds = (rule, vals) => Object.entries(rule).every(([k, allowed]) => allowed.includes(vals[k] === undefined || vals[k] === null ? '' : String(vals[k])));
+  const scanProfileOptions = (kind) => kind === 'architecture' ? ['production', 'lab'] : ['cis', 'stig'];
   // placeholders: sample values for a form's fields, shown greyed out (never sent)
   function actionForm(a, presets = {}, compact = false, placeholders = {}) {
     const form = el('form', { class: compact ? '' : 'card', 'data-form': a.name });
@@ -574,9 +595,22 @@
     // the values the rules look at (unparsable input counts as blank here; submitting reports it)
     const ruleVals = () => { const o = {}; for (const inp of $$('input,select,textarea', form)) if (inp.name) { try { o[inp.name] = readField(inp); } catch { o[inp.name] = undefined; } } return o; };
     const needed = (vals) => ruled.filter(([, , r]) => r.need && ruleHolds(r.need, vals) && !(r.when && !ruleHolds(r.when, vals))).map(([n]) => n);
+    let confirm = null;
     const syncRules = () => {
       if (!ruled.length) return;
       const vals = ruleVals();
+      if (a.name === 'cloudseed_scan') {
+        if (confirm) {
+          confirm.hidden = ['architecture', 'fips', 'reports'].includes(vals.kind);
+          if (confirm.hidden) $('input', confirm).checked = false;
+        }
+        const input = $('[name="profile"]', form), options = ['', ...scanProfileOptions(vals.kind)];
+        if (input && Array.from(input.options).map((o) => o.value).join(',') !== options.join(',')) {
+          const previous = input.value;
+          input.replaceChildren(...options.map((value) => el('option', { value }, value || '(default)')));
+          input.value = options.includes(previous) ? previous : '';
+        }
+      }
       for (const [name, lab, r] of ruled) {
         const shown = !r.when || ruleHolds(r.when, vals), req = shown && !!r.need && ruleHolds(r.need, vals);
         lab.hidden = !shown;
@@ -592,8 +626,9 @@
     const tick = a.destructive ? el('input', { type: 'checkbox', name: 'confirm' }) : null;
     const runBtn = el('button', { type: 'submit', class: 'btn ' + (a.always_destructive ? 'rose' : 'primary'), disabled: !!a.always_destructive, title: a.always_destructive ? 'Tick the confirmation first' : null }, '▶ Run');
     if (tick && a.always_destructive) tick.addEventListener('change', () => { runBtn.disabled = !tick.checked; runBtn.title = tick.checked ? '' : 'Tick the confirmation first'; });
-    const confirm = tick ? el('label', { class: 'check' }, tick, el('span', {}, a.always_destructive ? 'I understand this changes infrastructure or runs a task' : 'Confirm changes (apply, install, add, remove, run …)')) : null;
+    confirm = tick ? el('label', { class: 'check' }, tick, el('span', {}, a.always_destructive ? 'I understand this changes infrastructure or runs a task' : 'Confirm changes (apply, install, add, remove, run …)')) : null;
     form.append(el('div', { class: 'row form-actions' }, confirm, el('span', { class: 'spacer' }), runBtn));
+    syncRules();
     form.onsubmit = async (ev) => {
       ev.preventDefault();
       let args;
@@ -648,11 +683,11 @@
       el('div', {}, el('p', { class: 'muted small', style: 'margin:0 0 14px' }, a.description), name === 'cloudseed_destroy' ? destroyNote(presets.cloud ? presets : envArgs()) : null, actionForm(a, presets, true, placeholders)), { narrow: true, explain: actionXq(name) });
   };
   // verdict words of the CLI and its reports ('FAIL - 2 failed' counts by its first word): PASS green; FAIL, INTERRUPTED,
-  // ERROR red; INCONCLUSIVE (nothing proved), N/A (not a FIPS environment, no profile content), SKIP amber; '?' neutral
+  // ERROR red; INCOMPLETE/UNKNOWN/INCONCLUSIVE (nothing proved), N/A, SKIP amber; '?' neutral
   const verdictClass = (v) => {
     const t = String(v === undefined || v === null ? '' : v).trim().toUpperCase().split(/[\s:,]/)[0];
     return /^(PASS|PASSED|OK)$/.test(t) ? 'leaf' : /^(FAIL|FAILED|INTERRUPTED|ERROR|CRITICAL|HIGH)$/.test(t) ? 'rose'
-      : /^(INCONCLUSIVE|N\/A|NA|SKIP|SKIPPED|WARN|WARNING|MEDIUM|PARTIAL)$/.test(t) ? 'seed' : '';
+      : /^(INCOMPLETE|UNKNOWN|INCONCLUSIVE|NOT_APPLICABLE|N\/A|NA|SKIP|SKIPPED|WARN|WARNING|MEDIUM|PARTIAL)$/.test(t) ? 'seed' : '';
   };
   const verdictChip = (label, v) => !v ? el('span', { class: 'chip' }, label + ': —') : el('span', { class: 'chip ' + verdictClass(v.verdict), title: v.detail }, `${label} ${v.verdict}`);
 
@@ -687,7 +722,7 @@
   const XQ_ACTION = { cloudseed_vpn_connect: 'command vpn' };
   const actionXq = (name) => XQ_ACTION[name] || 'command ' + String(name).replace(/^cloudseed_/, '').replace(/_/g, '-');
   // what each scan button runs, for its tooltip (cs help scan)
-  const SCAN_WHAT = { all: 'Every scan that applies, one report each, then a summary', cis: 'CIS Kubernetes Benchmark with kube-bench (the profile of the distribution)',
+  const SCAN_WHAT = { all: 'Every security scan that applies, one report each, then a summary', architecture: 'Well-Architected assessment of saved configuration and evidence; no live cloud checks', cis: 'CIS Kubernetes Benchmark with kube-bench (the profile of the distribution)',
     kube: 'kubescape posture scan: the NSA and MITRE ATT&CK frameworks', images: 'Vulnerabilities in the running workloads (trivy)',
     host: 'OpenSCAP CIS benchmark on every host reachable over SSH (bastion, VPN, local nodes)', stig: 'DISA STIG on the hosts (and the Kubernetes STIG on EKS)',
     cloud: 'prowler: the newest CIS benchmark of the cloud account', fips: 'FIPS 140 end to end: kernels, SSH/TLS algorithms, endpoints, images and installed items' };
@@ -1133,8 +1168,8 @@
     const tl = el('div', { class: 'timeline' });
     // the outcome is said in words next to the coloured dot (colour alone carries nothing)
     for (const j of [...s.jobs].reverse().slice(0, 10)) {
-      const k = jobState(j), how = j.running ? ' · running' : j.lost ? ' · lost (exit code unknown)' : k === 'ok' ? ` · ok in ${j.seconds}s` : k === 'interrupted' ? ` · interrupted after ${j.seconds}s` : ` · failed (exit ${j.rc}) after ${j.seconds}s`;
-      tl.append(el('div', { class: 'tl' }, el('span', { class: 'tdot ' + (j.running ? 'run' : k === 'ok' ? 'ok' : k === 'interrupted' ? 'warn' : 'bad'), 'aria-hidden': 'true' }), el('div', {}, el('a', { href: '#', onclick: (e) => { e.preventDefault(); if (!jobs.has(j.id)) trackJob(j.id, j); showJob(j.id); } }, j.label), el('div', { class: 'muted small mono' }, cmdLine(j.argv).slice(0, 90)), el('div', { class: 'muted small' }, fmtTime(j.started) + how))));
+      const k = jobState(j), how = j.running ? ' · running' : j.lost ? ' · lost (exit code unknown)' : k === 'ok' ? ` · ok in ${j.seconds}s` : k === 'interrupted' ? ` · interrupted after ${j.seconds}s` : k === 'incomplete' ? ` · incomplete assessment in ${j.seconds}s` : ` · failed (exit ${j.rc}) after ${j.seconds}s`;
+      tl.append(el('div', { class: 'tl' }, el('span', { class: 'tdot ' + (j.running ? 'run' : k === 'ok' ? 'ok' : ['interrupted', 'incomplete'].includes(k) ? 'warn' : 'bad'), 'aria-hidden': 'true' }), el('div', {}, el('a', { href: '#', onclick: (e) => { e.preventDefault(); if (!jobs.has(j.id)) trackJob(j.id, j); showJob(j.id); } }, j.label), el('div', { class: 'muted small mono' }, cmdLine(j.argv).slice(0, 90)), el('div', { class: 'muted small' }, fmtTime(j.started) + how))));
     }
     act.append(s.jobs.length ? tl : el('p', { class: 'muted' }, 'Nothing has run yet.'));
     if (s.undo && s.undo.length) { act.append(el('h4', {}, 'Undo history', explainBtn('undo', 'undo')), ...s.undo.slice(0, 5).map((u) => el('div', { class: 'small', style: 'padding:3px 0' }, el('span', { class: 'chip' }, u.scope), ' ', u.summary))); }
@@ -1164,12 +1199,13 @@
     if (e.error) c.append(el('div', { class: 'callout warn', role: 'note', style: 'margin:12px 0 0' }, el('b', {}, 'Its configuration cannot be read'), el('p', { class: 'small mono', style: 'margin:6px 0 0' }, e.error)));
     c.append(el('div', { class: 'kv', style: 'margin-top:12px' }, el('span', { class: 'k' }, 'bastion', explainBtn('bastion', 'the bastion')), el('span', { class: 'mono' }, e.bastion_ip || '—'), el('span', { class: 'k' }, 'resources'), el('span', {}, `${e.resources} in state`), el('span', { class: 'k' }, 'network'), el('span', { class: 'mono' }, e.cidr || '—'), el('span', { class: 'k' }, 'updated'), el('span', { title: e.updated || '' }, fmtTime(e.updated))));
     const vd = e.verdicts || {};
-    c.append(['dr', 'chaos', 'cis', 'fips'].some((k) => vd[k]) ? el('div', { class: 'verdicts' }, verdictChip('DR', vd.dr), verdictChip('chaos', vd.chaos), verdictChip('CIS', vd.cis), verdictChip('FIPS', vd.fips))
+    c.append(['dr', 'chaos', 'cis', 'fips', 'architecture'].some((k) => vd[k]) ? el('div', { class: 'verdicts' }, verdictChip('DR', vd.dr), verdictChip('chaos', vd.chaos), verdictChip('CIS', vd.cis), verdictChip('FIPS', vd.fips), vd.architecture ? verdictChip('Architecture', vd.architecture) : null)
       : el('div', { class: 'verdicts muted small' }, 'No DR drills, chaos runs or compliance scans yet'));
     c.append(el('div', { class: 'row', style: 'margin-top:12px' },
       el('button', { class: 'btn small primary', 'data-fk': fk('status'), onclick: () => run('cloudseed_status', cl, 'status ' + e.id) }, 'Status'),
       el('button', { class: 'btn small ghost', 'data-fk': fk('outputs'), onclick: () => run('cloudseed_output', cl, 'outputs ' + e.id) }, 'Outputs'),
-      el('button', { class: 'btn small ghost', 'data-fk': fk('troubleshoot'), onclick: () => run('cloudseed_troubleshoot', cl, 'troubleshoot ' + e.id) }, 'Troubleshoot')));
+      el('button', { class: 'btn small ghost', 'data-fk': fk('troubleshoot'), onclick: () => run('cloudseed_troubleshoot', cl, 'troubleshoot ' + e.id) }, 'Troubleshoot'),
+      el('button', { class: 'btn small ghost', 'data-fk': fk('architecture'), onclick: () => openAction('cloudseed_scan', { kind: 'architecture', profile: 'production', max_age_days: 30, ...cl }) }, 'Well-Architected…')));
     // where to go next: a cluster's Platform view (it follows the page's environment), or this card on the Environments page
     const next = e.kubernetes ? el('button', { class: 'btn small ghost', 'data-fk': fk('platform'), onclick: () => selectEnv(e.id).then(() => go('platform')) }, 'Platform →')
       : !full ? el('button', { class: 'btn small ghost', 'data-fk': fk('manage'), onclick: () => showEnvCard(e.id) }, 'Manage →') : null;
@@ -1912,7 +1948,7 @@
     const needHosts = !e ? needEnv : hasHosts ? {} : { disabled: true, title: `${e.id} has no host the scan can reach over SSH yet (bastion, VPN host or local Kubernetes nodes): apply it first` };
     const card = (title, verdict, desc, ...rows) => el('div', { class: 'card' }, el('h3', {}, title, verdict ? verdictChip('last', verdict) : null), el('p', { class: 'muted small' }, desc), ...rows);
     const fkr = (k) => 'res:' + k;
-    v.append(el('div', { class: 'hero' }, el('h2', {}, 'Resilience, chaos and compliance'), el('p', {}, (e ? `Acting on ${e.id}.` : STATE.envs.length ? 'Pick an environment (top right).' : 'Create an environment first.') + ' DR drills prove backups restore; chaos suites prove workloads survive faults; scans measure CIS, STIG, vulnerabilities, cloud posture and FIPS.'),
+    v.append(el('div', { class: 'hero' }, el('h2', {}, 'Resilience, chaos and compliance'), el('p', {}, (e ? `Acting on ${e.id}.` : STATE.envs.length ? 'Pick an environment (top right).' : 'Create an environment first.') + ' DR drills prove backups restore; chaos suites prove workloads survive faults; scans assess architecture, CIS, STIG, vulnerabilities, cloud posture and FIPS.'),
       STATE.envs.length ? null : el('div', { class: 'row' }, el('button', { class: 'btn ghost', html: icon('create'), onclick: () => go('create', { env: null }) }, el('span', {}, 'Create environment')))));
     const suites = STATE.platform.chaos.suites, exps = STATE.platform.chaos.experiments;
     v.append(el('div', { class: 'grid cols-2' },
@@ -1923,10 +1959,14 @@
           el('button', { class: 'btn ghost', ...needCluster, onclick: () => openAction('cloudseed_chaos', { action: 'run', ...ea }, { target: 'namespace/deployment[:port], e.g. shop/api:8080' }) }, 'My workload…'), el('button', { class: 'btn ghost', 'data-fk': fkr('chaos-status'), ...needCluster, onclick: () => quick('cloudseed_chaos', { action: 'status' }, 'chaos status', ea) }, 'Status'), el('button', { class: 'btn ghost', 'data-fk': fkr('chaos-stop'), ...needCluster, onclick: () => quick('cloudseed_chaos', { action: 'stop' }, 'chaos stop', ea) }, 'Stop all')),
         el('h4', {}, `Experiments (${Object.keys(exps).length})`), el('dl', { class: 'defs small' }, Object.entries(exps).map(([k, d]) => [el('dt', {}, k), el('dd', {}, d)]))),
       card(['Security & compliance scans', explainBtn('scan', 'security and compliance scans')], vd.cis || vd.kube, 'CIS (kube-bench), NSA/MITRE (kubescape), vulnerabilities (trivy), host CIS/STIG (OpenSCAP), cloud CIS (prowler), FIPS verification. Reports land in Reports.',
-        el('div', { class: 'row' }, ...[['all', '▶ Everything', 'leaf'], ['cis', 'CIS', ''], ['kube', 'NSA / MITRE', ''], ['images', 'Vulnerabilities', ''], ['host', 'Host CIS', ''], ['stig', 'STIG', ''], ['cloud', 'Cloud CIS', ''], ['fips', 'FIPS', '']].map(([k, l, c]) => { const gate = { cis: needCluster, kube: needCluster, images: needCluster, host: needHosts, stig: needHosts, cloud: needCloud }[k] || needEnv; return el('button', { class: 'btn ' + (c || 'ghost'), 'data-fk': fkr('scan-' + k), ...gate, title: [SCAN_WHAT[k], gate.title].filter(Boolean).join('\n'), onclick: () => run('cloudseed_scan', { kind: k, ...ea }, 'scan ' + k) }, l); }), el('button', { class: 'btn ghost', ...needEnv, onclick: () => openAction('cloudseed_scan', { kind: 'host', profile: 'stig', ...ea }) }, 'Options…')),
+        el('div', { class: 'row' }, ...[['all', '▶ All security scans', 'leaf'], ['cis', 'CIS', ''], ['kube', 'NSA / MITRE', ''], ['images', 'Vulnerabilities', ''], ['host', 'Host CIS', ''], ['stig', 'STIG', ''], ['cloud', 'Cloud CIS', ''], ['fips', 'FIPS', '']].map(([k, l, c]) => { const gate = { cis: needCluster, kube: needCluster, images: needCluster, host: needHosts, stig: needHosts, cloud: needCloud }[k] || needEnv; return el('button', { class: 'btn ' + (c || 'ghost'), 'data-fk': fkr('scan-' + k), ...gate, title: [SCAN_WHAT[k], gate.title].filter(Boolean).join('\n'), onclick: () => run('cloudseed_scan', { kind: k, ...ea }, 'scan ' + k) }, l); }), el('button', { class: 'btn ghost', ...needEnv, onclick: () => openAction('cloudseed_scan', { kind: 'host', profile: 'stig', ...ea }) }, 'Options…')),
         // (every disabled scan says why, in words: a local environment without hosts has both reasons)
         local ? el('p', { class: 'muted small', style: 'margin:10px 0 0' }, 'Cloud CIS does not apply to a local VMware environment: there is no cloud account to scan.') : null,
         e && !hasHosts ? el('p', { class: 'muted small', style: 'margin:10px 0 0' }, `Host CIS and STIG need a host reachable over SSH: ${e.id} has none yet.`) : null),
+      card(['Well-Architected assessment', explainBtn('scan', 'architecture assessments')], vd.architecture, 'Screen AWS, Azure or GCP configuration and saved evidence against provider pillars; VMware uses common architectural guidance. Missing or stale evidence stays unknown. This saves a report without contacting cloud services or changing infrastructure.',
+        el('div', { class: 'row' }, el('button', { class: 'btn primary', 'data-fk': fkr('architecture'), ...needEnv, title: SCAN_WHAT.architecture, onclick: () => run('cloudseed_scan', { kind: 'architecture', profile: 'production', max_age_days: 30, ...ea }, 'Well-Architected assessment') }, '▶ Assess production'),
+          el('button', { class: 'btn ghost', ...needEnv, onclick: () => openAction('cloudseed_scan', { kind: 'architecture', profile: 'production', max_age_days: 30, ...ea }) }, 'Profile & evidence…'),
+          el('button', { class: 'btn ghost', ...needEnv, onclick: () => go('reports') }, 'Reports'))),
       card(['FIPS 140', explainBtn('fips', 'FIPS 140 mode')], vd.fips, e ? (e.fips ? `${e.id} was created in FIPS mode.` : `${e.id} is not a FIPS environment; FIPS is chosen at creation (fips_mode=true).`) : 'Create an environment with fips_mode=true for FIPS endpoints, images, kernels, SSH/TLS algorithms and FIPS-gated platform items.',
         el('div', { class: 'row' }, el('button', { class: 'btn primary', 'data-fk': fkr('fips'), ...needEnv, onclick: () => run('cloudseed_scan', { kind: 'fips', ...ea }, 'scan fips') }, 'Verify FIPS'), el('button', { class: 'btn ghost', onclick: () => showHelp('fips') }, 'How it works')))));
   };
@@ -1944,8 +1984,8 @@
   const num = (x) => (typeof x === 'number' ? x : typeof x === 'string' && /^\d+(\.\d+)?$/.test(x.trim()) ? Number(x) : null);
   function scanResult(it) {
     const s = it.summary || {};
-    let p = num(s.pass ?? s['controls passed']), f = num(s.fail ?? s['controls failed'] ?? s.critical);
-    const w = num(s.warn) || 0, errors = num(s.errors) || 0;
+    let p = num(s.pass ?? s.passed ?? s['controls passed']), f = num(s.fail ?? s.failed ?? s['controls failed'] ?? s.critical);
+    const w = (num(s.warn) || 0) + (num(s.unknown) || 0), errors = num(s.errors) || 0;
     if (f === null) {   // OpenSCAP host/STIG reports written before totals were stored: "score 61.2%  pass 180  fail 95" per host
       let pp = 0, ff = 0, seen = false;
       for (const val of Object.values(s)) { if (typeof val !== 'string') continue; const mf = /\bfail (\d+)/.exec(val), mp = /\bpass (\d+)/.exec(val); if (mf) { ff += Number(mf[1]); seen = true; } if (mp) pp += Number(mp[1]); }
@@ -1959,15 +1999,17 @@
   // to its counters, and one without any counters is 'no totals', never 'clean'.
   function scanChip(it) {
     const { p, f, w, errors } = scanResult(it);
-    const counts = [p ? `${p} passed` : '', f ? `${f} failed` : '', w ? `${w} warnings` : '', errors ? `${errors} host(s) not scanned` : ''].filter(Boolean).join(', ');
+    const architecture = it.kind === 'architecture' || /^architecture-/.test(it.name || '');
+    const counts = [p ? `${p} passed` : '', f ? `${f} failed` : '', w ? `${w} ${architecture ? 'unknown' : 'warnings'}` : '', errors ? `${errors} host(s) not scanned` : ''].filter(Boolean).join(', ');
     const verdict = String(it.verdict || '').trim().toUpperCase().split(/\s/)[0];
     const failed = () => [f ? `${f} failed` : 'failed', errors ? `${errors} host(s) not scanned` : ''].filter(Boolean).join(', ');
     let label, cls, title;
     if (verdict) {
       cls = verdictClass(verdict);
-      label = cls === 'rose' ? (verdict === 'FAIL' ? failed() : verdict.toLowerCase()) : verdict === 'PASS' ? (f || errors ? 'passed' : 'clean') : verdict.toLowerCase();
+      label = cls === 'rose' ? (verdict === 'FAIL' ? failed() : verdict.toLowerCase()) : verdict === 'PASS' ? (architecture || f || errors ? 'passed' : 'clean') : verdict.toLowerCase();
       title = [`verdict ${verdict}`, counts, verdict === 'N/A' ? 'nothing to check here (no scanned host has content for this profile, or not a FIPS environment)'
-        : verdict === 'INCONCLUSIVE' ? 'the scan could not decide: see the report' : ''].filter(Boolean).join(' · ');
+        : verdict === 'INCOMPLETE' ? 'required evidence is missing, stale or could not be verified; see the report'
+          : verdict === 'INCONCLUSIVE' ? 'the scan could not decide: see the report' : ''].filter(Boolean).join(' · ');
     } else if (f === null) { cls = ''; label = 'no totals'; title = 'this file carries no pass/fail summary'; }
     else { const bad = f + errors > 0; cls = bad ? 'rose' : 'leaf'; label = bad ? failed() : 'clean'; title = counts || undefined; }
     return { p, f, w, label, cls, title };
@@ -1981,10 +2023,10 @@
     if (!e) {
       v.innerHTML = ''; delete v.dataset.env; reportsSig = '';
       v.append(STATE.envs.length ? emptyState('Pick an environment', 'Reports belong to an environment. Show the reports of:', ...STATE.envs.map((x) => el('button', { class: 'btn ghost', onclick: () => selectEnv(x.id).then(() => go('reports')) }, x.id)))
-        : emptyState('No reports yet', 'DR drills, chaos runs and compliance scans save their reports here. Create an environment to get started.', el('button', { class: 'btn primary', onclick: () => go('create', { env: null }) }, 'Create environment')));
+        : emptyState('No reports yet', 'Architecture assessments, DR drills, chaos runs and compliance scans save their reports here. Create an environment to get started.', el('button', { class: 'btn primary', onclick: () => go('create', { env: null }) }, 'Create environment')));
       return;
     }
-    const hero = () => el('div', { class: 'hero' }, el('h2', {}, `Reports of ${e.id}`), el('p', {}, 'DR drills, chaos runs and compliance scans saved for this environment, and the logs of its setup, apply and destroy runs.'));
+    const hero = () => el('div', { class: 'hero' }, el('h2', {}, `Reports of ${e.id}`), el('p', {}, 'Architecture assessments, DR drills, chaos runs and compliance scans saved for this environment, and the logs of its setup, apply and destroy runs.'));
     // the reports of this environment already on screen stay there while the new answer is fetched (no flash of "Loading…")
     const shown = v.dataset.env === e.id && v.children.length > 0;
     if (!shown) { v.innerHTML = ''; reportsSig = ''; v.dataset.env = e.id; v.append(hero(), el('p', { class: 'muted' }, `Loading the reports of ${e.id}…`)); }
@@ -2030,8 +2072,8 @@
   const runLabel = (name) => { const m = /(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/.exec(name || ''); const d = m ? new Date(Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6])) : null; return d && !isNaN(d) ? d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : String(name || ''); };
   const REPORT_KIND = { report: 'Chaos run', drill: 'DR drill' };
   // the scans the CLI saves, in words (the list chip uses the short name, the report dialog the full one)
-  const SCAN_TITLES = { cis: 'CIS Kubernetes benchmark', 'stig-k8s': 'Kubernetes STIG', kube: 'Kubernetes posture (NSA/MITRE)', images: 'Vulnerability scan', 'stig-host': 'Host STIG (OpenSCAP)', cloud: 'Cloud CIS (prowler)', fips: 'FIPS verification' };
-  const SCAN_SHORT = { cis: 'CIS', 'stig-k8s': 'K8s STIG', kube: 'NSA/MITRE', images: 'Vulnerabilities', 'stig-host': 'Host STIG', cloud: 'Cloud CIS', fips: 'FIPS' };
+  const SCAN_TITLES = { architecture: 'Well-Architected assessment', cis: 'CIS Kubernetes benchmark', 'stig-k8s': 'Kubernetes STIG', kube: 'Kubernetes posture (NSA/MITRE)', images: 'Vulnerability scan', 'stig-host': 'Host STIG (OpenSCAP)', cloud: 'Cloud CIS (prowler)', fips: 'FIPS verification' };
+  const SCAN_SHORT = { architecture: 'Architecture', cis: 'CIS', 'stig-k8s': 'K8s STIG', kube: 'NSA/MITRE', images: 'Vulnerabilities', 'stig-host': 'Host STIG', cloud: 'Cloud CIS', fips: 'FIPS' };
   const scanTitle = (kind) => SCAN_TITLES[kind] || (/^host-(.+)$/.test(kind) ? `Host ${kind.slice(5).toUpperCase()} (OpenSCAP)` : kind ? kind + ' scan' : 'Report');
   // one wording for a report's verdict, in the list and in its dialog: lower-case words, counts for scans
   const reportChip = (it) => {
@@ -2061,6 +2103,10 @@
   function showReport(it) {
     const body = el('div', {}), kind = runKind(it.name), sm = reportSummary(it);
     body.append(el('div', { class: 'row', style: 'margin-bottom:10px' }, it.verdict || !REPORT_KIND[kind] ? reportChip(it) : null, el('span', { class: 'muted small mono' }, it.name)));
+    if (kind === 'architecture') {
+      body.append(el('p', { class: 'muted small' }, `Profile: ${it.profile || 'unspecified'}. Assesses saved configuration and evidence; it does not verify live infrastructure. Missing evidence stays unknown.${it.max_age_days ? ` Evidence freshness: ${it.max_age_days} days.` : ''}`));
+      if ((it.coverage_limits || []).length) body.append(el('details', {}, el('summary', {}, 'Assessment coverage and limits'), el('ul', {}, ...it.coverage_limits.map((limit) => el('li', { class: 'small' }, limit)))));
+    }
     if (Object.keys(sm).length) body.append(kv(...Object.entries(sm).map(([k, val]) => [colLabel(k), String(val)])));
     // columns: the union over all rows, the meaningful ones first (verdict and reason are never cut off); description as a row tooltip
     const table = (rows) => {
@@ -2071,7 +2117,30 @@
       return el('div', { class: 'table-wrap' }, t);
     };
     if ((it.results || []).length) body.append(el('h4', {}, kind === 'drill' ? 'Steps' : 'Results'), table(it.results));
-    if (it.findings && it.findings.length && !(it.checks && it.checks.length)) { body.append(el('h4', {}, `Findings (${it.findings.length})`)); const t = el('table', {}, el('tr', {}, el('th', {}, 'severity'), el('th', {}, 'finding'), el('th', {}, 'detail'))); for (const f of it.findings) t.append(el('tr', {}, el('td', {}, el('span', { class: 'chip ' + ({ CRITICAL: 'rose', HIGH: 'rose', MEDIUM: 'seed', LOW: '', INFO: '' }[f.severity] || '') }, f.severity || f.status)), el('td', { class: 'small' }, f.title), el('td', { class: 'small muted' }, f.detail))); body.append(el('div', { class: 'table-wrap' }, t)); }
+    if (kind === 'architecture' && (it.findings || []).length) {
+      body.append(el('h4', {}, `Checks (${it.findings.length})`));
+      const t = el('table', {}, el('tr', {}, ...['status', 'pillar / check', 'evidence', 'remediation'].map((title) => el('th', {}, title))));
+      const evidenceText = (value) => {
+        if (!value || typeof value !== 'object') return String(value);
+        const type = { declared_configuration: 'Declared configuration', saved_report: 'Saved report', manual_review: 'Manual review required' }[value.type] || colLabel(value.type || 'evidence');
+        const fields = Array.isArray(value.fields) ? value.fields.join(', ') : '';
+        const extra = Object.entries(value).filter(([key]) => !['type', 'source', 'fields', 'reason', 'live_verified'].includes(key)).map(([key, detail]) => `${colLabel(key)}: ${String(detail)}`);
+        return [type, value.source, fields, value.reason, ...extra, value.live_verified === false ? 'Not checked live' : ''].filter(Boolean).join(' · ');
+      };
+      const guidance = (ref) => {
+        const url = typeof ref === 'string' ? ref : ref && ref.url;
+        return el('p', { class: 'muted small' }, typeof url === 'string' && /^https:\/\//i.test(url) ? el('a', { href: url, target: '_blank', rel: 'noopener noreferrer', title: url }, 'Provider guidance') : url || '',
+          ref && typeof ref === 'object' && ref.scope ? ` · ${ref.scope}` : '');
+      };
+      for (const f of it.findings) {
+        const evidence = Array.isArray(f.evidence) ? f.evidence : f.evidence ? [f.evidence] : [];
+        const refs = Array.isArray(f.references) ? f.references : [];
+        t.append(el('tr', {}, el('td', {}, cellChip(f.status || 'UNKNOWN')), el('td', { class: 'small' }, el('b', {}, f.title), el('p', { class: 'muted small' }, colLabel(f.pillar))),
+          el('td', { class: 'small' }, f.detail, ...evidence.map((item) => el('p', { class: 'muted small' }, evidenceText(item)))),
+          el('td', { class: 'small' }, f.remediation || '—', ...refs.map(guidance))));
+      }
+      body.append(el('div', { class: 'table-wrap' }, t));
+    } else if (it.findings && it.findings.length && !(it.checks && it.checks.length)) { body.append(el('h4', {}, `Findings (${it.findings.length})`)); const t = el('table', {}, el('tr', {}, el('th', {}, 'severity'), el('th', {}, 'finding'), el('th', {}, 'detail'))); for (const f of it.findings) t.append(el('tr', {}, el('td', {}, el('span', { class: 'chip ' + ({ CRITICAL: 'rose', HIGH: 'rose', MEDIUM: 'seed', LOW: '', INFO: '' }[f.severity] || '') }, f.severity || f.status)), el('td', { class: 'small' }, f.title), el('td', { class: 'small muted' }, f.detail))); body.append(el('div', { class: 'table-wrap' }, t)); }
     if (it.checks && it.checks.length) { body.append(el('h4', {}, 'Checks')); const t = el('table', {}, el('tr', {}, el('th', {}, 'status'), el('th', {}, 'area'), el('th', {}, 'check'), el('th', {}, 'detail'))); for (const c of it.checks) t.append(el('tr', {}, el('td', {}, cellChip(c.status || 'INFO')), el('td', {}, c.area), el('td', { class: 'small' }, c.check), el('td', { class: 'small muted' }, c.detail))); body.append(el('div', { class: 'table-wrap' }, t)); }
     body.append(el('p', { class: 'muted small mono', style: 'margin-top:12px' }, it.path));
     const e = currentEnv();

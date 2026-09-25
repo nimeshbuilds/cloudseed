@@ -59,7 +59,7 @@ TASK_WORDS = {
                          "pricing", "cheaper", "cheap", "expensive", "budget", "opencost"},
     "cloudseed-managed": {"databricks", "snowflake"},
     "cloudseed-architecture": {"how", "why", "where", "explain", "architecture", "implemented", "implementation",
-                               "internals", "design", "works"},
+                               "internals", "design", "works", "architected", "assessment", "assess", "pillars"},
     "cloudseed-destroy": {"destroy", "delete", "tear", "teardown", "remove", "clean", "cleanup", "purge",
                           "decommission", "undo"},
 }

@@ -41,8 +41,8 @@ CORE COMMANDS
   dr                 status | backups | backup | restore | schedule | test | describe | logs: disaster recovery with
                      Velero (bucket + identity created for you); `test` is an automated drill
   chaos              run | list | status | stop | report: Chaos Mesh experiments with a PASS/FAIL report
-  scan               cis | kube | images | host | stig | cloud | fips | all | reports: CIS / NSA-MITRE /
-                     vulnerability / OpenSCAP STIG / cloud CIS / FIPS scans with reports
+  scan               cis | kube | images | host | stig | cloud | fips | architecture | all | reports:
+                     security scans and local Well-Architected assessments with saved reports
   databricks         Databricks: connect (profile per environment), test, or pass any CLI command through
   snowflake          Snowflake: the same, with the Snowflake CLI
   explain [name]     how anything works: a feature, target, command, topic, platform item or setup variable
@@ -804,7 +804,7 @@ Desktop, Codex, Cursor, Windsurf, Gemini CLI, VS Code, LangGraph, ... (30 tools;
   access            ssh, vpn, managed (databricks / snowflake)
   cost & docs       finops, troubleshoot, explain, help, skill
   resilience        dr (backup / restore / drill), chaos (experiments with verdicts), scan (CIS / STIG / CVEs /
-                    cloud / FIPS)
+                    cloud / FIPS / local Well-Architected assessments)
   undo & teardown   undo (revert the last environment action), destroy
 plus resources (cloudseed://environments, cloudseed://skills/<name>), the resource template cloudseed://explain/{query}
 (how anything works, as JSON - the same data as cloudseed_explain with format=json and `cs explain --json`) and prompts
@@ -854,7 +854,7 @@ SECURE BY DEFAULT
   - destructive tools carry destructiveHint and refuse to run unless the call has confirm=true: setup with apply, apply,
     destroy, update-ip, provision, node add/remove/scale, platform install/uninstall/ui, vpn add-user/revoke/provision,
     ssh commands, install, mutating kubectl/helm, databricks/snowflake commands other than status/test/list/get/describe,
-    scan (every kind except fips and reports: they run cluster jobs or Ansible, or install scanners), dr
+    scan (every kind except architecture, fips and reports: they run cluster jobs or Ansible, or install scanners), dr
     backup/restore/schedule/test, chaos run/stop, undo (--drop included). Reading Kubernetes Secrets (kubectl get
     secret, get --raw on secrets) or helm release values (helm get values|all|manifest|hooks, helm status -o json|yaml)
     needs confirm=true too: they can print passwords that redaction cannot always recognise.
@@ -1129,6 +1129,7 @@ cloudseed scan host [<cloud> --env NAME] [--host bastion,vpn,k8s] [--profile cis
 cloudseed scan stig [<cloud> --env NAME] [--host bastion,vpn,k8s]                       (hosts: DISA STIG; EKS: Kubernetes STIG)
 cloudseed scan cloud [<cloud> --env NAME] [--framework cis_4.0_aws]                     (account / project / subscription)
 cloudseed scan fips [<cloud> --env NAME]                                                (FIPS 140 verification)
+cloudseed scan architecture [<cloud> --env NAME] [--profile production|lab] [--max-age-days 30] [--json]
 cloudseed scan all [<cloud> --env NAME] · cloudseed scan reports [--last N]
 
   cis     CIS Kubernetes Benchmark with kube-bench: the right profile per distro (eks-1.8.0, gke-1.9.0, aks-1.8, rke2-cis-1.9,
@@ -1155,12 +1156,21 @@ cloudseed scan all [<cloud> --env NAME] · cloudseed scan reports [--last N]
           FIPS-validated). In AWS FIPS environments also, on the live cluster: AWS_USE_FIPS_ENDPOINT on the AWS
           controllers, Velero's s3-fips endpoint, Karpenter EC2NodeClass AMIs and '-fips' Bottlerocket node images.
           On an environment created without fips_mode the verdict is N/A.
-  all     everything applicable, one report each, then a summary (FIPS verification only on FIPS environments).
+  architecture  Well-Architected assessment of saved configuration and local evidence. AWS/GCP: six pillars;
+          Azure: five pillars plus separate sustainability guidance; VMware: local infrastructure best practices.
+          Defaults: --profile production, --max-age-days 30. Lab relaxes production availability expectations;
+          it does not hide missing evidence. No cloud queries, provisioning or scanner installation. Saves reports
+          with findings, evidence and remediation; --json prints the report for automation. This is a scoped local
+          assessment, not live verification or provider certification. Missing/stale/manual evidence stays unknown.
+          Initial rules retain manual UNKNOWN items; a failure-free report is INCOMPLETE, not an overall PASS.
+  all     applicable security scans, one report each, then a summary (FIPS only on FIPS environments).
+          Architecture is explicit: run `cs scan architecture` separately.
 
 --host takes bastion, vpn and k8s, comma-separated or repeated (any case); an unknown value stops with exit code 2.
 Reports: <workdir>/scans/<kind>-<run>.json + .md; raw tool output under <workdir>/scans/raw/. Every scan is logged in
 the audit trail. Exit code: 1 when a verdict is FAIL or `scan all` could not run one of its scans (like chaos run and
-dr test), else 0.
+dr test), else 0. Architecture exits 0 on PASS, 1 on definite findings (FAIL), or 3 when evidence is missing,
+stale or needs manual review (INCOMPLETE); invalid arguments exit 2. FAIL takes precedence over INCOMPLETE.
 
 EXAMPLES
   cs scan all
@@ -1169,6 +1179,8 @@ EXAMPLES
   cs scan stig aws --env prod --host vpn         # the Ubuntu VPN host (the AL2023 bastion has no STIG content)
   cs scan cloud gcp --env prod
   cs scan fips vmware --env lab
+  cs scan architecture aws --env prod --profile production --max-age-days 30 --json
+  cs scan architecture vmware --env lab --profile lab
 """,
     "disable": """\
 cloudseed disable agentic | headliner | mcp | ui
@@ -1260,7 +1272,7 @@ cloudseed skill show <name>
 The 10 bundled skills follow the SKILL.md Agent Skills format used by Claude Code, Codex, Gemini CLI and others:
 cloudseed (the driver skill) plus cloudseed-aws, -gcp, -azure, -vmware (targets), -destroy (safe teardown),
 -platform (Kubernetes day-2: env, node, platform, dr, chaos, scan), -finops, -managed (Databricks / Snowflake) and
--architecture (how cloudseed works). `cloudseed skill list` shows them with their descriptions; `skill show <name>`
+-architecture (Well-Architected assessments and how cloudseed works). `cloudseed skill list` shows them with their descriptions; `skill show <name>`
 prints one. Names can be short (aws, gcp, azure, vmware, destroy, platform, finops, managed, architecture) or full
 (cloudseed-aws); an unknown name is refused before anything is copied.
 `install` copies them (all bundled skills when no names are given) into the agent's skills directory (~/.claude/skills,
@@ -1345,7 +1357,7 @@ cloudseed explain ... --json                   (the same page as data; exit 1 wh
 Deterministic explanation of anything cloudseed does - for you and for the agent:
   <feature>   how it is implemented: files, resources, security controls, where state/logs live, commands
               (overview network bastion security-baseline state kubernetes platform vpn vmware provisioning finops
-              managed-data agentic reconcile mcp prereqs fips chaos dr scan undo ui audit dependencies)
+              managed-data agentic reconcile mcp prereqs fips chaos dr scan architecture undo ui audit dependencies)
   <target>    aws | gcp | azure | vmware: what is built there, every variable and output (= cs help aws|gcp|azure|vmware-skill)
   <command>   the full help page of that command (same as cs help <command>)
   <topic>     quickstart deps agents envs services destroy troubleshooting examples ... (same as cs help <topic>)
@@ -1546,9 +1558,9 @@ disable and the changing forms of install, deps, skill, creds, use, model, ui an
 k9s (they need your terminal) and mcp serve (the server itself, which runs until stopped). Their read-only forms work:
 creds list, model, use list, install list, ui status|logs, mcp status|guide|tools|config|test|logs, deps status,
 skill list|show.
-Commands that change things wait for your approval: any --auto-approve, --purge*, provision, scans (all but fips and
-reports), vpn add-user/provision/revoke/connect/disconnect, platform install/ui, chaos run/stop, dr
-backup/schedule/test, mutating kubectl/helm (also options that point them at another server, identity or local file),
+Commands that change things wait for your approval: any --auto-approve, --purge*, provision, scans (all but
+architecture, fips and reports), vpn add-user/provision/revoke/connect/disconnect, platform install/ui, chaos run/stop,
+dr backup/schedule/test, mutating kubectl/helm (also options that point them at another server, identity or local file),
 helm template/lint, reading cluster secrets (kubectl get secret / --raw, helm get values|all|manifest|hooks, helm
 status -o json|yaml), and databricks/snowflake commands other than status/test. destroy, undo, node add/remove/scale,
 platform uninstall, dr restore and chaos run --target run unasked as a preview first (without --auto-approve they stop
@@ -2614,4 +2626,3 @@ def render(text: str, synopsis: bool = True, width: int | None = None) -> str:
 
 def print_page(topic: str | None, cloud: str | None) -> None:
     print(render(page(topic, cloud), synopsis=True, width=term_width()))
-

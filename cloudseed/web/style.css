@@ -355,7 +355,7 @@ dl.defs dd { margin: 0; color: var(--muted); }
 .drawer-tabs a.active { background: #1a2540; color: #fff; }
 .drawer-tabs a .t { color: #7c8aa5; font-size: 11px; font-variant-numeric: tabular-nums; }
 .drawer-tabs .dot { background: #7c8aa5; } .drawer-tabs .dot.run { background: var(--seed); } .drawer-tabs .dot.ok { background: #4ade80; } .drawer-tabs .dot.bad { background: #f87171; }
-.drawer-tabs .dot.interrupted { background: #fbbf24; } .drawer-tabs .dot.lost { background: #64748b; }
+.drawer-tabs .dot.interrupted, .drawer-tabs .dot.incomplete { background: #fbbf24; } .drawer-tabs .dot.lost { background: #64748b; }
 .drawer :focus-visible { outline-color: #a5b4fc; }
 #job-status { white-space: nowrap; }
 .job-cmd { padding: 6px 16px 0; font-family: var(--mono); font-size: 12px; color: #c4b5fd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
@@ -450,6 +450,7 @@ dl.defs dd { margin: 0; color: var(--muted); }
   #job-status[data-state="ok"]::before { content: "✔"; color: #4ade80; }
   #job-status[data-state="bad"]::before { content: "✖"; color: #f87171; }
   #job-status[data-state="interrupted"]::before { content: "▲"; color: #fbbf24; }
+  #job-status[data-state="incomplete"]::before { content: "?"; color: #fbbf24; }
   #job-status[data-state="lost"]::before { content: "?"; color: #9fb0cc; }
   .toasts { left: 16px; right: 16px; bottom: calc(var(--drawer-live, 0px) + 16px); }
   /* the wizard's step actions stay in reach on a long step */

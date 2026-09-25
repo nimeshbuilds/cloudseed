@@ -103,6 +103,10 @@ cs mcp connect cursor --transport stdio
 
 ## Safety model
 
+For a [Well-Architected assessment](well-architected.md), use `cloudseed_scan` with `kind=architecture`, the target
+`cloud` and `env`, `profile=production` (or `lab`), `max_age_days=30` and `json=true`. It reads saved local configuration
+and evidence, saves reports and needs no `confirm=true`. It makes no cloud queries and changes no infrastructure.
+
 - **Loopback only.** The server binds to 127.0.0.1, validates the `Origin` header (no DNS rebinding) and answers
   `401` without the bearer token. stdio has no port at all.
 - **Off until you turn it on.** It refuses to start until `cs setup mcp` or `cs enable mcp`; `cs disable mcp` stops it.
@@ -111,7 +115,7 @@ cs mcp connect cursor --transport stdio
 - **Confirmation for changes.** Tools that change infrastructure, a host or a service carry `destructiveHint` and refuse
   to run unless the call has `confirm=true`, so the assistant must ask you first: setup with apply, apply, destroy,
   update-ip, provision, node changes, platform install/uninstall/ui, VPN user changes, SSH commands, installs,
-  mutating kubectl/helm, scans (all but `fips` and `reports`), DR, chaos and undo. Reading Kubernetes Secrets or Helm
+  mutating kubectl/helm, scans (all but `architecture`, `fips` and `reports`), DR, chaos and undo. Reading Kubernetes Secrets or Helm
   release values needs `confirm=true` too, because they can print passwords.
 - **No credentials to the model.** Tool calls run `cloudseed` as a child under the credential session broker, and
   every line of output is redacted. Terraform state and credential files are never exposed as resources.

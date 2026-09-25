@@ -72,6 +72,12 @@ ok api GET /api/actions
 has "cloudseed_platform"
 ok api GET /api/jobs
 has '"label"'
+rc 3 job cloudseed_scan '{"kind": "architecture", "cloud": "aws", "env": "web", "profile": "lab", "max_age_days": 30}'
+has "Well-Architected screening"
+has "INCOMPLETE"
+ok api GET '/api/reports?env=aws-web'
+has '"architecture"'
+has '"INCOMPLETE"'
 EXPLAIN_CODE="$(curl -s -o /dev/null -w "%{http_code}" -H "X-CS-Token: $TOKEN" "$URL/api/explain?q=vpn")"
 if [[ "$EXPLAIN_CODE" == "200" ]]; then
   ok api GET "/api/explain?q=vpn"

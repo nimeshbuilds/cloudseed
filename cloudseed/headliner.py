@@ -30,7 +30,8 @@ cloudseed platform ui · cloudseed platform template gitlab-ci      # expose ins
 cloudseed kubectl|helm|k9s [cloud --env NAME] <args>                              # tools on the current cluster
 cloudseed finops estimate|cloud|k8s|report [cloud --env NAME]                      # costs
 cloudseed chaos list|run|status|stop|report · cloudseed dr status|backups|backup|restore|schedule|test|describe|logs
-cloudseed scan cis|kube|images|host|stig|cloud|fips|all|reports [cloud --env NAME]
+cloudseed scan cis|kube|images|host|stig|cloud|fips|architecture|all|reports [cloud --env NAME]
+cloudseed scan architecture [cloud --env NAME] --profile production|lab [--max-age-days 30] [--json]  # local Well-Architected assessment; incomplete evidence exits 3
 cloudseed databricks|snowflake status|test|connect|<cli args>                     # managed data platforms
 cloudseed troubleshoot <cloud> --env <name> [--log] · cloudseed inventory <cloud> --env <name>
 cloudseed explain <feature|target|command|item> [--json] · cloudseed help <command|topic> · cloudseed skill list|show <name>

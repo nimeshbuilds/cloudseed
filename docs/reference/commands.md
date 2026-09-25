@@ -51,8 +51,8 @@ CORE COMMANDS
   dr                 status | backups | backup | restore | schedule | test | describe | logs: disaster recovery with
                      Velero (bucket + identity created for you); `test` is an automated drill
   chaos              run | list | status | stop | report: Chaos Mesh experiments with a PASS/FAIL report
-  scan               cis | kube | images | host | stig | cloud | fips | all | reports: CIS / NSA-MITRE /
-                     vulnerability / OpenSCAP STIG / cloud CIS / FIPS scans with reports
+  scan               cis | kube | images | host | stig | cloud | fips | architecture | all | reports:
+                     security scans and local Well-Architected assessments with saved reports
   databricks         Databricks: connect (profile per environment), test, or pass any CLI command through
   snowflake          Snowflake: the same, with the Snowflake CLI
   explain [name]     how anything works: a feature, target, command, topic, platform item or setup variable
@@ -128,7 +128,7 @@ Home: ~/.cloudseed   (override with CLOUDSEED_HOME)
 | [`cloudseed finops`](#cloudseed-finops) | estimate &#124; cloud &#124; k8s &#124; report: cloudseed estimate, provider bill, OpenCost allocation |
 | [`cloudseed dr`](#cloudseed-dr) | status &#124; backups &#124; backup &#124; restore &#124; schedule &#124; test &#124; describe &#124; logs: disaster recovery with Velero (bucket + identity created for you); `test` is an automated drill |
 | [`cloudseed chaos`](#cloudseed-chaos) | run &#124; list &#124; status &#124; stop &#124; report: Chaos Mesh experiments with a PASS/FAIL report |
-| [`cloudseed scan`](#cloudseed-scan) | cis &#124; kube &#124; images &#124; host &#124; stig &#124; cloud &#124; fips &#124; all &#124; reports: CIS / NSA-MITRE / vulnerability / OpenSCAP STIG / cloud CIS / FIPS scans with reports |
+| [`cloudseed scan`](#cloudseed-scan) | cis &#124; kube &#124; images &#124; host &#124; stig &#124; cloud &#124; fips &#124; architecture &#124; all &#124; reports: security scans and local Well-Architected assessments with saved reports |
 | [`cloudseed databricks / snowflake`](#cloudseed-databricks-snowflake) | Databricks: connect (profile per environment), test, or pass any CLI command through; Snowflake: the same, with the Snowflake CLI |
 | [`cloudseed explain`](#cloudseed-explain) | how anything works: a feature, target, command, topic, platform item or setup variable (files, resources, controls, state, commands; --json: the page as data) |
 | [`cloudseed undo`](#cloudseed-undo) | undo the previous action (setup changes, installs, node changes, backups …), fifteen deep per environment (five of one kind); `undo --global` for settings, agents, MCP, UI and credentials |
@@ -915,7 +915,7 @@ Terminal: `cloudseed help chaos` · How it works: `cloudseed explain command cha
 
 ## cloudseed scan
 
-Cis &#124; kube &#124; images &#124; host &#124; stig &#124; cloud &#124; fips &#124; all &#124; reports: CIS / NSA-MITRE / vulnerability / OpenSCAP STIG / cloud CIS / FIPS scans with reports
+Cis &#124; kube &#124; images &#124; host &#124; stig &#124; cloud &#124; fips &#124; architecture &#124; all &#124; reports: security scans and local Well-Architected assessments with saved reports
 
 ```text
 cloudseed scan cis | kube [--framework nsa,mitre,cis-v1.10.0] | images                 (current cluster)
@@ -923,6 +923,7 @@ cloudseed scan host [<cloud> --env NAME] [--host bastion,vpn,k8s] [--profile cis
 cloudseed scan stig [<cloud> --env NAME] [--host bastion,vpn,k8s]                       (hosts: DISA STIG; EKS: Kubernetes STIG)
 cloudseed scan cloud [<cloud> --env NAME] [--framework cis_4.0_aws]                     (account / project / subscription)
 cloudseed scan fips [<cloud> --env NAME]                                                (FIPS 140 verification)
+cloudseed scan architecture [<cloud> --env NAME] [--profile production|lab] [--max-age-days 30] [--json]
 cloudseed scan all [<cloud> --env NAME] · cloudseed scan reports [--last N]
 ```
 
@@ -951,10 +952,18 @@ cloudseed scan all [<cloud> --env NAME] · cloudseed scan reports [--last N]
           FIPS-validated). In AWS FIPS environments also, on the live cluster: AWS_USE_FIPS_ENDPOINT on the AWS
           controllers, Velero's s3-fips endpoint, Karpenter EC2NodeClass AMIs and '-fips' Bottlerocket node images.
           On an environment created without fips_mode the verdict is N/A.
-  all     everything applicable, one report each, then a summary (FIPS verification only on FIPS environments).
+  architecture  Well-Architected assessment of saved configuration and local evidence. AWS/GCP: six pillars;
+          Azure: five pillars plus separate sustainability guidance; VMware: local infrastructure best practices.
+          Defaults: --profile production, --max-age-days 30. Lab relaxes production availability expectations;
+          it does not hide missing evidence. No cloud queries, provisioning or scanner installation. Saves reports
+          with findings, evidence and remediation; --json prints the report for automation. This is a scoped local
+          assessment, not live verification or provider certification. Missing/stale/manual evidence stays unknown.
+          Initial rules retain manual UNKNOWN items; a failure-free report is INCOMPLETE, not an overall PASS.
+  all     applicable security scans, one report each, then a summary (FIPS only on FIPS environments).
+          Architecture is explicit: run `cs scan architecture` separately.
 ```
 
---host takes bastion, vpn and k8s, comma-separated or repeated (any case); an unknown value stops with exit code 2. Reports: &lt;workdir&gt;/scans/&lt;kind&gt;-&lt;run&gt;.json + .md; raw tool output under &lt;workdir&gt;/scans/raw/. Every scan is logged in the audit trail. Exit code: 1 when a verdict is FAIL or `scan all` could not run one of its scans (like chaos run and dr test), else 0.
+--host takes bastion, vpn and k8s, comma-separated or repeated (any case); an unknown value stops with exit code 2. Reports: &lt;workdir&gt;/scans/&lt;kind&gt;-&lt;run&gt;.json + .md; raw tool output under &lt;workdir&gt;/scans/raw/. Every scan is logged in the audit trail. Exit code: 1 when a verdict is FAIL or `scan all` could not run one of its scans (like chaos run and dr test), else 0. Architecture exits 0 on PASS, 1 on definite findings (FAIL), or 3 when evidence is missing, stale or needs manual review (INCOMPLETE); invalid arguments exit 2. FAIL takes precedence over INCOMPLETE.
 
 **Examples**
 
@@ -965,6 +974,8 @@ cs scan host azure --env prod --profile stig
 cs scan stig aws --env prod --host vpn         # the Ubuntu VPN host (the AL2023 bastion has no STIG content)
 cs scan cloud gcp --env prod
 cs scan fips vmware --env lab
+cs scan architecture aws --env prod --profile production --max-age-days 30 --json
+cs scan architecture vmware --env lab --profile lab
 ```
 
 Terminal: `cloudseed help scan` · How it works: `cloudseed explain command scan`
@@ -1027,7 +1038,7 @@ Deterministic explanation of anything cloudseed does - for you and for the agent
 ```text
   <feature>   how it is implemented: files, resources, security controls, where state/logs live, commands
               (overview network bastion security-baseline state kubernetes platform vpn vmware provisioning finops
-              managed-data agentic reconcile mcp prereqs fips chaos dr scan undo ui audit dependencies)
+              managed-data agentic reconcile mcp prereqs fips chaos dr scan architecture undo ui audit dependencies)
   <target>    aws | gcp | azure | vmware: what is built there, every variable and output (= cs help aws|gcp|azure|vmware-skill)
   <command>   the full help page of that command (same as cs help <command>)
   <topic>     quickstart deps agents envs services destroy troubleshooting examples ... (same as cs help <topic>)
@@ -1441,7 +1452,7 @@ cloudseed as a Model Context Protocol server: every feature is a tool any MCP cl
   access            ssh, vpn, managed (databricks / snowflake)
   cost & docs       finops, troubleshoot, explain, help, skill
   resilience        dr (backup / restore / drill), chaos (experiments with verdicts), scan (CIS / STIG / CVEs /
-                    cloud / FIPS)
+                    cloud / FIPS / local Well-Architected assessments)
   undo & teardown   undo (revert the last environment action), destroy
 ```
 
@@ -1498,7 +1509,7 @@ plus resources (cloudseed://environments, cloudseed://skills/&lt;name&gt;), the 
   - destructive tools carry destructiveHint and refuse to run unless the call has confirm=true: setup with apply, apply,
     destroy, update-ip, provision, node add/remove/scale, platform install/uninstall/ui, vpn add-user/revoke/provision,
     ssh commands, install, mutating kubectl/helm, databricks/snowflake commands other than status/test/list/get/describe,
-    scan (every kind except fips and reports: they run cluster jobs or Ansible, or install scanners), dr
+    scan (every kind except architecture, fips and reports: they run cluster jobs or Ansible, or install scanners), dr
     backup/restore/schedule/test, chaos run/stop, undo (--drop included). Reading Kubernetes Secrets (kubectl get
     secret, get --raw on secrets) or helm release values (helm get values|all|manifest|hooks, helm status -o json|yaml)
     needs confirm=true too: they can print passwords that redaction cannot always recognise.
@@ -1630,7 +1641,7 @@ Agents: builtin (Claude API), claude (Claude Code - used automatically when no A
 
 Headliner: before the agent runs, the CLI gathers environments, outputs, tool + credential status and a command cheat-sheet into a compact brief. The agent starts informed instead of exploring - fewer tokens.
 
-Built-in agent: official Anthropic SDK, installed on first use into ~/.cloudseed/venv-agent. Needs ANTHROPIC\_API\_KEY or an `ant auth login` profile. Without those, cloudseed automatically falls back to your logged-in Claude Code CLI (`claude`) when it is installed - a claude.ai subscription login works only there. Models: claude-opus-5 (default), claude-opus-5-5, claude-fable-5-1, claude-sonnet-5. Its only tool runs `cloudseed <args>`. It follows the policy every agent session shares (below): agentic, enable, disable and the changing forms of install, deps, skill, creds, use, model, ui and mcp are refused, and so are ssh and k9s (they need your terminal) and mcp serve (the server itself, which runs until stopped). Their read-only forms work: creds list, model, use list, install list, ui status&#124;logs, mcp status&#124;guide&#124;tools&#124;config&#124;test&#124;logs, deps status, skill list&#124;show. Commands that change things wait for your approval: any --auto-approve, --purge\*, provision, scans (all but fips and reports), vpn add-user/provision/revoke/connect/disconnect, platform install/ui, chaos run/stop, dr backup/schedule/test, mutating kubectl/helm (also options that point them at another server, identity or local file), helm template/lint, reading cluster secrets (kubectl get secret / --raw, helm get values&#124;all&#124;manifest&#124;hooks, helm status -o json&#124;yaml), and databricks/snowflake commands other than status/test. destroy, undo, node add/remove/scale, platform uninstall, dr restore and chaos run --target run unasked as a preview first (without --auto-approve they stop at exit 3, nothing changed), so you approve once, with the plan on screen. Refused and unapproved calls are shown to you too. Without a terminal approvals are refused unless CLOUDSEED\_AGENT\_ALLOW\_DESTRUCTIVE is 1, true, yes or on. Skills: the core cloudseed skill plus the skills the task needs go into its prompt, with an index of the others (it reads them with `cloudseed skill show <name>`).
+Built-in agent: official Anthropic SDK, installed on first use into ~/.cloudseed/venv-agent. Needs ANTHROPIC\_API\_KEY or an `ant auth login` profile. Without those, cloudseed automatically falls back to your logged-in Claude Code CLI (`claude`) when it is installed - a claude.ai subscription login works only there. Models: claude-opus-5 (default), claude-opus-5-5, claude-fable-5-1, claude-sonnet-5. Its only tool runs `cloudseed <args>`. It follows the policy every agent session shares (below): agentic, enable, disable and the changing forms of install, deps, skill, creds, use, model, ui and mcp are refused, and so are ssh and k9s (they need your terminal) and mcp serve (the server itself, which runs until stopped). Their read-only forms work: creds list, model, use list, install list, ui status&#124;logs, mcp status&#124;guide&#124;tools&#124;config&#124;test&#124;logs, deps status, skill list&#124;show. Commands that change things wait for your approval: any --auto-approve, --purge\*, provision, scans (all but architecture, fips and reports), vpn add-user/provision/revoke/connect/disconnect, platform install/ui, chaos run/stop, dr backup/schedule/test, mutating kubectl/helm (also options that point them at another server, identity or local file), helm template/lint, reading cluster secrets (kubectl get secret / --raw, helm get values&#124;all&#124;manifest&#124;hooks, helm status -o json&#124;yaml), and databricks/snowflake commands other than status/test. destroy, undo, node add/remove/scale, platform uninstall, dr restore and chaos run --target run unasked as a preview first (without --auto-approve they stop at exit 3, nothing changed), so you approve once, with the plan on screen. Refused and unapproved calls are shown to you too. Without a terminal approvals are refused unless CLOUDSEED\_AGENT\_ALLOW\_DESTRUCTIVE is 1, true, yes or on. Skills: the core cloudseed skill plus the skills the task needs go into its prompt, with an index of the others (it reads them with `cloudseed skill show <name>`).
 
 External agents: their CLI is launched with the task; cloudseed skills are installed into the agent's skills directory (Grok cannot load skills: the core skill and the task's skills go into each Grok prompt). In every agent session (CLOUDSEED\_AGENT set) cloudseed itself refuses what changes your machine or its settings - install, deps install&#124;image&#124;bundle&#124;runtime, skill install, creds set/unset/clear, use &lt;agent&gt;, model &lt;id&gt;&#124;--forget, enable, disable, ui (all but status&#124;logs), mcp (all but status&#124;guide&#124;tools&#124;config&#124;test&#124;serve&#124;logs), agentic - with exit code 2 and the command for you to run; the read-only forms (creds list, model, use list, install list, ui status&#124;logs, mcp status&#124;guide&#124;tools&#124;config&#124;test&#124;logs, deps status, skill list&#124;show) stay available. Codex and Grok have a full shell, so for them that rule is advisory. Command templates per agent are in cloudseed/agents.py, overridable in ~/.cloudseed/agents.json: {prompt} and {model} are replaced anywhere inside a word; without a model a bare {model} and the option right before it are dropped, and a word containing {model} is dropped (the codex template passes --skip-git-repo-check).
 
@@ -1656,7 +1667,7 @@ cloudseed skill install [names...] [--agent NAME] [--project] [--dir PATH]
 cloudseed skill show <name>
 ```
 
-The 10 bundled skills follow the SKILL.md Agent Skills format used by Claude Code, Codex, Gemini CLI and others: cloudseed (the driver skill) plus cloudseed-aws, -gcp, -azure, -vmware (targets), -destroy (safe teardown), -platform (Kubernetes day-2: env, node, platform, dr, chaos, scan), -finops, -managed (Databricks / Snowflake) and -architecture (how cloudseed works). `cloudseed skill list` shows them with their descriptions; `skill show <name>` prints one. Names can be short (aws, gcp, azure, vmware, destroy, platform, finops, managed, architecture) or full (cloudseed-aws); an unknown name is refused before anything is copied. `install` copies them (all bundled skills when no names are given) into the agent's skills directory (~/.claude/skills, ~/.codex/skills, ...), into ./.&lt;agent&gt;/skills with --project, or anywhere with --dir. The built-in agent (the default) reads the skills straight from cloudseed, so for it they go to Claude Code's directory (./.claude/skills with --project). The built-in agent puts the core cloudseed skill plus the skills a task needs into its prompt, with an index of the others (it reads them with `skill show`). Grok cannot load skills from a directory: cloudseed sends the core skill and the task's skills in each Grok prompt, and `skill install --agent grok` installs them for Claude Code.
+The 10 bundled skills follow the SKILL.md Agent Skills format used by Claude Code, Codex, Gemini CLI and others: cloudseed (the driver skill) plus cloudseed-aws, -gcp, -azure, -vmware (targets), -destroy (safe teardown), -platform (Kubernetes day-2: env, node, platform, dr, chaos, scan), -finops, -managed (Databricks / Snowflake) and -architecture (Well-Architected assessments and how cloudseed works). `cloudseed skill list` shows them with their descriptions; `skill show <name>` prints one. Names can be short (aws, gcp, azure, vmware, destroy, platform, finops, managed, architecture) or full (cloudseed-aws); an unknown name is refused before anything is copied. `install` copies them (all bundled skills when no names are given) into the agent's skills directory (~/.claude/skills, ~/.codex/skills, ...), into ./.&lt;agent&gt;/skills with --project, or anywhere with --dir. The built-in agent (the default) reads the skills straight from cloudseed, so for it they go to Claude Code's directory (./.claude/skills with --project). The built-in agent puts the core cloudseed skill plus the skills a task needs into its prompt, with an index of the others (it reads them with `skill show`). Grok cannot load skills from a directory: cloudseed sends the core skill and the task's skills in each Grok prompt, and `skill install --agent grok` installs them for Claude Code.
 
 **Examples**
 

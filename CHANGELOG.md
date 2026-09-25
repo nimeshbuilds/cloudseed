@@ -7,6 +7,13 @@ commands or defaults; such changes are called out under **Changed**.
 
 ## [Unreleased]
 
+### Added
+
+- Local Well-Architected assessments with `cs scan architecture` across AWS, GCP, Azure and VMware, available through
+  the CLI, MCP, console and bundled skills. Production/lab policies, evidence age limits, provider pillar mappings,
+  findings and remediation share saved JSON/Markdown reports. Missing, stale and manual-review evidence yields
+  INCOMPLETE instead of a pass; the scanner makes no cloud queries or infrastructure changes.
+
 ### Changed
 
 - Redesigned GitHub Pages with a white-and-blue documentation theme, interactive architecture previews, clearer

@@ -203,7 +203,7 @@ def _panel(title: str, summary: dict, findings: list[dict], path: Path | None, v
         rows.append(("", ui.dim(note)))
     if hint:   # what to do about it: its own row, never read as part of the last finding
         rows += [("", ""), ("next step", hint)]
-    tone = "leaf" if not verdict or verdict.startswith("PASS") else "seed" if verdict.startswith("N/A") else "rose"
+    tone = "leaf" if not verdict or verdict.startswith("PASS") else "seed" if verdict.startswith(("N/A", "INCOMPLETE")) else "rose"
     if verdict:
         rows.append(("", ""))
         rows.append(("verdict", ui.style(verdict, tone, "bold")))

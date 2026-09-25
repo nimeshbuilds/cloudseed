@@ -550,7 +550,8 @@ def raw_argv(body: dict) -> list[str]:
     cmd = next((a for a in head[g:] if not a.startswith("-")), "")   # `--runtime local setup ...` is a setup
     if cmd in ("ssh", "k9s") and "--" not in argv:
         raise ValueError("interactive commands need a remote command (use the SSH action)")
-    if cmd not in READ_ONLY_COMMANDS and body.get("confirm") is not True:
+    local_assessment = rest[:2] == ["scan", "architecture"]
+    if cmd not in READ_ONLY_COMMANDS and not local_assessment and body.get("confirm") is not True:
         raise NeedsConfirm(f"`cloudseed {cmd}` can change things; send \"confirm\": true to run it.", audit.safe_argv(argv))
     if "-y" not in head and "--yes" not in head:
         argv = ["-y"] + argv
@@ -1679,7 +1680,7 @@ def platform_status(env_id: str) -> dict:
 
 # ---------------------------------------------------------------- reports and verdicts
 
-REPORT_PREFIXES = ("cis-", "stig-", "kube-", "images-", "host-", "cloud-", "fips-")   # what scan.save_report writes
+REPORT_PREFIXES = ("architecture-", "cis-", "stig-", "kube-", "images-", "host-", "cloud-", "fips-")   # saved scan reports
 RAW_PREFIXES = ("kubescape-", "trivy-")                                                # tool dumps next to them: never reports
 MAX_REPORT_BYTES = 32 << 20
 
@@ -1765,6 +1766,11 @@ def scan_verdict(kind: str, data: dict) -> str:
         return stored
     sm = data.get("summary") if isinstance(data.get("summary"), dict) else {}
     findings = [f for f in _items(data, "findings") if isinstance(f, dict)]
+    if kind == "architecture":
+        if _num(sm.get("failed")) or _num(sm.get("fail")) or any(f.get("status") == "FAIL" for f in findings):
+            return "FAIL"
+        # A damaged / incomplete assessment without its recorded verdict cannot prove that all checks passed.
+        return "INCOMPLETE"
     high = any(str(f.get("severity", "")).upper() in ("CRITICAL", "HIGH") for f in findings)
     if kind == "kube" or kind == "cloud":
         return "FAIL" if high else "PASS"
@@ -1853,7 +1859,7 @@ def verdicts(env) -> dict:
     """Last chaos / DR / scan verdicts of an environment for the dashboard (same rules as the CLI)."""
     out: dict = {}
     for key, sub, pat in (("chaos", "chaos", "report-*.json"), ("dr", "dr", "drill-*.json"), ("fips", "scans", "fips-*.json"),
-                          ("cis", "scans", "cis-*.json"), ("kube", "scans", "kube-*.json")):
+                          ("cis", "scans", "cis-*.json"), ("kube", "scans", "kube-*.json"), ("architecture", "scans", "architecture-*.json")):
         for p in _report_files(env.dir / sub, pat, scans=sub == "scans")[:3]:
             data = _load_report(p)
             if data is None:
@@ -1894,6 +1900,11 @@ def reports(env_id: str) -> dict:
                    "run": data.get("run") if isinstance(data.get("run"), str) else None,
                    "results": _items(data, "results", 200) or _items(data, "steps", 200), "findings": _items(data, "findings", 100),
                    "checks": _items(data, "checks", 200)}
+            if kind == "scans" and row["kind"] == "architecture":
+                for k in ("profile", "scope", "framework", "max_age_days"):
+                    if isinstance(data.get(k), (str, int, dict, list)):
+                        row[k] = data[k]
+                row["coverage_limits"] = [item for item in _items(data, "coverage_limits", 20) if isinstance(item, str)]
             if kind == "dr":
                 # the drill's own measurements; an RTO only for a PASS (a failed or interrupted drill recovered nothing,
                 # whatever its steps took), and the summary the Reports view shows, so it never derives one from the steps

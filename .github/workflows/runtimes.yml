@@ -59,7 +59,7 @@ jobs:
           set -o pipefail
           docker run --rm --entrypoint /bin/bash cloudseed:test -euo pipefail -c '
             export CLOUDSEED_HOME="$(mktemp -d)" NO_COLOR=1
-            python3 -m unittest tests.test_cli_e2e
+            python3 -m unittest tests.test_cli_e2e tests.test_architecture_cli
             bash tests/scenarios/14-ai-agents-and-mcp.sh
             bash tests/scenarios/15-web-console-and-finops.sh
           ' 2>&1 | tee "$RUNNER_TEMP/container-tests.log"
@@ -103,7 +103,7 @@ jobs:
       - name: CLI end-to-end against the frozen executable
         run: |
           set -o pipefail
-          python3 -m unittest tests.test_cli_e2e tests.test_bundle_lifecycle 2>&1 | tee "$RUNNER_TEMP/bundle-tests.log"
+          python3 -m unittest tests.test_cli_e2e tests.test_bundle_lifecycle tests.test_architecture_cli 2>&1 | tee "$RUNNER_TEMP/bundle-tests.log"
 
       - name: Real MCP and console HTTP services from the frozen executable
         run: |
