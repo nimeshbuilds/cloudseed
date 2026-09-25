@@ -2223,6 +2223,10 @@ def _serve_argv(state: dict) -> list[str]:
 def _service_env() -> dict:
     from . import creds, deps
     env = {"PATH": deps.path_env()["PATH"], "HOME": str(Path.home()), "NO_COLOR": "1", "LANG": os.environ.get("LANG", "en_US.UTF-8")}
+    if paths.IS_BUNDLE:
+        # A detached server outlives this CLI. Give it its own extraction directory;
+        # PyInstaller otherwise reuses ours and loses every asset when we exit.
+        env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
     shell = creds.shell_env()   # never bake credential-vault values into the service: it reads the vault itself, fresh
     for k in ("CLOUDSEED_HOME", "AWS_PROFILE", "AWS_DEFAULT_REGION", "AWS_REGION", "CLOUDSDK_CORE_PROJECT", "GOOGLE_CLOUD_PROJECT", "ARM_SUBSCRIPTION_ID", "AZURE_SUBSCRIPTION_ID", "KUBECONFIG"):
         if shell.get(k):

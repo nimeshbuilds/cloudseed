@@ -782,6 +782,10 @@ def child_env() -> dict:
     if e.get("XPC_SERVICE_NAME") in (LAUNCHD_LABEL, LEGACY_LAUNCHD_LABEL):   # launchd's name for the console, not for its jobs
         e.pop("XPC_SERVICE_NAME", None)
     e.update({"NO_COLOR": "1", "CLOUDSEED_UI": "1", "PYTHONUNBUFFERED": "1", "TERM": "dumb"})
+    if paths.IS_BUNDLE:
+        # Jobs survive console restarts, so their bundled Terraform, skills and
+        # playbooks must not share the console's temporary extraction directory.
+        e["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
     return e
 
 

@@ -1,0 +1,120 @@
+name: Packaged runtimes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtimes-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NO_COLOR: "1"
+  TF_IN_AUTOMATION: "1"
+  TF_INPUT: "0"
+
+jobs:
+  container:
+    name: container (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # Build the actual Dockerfile on both native architectures; never push an image.
+      - name: Build runtime image
+        run: |
+          set -o pipefail
+          docker build --progress=plain -t cloudseed:test . 2>&1 | tee "$RUNNER_TEMP/container-build.log"
+
+      - name: Smoke test every included tool and the default entrypoint
+        run: |
+          docker run --rm cloudseed:test --version
+          docker run --rm cloudseed:test --help
+          docker run --rm --entrypoint /bin/bash cloudseed:test -euo pipefail -c '
+            python3 --version
+            terraform version
+            aws --version
+            gcloud version
+            gke-gcloud-auth-plugin --version
+            az version
+            kubectl version --client
+            helm version
+            ssh -V
+            go version
+            qemu-img --version
+          '
+
+      - name: CLI end-to-end and real HTTP services inside the container
+        run: |
+          set -o pipefail
+          docker run --rm --entrypoint /bin/bash cloudseed:test -euo pipefail -c '
+            export CLOUDSEED_HOME="$(mktemp -d)" NO_COLOR=1
+            python3 -m unittest tests.test_cli_e2e
+            bash tests/scenarios/14-ai-agents-and-mcp.sh
+            bash tests/scenarios/15-web-console-and-finops.sh
+          ' 2>&1 | tee "$RUNNER_TEMP/container-tests.log"
+
+      - uses: actions/upload-artifact@v7.0.1
+        if: failure()
+        with:
+          name: container-logs-${{ matrix.os }}
+          path: ${{ runner.temp }}/container-*.log
+          retention-days: 7
+
+  bundle:
+    name: binary (${{ matrix.os }}, python 3.14)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.14"
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: providers/vmdesktop/go.mod
+          cache-dependency-path: providers/vmdesktop/go.sum
+
+      - name: Build the self-contained binary
+        env:
+          TF_VERSION: "1.16.4"
+        run: |
+          set -o pipefail
+          bash scripts/build-bundle.sh 2>&1 | tee "$RUNNER_TEMP/bundle-build.log"
+          echo "CLOUDSEED_TEST_BINARY=$(find "$PWD/dist" -type f -name 'cloudseed-*' -print -quit)" >> "$GITHUB_ENV"
+          echo "$PWD/build/tfbin" >> "$GITHUB_PATH"
+
+      - name: CLI end-to-end against the frozen executable
+        run: |
+          set -o pipefail
+          python3 -m unittest tests.test_cli_e2e tests.test_bundle_lifecycle 2>&1 | tee "$RUNNER_TEMP/bundle-tests.log"
+
+      - name: Real MCP and console HTTP services from the frozen executable
+        run: |
+          set -o pipefail
+          export SCN_BINARY="$CLOUDSEED_TEST_BINARY"
+          bash tests/scenarios/14-ai-agents-and-mcp.sh 2>&1 | tee "$RUNNER_TEMP/bundle-mcp.log"
+          bash tests/scenarios/15-web-console-and-finops.sh 2>&1 | tee "$RUNNER_TEMP/bundle-ui.log"
+
+      - uses: actions/upload-artifact@v7.0.1
+        if: failure()
+        with:
+          name: bundle-logs-${{ matrix.os }}
+          path: ${{ runner.temp }}/bundle-*.log
+          retention-days: 7
