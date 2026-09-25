@@ -115,7 +115,7 @@ cloudseed is deliberately focused. Things it does **not** do today:
 | Cloud bastions | Amazon Linux 2023 (AWS), Debian 12 (GCP), Ubuntu 24.04 (Azure); Ubuntu Pro FIPS images in FIPS mode |
 | Kubernetes | EKS, GKE, AKS; RKE2 (stable channel by default) or kubeadm (1.35 by default) on VMware |
 | Helm | Helm 3 and Helm 4 |
-| Go | 1.24+ (only to build the VMware provider) |
+| Go | 1.25+ (only to build the VMware provider) |
 
 ## Everything else
 

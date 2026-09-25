@@ -677,7 +677,7 @@ def ensure_provider(rebuild: bool | None = None, announce: bool | None = None, s
     `announce` reports an up-to-date build instead of staying silent. It defaults to on when `rebuild` is given
     explicitly - the `install vmware-provider [--rebuild]` command - and off for the implicit call every vmware
     command makes (prepare), which must stay quiet. When an existing build cannot be replaced, the implicit call warns
-    and keeps using it: without Go (or with one older than go.mod's 1.24) always; when the build fails only with
+    and keeps using it: without Go (or with one older than go.mod's 1.25) always; when the build fails only with
     `stale_ok` - the commands that change no VM (status, destroy, troubleshoot ...), so they never depend on Go. A
     command that creates or changes VMs stops instead of applying with a provider older than the stack it renders."""
     if announce is None:
@@ -698,7 +698,7 @@ def ensure_provider(rebuild: bool | None = None, announce: bool | None = None, s
     # that fails (offline with a cold module cache, a Go too old for go.mod): only an explicit rebuild insists.
     fallback = binary.exists() and not rebuild
     go = deps.find("go")
-    # a Go older than go.mod's `go 1.24` builds it only by downloading a newer toolchain (fails offline or with
+    # a Go older than go.mod's `go 1.25` builds it only by downloading a newer toolchain (fails offline or with
     # GOTOOLCHAIN=local): the same as no Go at all
     have = deps.version_of("go") if go else ""
     old = have if have and deps.too_old("go", have) else ""
@@ -736,7 +736,7 @@ def ensure_provider(rebuild: bool | None = None, announce: bool | None = None, s
                             "build. Retry once Go can reach its module proxy: cloudseed install vmware-provider --rebuild")
                     return binary
                 raise ui.Abort(f"Building the VMware provider failed ({why}). If Go reports missing modules, it needs network "
-                               "access once to fill its module cache; go.mod needs Go 1.24 or newer."
+                               "access once to fill its module cache; go.mod needs Go 1.25 or newer."
                                + (" The existing build is older than these sources: commands that change no VM (status, "
                                   "destroy ...) keep using it, but VMs are only created or changed with the current one."
                                   if fallback and implicit else ""))

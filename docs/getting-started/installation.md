@@ -18,7 +18,7 @@ and only after you agree.
 | Terraform | **1.10 or newer** | Required for every target (S3 native state locking needs 1.10). cloudseed installs it for you: `cloudseed install terraform`. |
 | OpenSSH | `ssh` and `ssh-keygen` | Preinstalled on macOS and most Linux distributions. |
 | Cloud CLIs | optional | `aws`, `gcloud` and `az` are only a login convenience: Terraform's providers authenticate with your profiles, application-default credentials or environment variables. Azure's `az login` is the exception: it needs the `az` CLI unless you use `ARM_*` service-principal variables. |
-| VMware (local target) | Fusion Pro 13+ or Workstation Pro 17+ | Both free. Go (1.24+) builds cloudseed's VMware provider once; qemu-img converts cloud images. `cloudseed install vmware` installs Terraform, Go, qemu-img and the provider. |
+| VMware (local target) | Fusion Pro 13+ or Workstation Pro 17+ | Both free. Go (1.25+) builds cloudseed's VMware provider once; qemu-img converts cloud images. `cloudseed install vmware` installs Terraform, Go, qemu-img and the provider. |
 
 ## Install
 

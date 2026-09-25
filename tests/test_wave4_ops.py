@@ -4,7 +4,7 @@ mismatches wrapped over lines and blamed on the VMware provider only when it is 
 with the working directory, the vmrest and provider-rebuild signatures, VMWARE_HOME and old VMware releases),
 reconcile (GovCloud partitions, an account-level IAM Access Analyzer under another name stops before apply), finops
 (GuardDuty / Security Hub / AWS Config follow the regional baseline switch) and deps (the clouds of each tool in
-deps.status, Go >= 1.24 and its upgrade, the Azure note built on arm_credentials). Stdlib only, no network, no cloud."""
+deps.status, Go >= 1.25 and its upgrade, the Azure note built on arm_credentials). Stdlib only, no network, no cloud."""
 
 import contextlib
 import io
@@ -473,11 +473,18 @@ class DepsTests(unittest.TestCase):
     def test_go_version_is_the_local_toolchain(self):
         self.assertEqual(deps.version_of("go"), "1.22.5")
         self.assertTrue(deps.too_old("go", deps.version_of("go")))
-        self.assertEqual(deps.TOOLS["go"]["min_version"], "1.24")
+        self.assertEqual(deps.TOOLS["go"]["min_version"], "1.25")
         self.state.write_text("go1.27.1\n")
         self.assertEqual(deps.version_of("go"), "1.27.1")
         self.assertFalse(deps.too_old("go", "1.27.1"))
-        self.assertFalse(deps.too_old("go", "1.24rc2"))
+        self.assertTrue(deps.too_old("go", "1.24.13"))
+        self.assertFalse(deps.too_old("go", "1.25.0"))
+        self.assertFalse(deps.too_old("go", "1.25rc2"))
+
+    def test_go_minimum_matches_provider_toolchain(self):
+        go_mod = (Path(__file__).resolve().parents[1] / "providers" / "vmdesktop" / "go.mod").read_text()
+        required = next(line.split()[1] for line in go_mod.splitlines() if line.startswith("go "))
+        self.assertEqual(deps.TOOLS["go"]["min_version"].split(".")[:2], required.split(".")[:2])
 
     def test_status_rows_carry_their_clouds(self):
         with mock.patch.object(deps, "find", return_value=None):
@@ -490,7 +497,7 @@ class DepsTests(unittest.TestCase):
     def test_an_old_go_is_reported_and_upgraded_with_brew(self):
         row = next(r for r in deps.status("vmware") if r["tool"] == "go")
         self.assertTrue(row["outdated"])
-        self.assertIn("needs >= 1.24", row["version"])
+        self.assertIn("needs >= 1.25", row["version"])
         self.assertIn("go", deps.missing("vmware")[1])
         stack, out = _quiet()
         with stack, mock.patch.object(deps, "_download", side_effect=AssertionError("no download expected")):
@@ -499,7 +506,7 @@ class DepsTests(unittest.TestCase):
         self.assertIn("upgrade go", calls)
         self.assertNotIn("install go", calls)
         self.assertEqual(deps.version_of("go"), "1.25.1")
-        self.assertIn("older than 1.24", out.getvalue())
+        self.assertIn("older than 1.25", out.getvalue())
 
     def test_a_go_brew_cannot_update_falls_back_to_the_official_release(self):
         _script(self.bin / "brew", f'echo "$*" >> "{self.calls}"\ncase "$1" in list) exit 1;; esac\n')   # not brew's Go
@@ -513,7 +520,7 @@ class DepsTests(unittest.TestCase):
             self.assertFalse(deps.install("go"))
         self.assertIn("install go", self.calls.read_text())
         self.assertTrue(called and called[0].startswith("https://go.dev/dl/"))
-        self.assertIn("older than 1.24", out.getvalue())
+        self.assertIn("older than 1.25", out.getvalue())
 
     def test_a_current_go_is_left_alone(self):
         self.state.write_text("go1.26.0\n")
