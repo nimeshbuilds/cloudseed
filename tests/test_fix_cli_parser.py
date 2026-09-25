@@ -609,6 +609,12 @@ class ReadKeyTests(unittest.TestCase):
 
 
 class SpinnerTests(unittest.TestCase):
+    def setUp(self):
+        # These tests explicitly emulate a terminal, independent of the runner.
+        terminal = mock.patch.object(ui, "_DUMB", False)
+        terminal.start()
+        self.addCleanup(terminal.stop)
+
     def test_output_during_a_spin_lands_on_a_clean_line(self):
         out, err = TTYBuf(), TTYBuf()
         with mock.patch("sys.stdout", out), mock.patch("sys.stderr", err), mock.patch.object(ui, "cols", return_value=40):

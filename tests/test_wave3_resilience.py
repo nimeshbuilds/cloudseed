@@ -768,6 +768,8 @@ class ProwlerEnvTests(unittest.TestCase):
         seen = {}
 
         def run(cmd, env=None, **kw):
+            if "account" in cmd:
+                return cp(0, '{"id": "sub"}')
             if "--list-compliance" in cmd:
                 seen["list_env"] = env
                 return cp(0, f"cis_4.0_{cloud_key}")

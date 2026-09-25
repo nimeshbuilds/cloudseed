@@ -637,6 +637,15 @@ class ServiceTests(Isolated):
         self.assertEqual(webui.url(s={"host": "127.0.0.1", "port": 7699}), "http://127.0.0.1:7699/")
 
 
+class LocalServerStartupTests(unittest.TestCase):
+    def test_binding_does_not_wait_for_reverse_dns(self):
+        with mock.patch.object(socket, "getfqdn", side_effect=AssertionError("reverse DNS must not run")):
+            server = webui._Server(("127.0.0.1", 0), webui._Handler)
+        self.addCleanup(server.server_close)
+        self.assertEqual(server.server_name, "127.0.0.1")
+        self.assertGreater(server.server_port, 0)
+
+
 class ForegroundServeTests(unittest.TestCase):                                # webui-backend#16, #3 (end to end)
     def test_foreground_serve_records_its_address_and_jobs_survive_a_restart(self):
         home = Path(tempfile.mkdtemp(prefix="cs-webui-fg-"))
