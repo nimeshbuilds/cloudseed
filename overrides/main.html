@@ -32,7 +32,7 @@
   {%- endif -%}
   {%- set cs_image = config.site_url ~ "assets/og-image.png" -%}
   {%- set cs_url = (page.canonical_url if page and page.canonical_url else config.site_url) -%}
-  <meta name="theme-color" content="#0f172a">
+  <meta name="theme-color" content="#ffffff">
   {% block cs_robots %}<meta name="robots" content="index, follow, max-image-preview:large">{% endblock %}
   <link rel="icon" type="image/svg+xml" href="{{ 'assets/icon.svg' | url }}">
   <link rel="apple-touch-icon" href="{{ 'assets/apple-touch-icon.png' | url }}">
@@ -91,10 +91,5 @@
   {%- endif %}
 {% endblock %}
 
-{% block announce %}
-  <a class="cs-announce" href="https://github.com/nimeshbuilds/cloudseed">
-    <span class="cs-announce__tag">New</span>
-    <span>cloudseed {{ config.extra.cloudseed_version }} is open source<span class="cs-announce__more"> under Apache-2.0</span><span class="cs-announce__more"> — star it on GitHub</span></span>
-    <span class="cs-announce__icon" aria-hidden="true">{% include ".icons/octicons/star-16.svg" %}</span>
-  </a>
-{% endblock %}
+{# Release information lives in the homepage and changelog; keep the reading header quiet. #}
+{% block announce %}{% endblock %}

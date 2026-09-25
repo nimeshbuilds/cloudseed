@@ -1,96 +1,12 @@
-/* cloudseed site behaviour (no dependencies): the landing page's typed terminal demo, copy buttons, the console
- * screenshot tabs and the GitHub star count; on docs pages, unbreakable short inline code and full-size diagrams.
+/* cloudseed site behaviour (no dependencies): copy buttons, architecture and console tabs;
+ * on docs pages, unbreakable short inline code and full-size diagrams.
  * Runs on every page load, including Material's instant navigation (document$), and does nothing on pages without
  * these elements. */
 (function () {
   "use strict";
 
-  var running = [];   // stop functions of the current page's animations (instant navigation swaps the page)
-
   function reducedMotion() {
     return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  }
-
-  /* ---------------------------------------------------------------- terminal demo */
-  function initTerminal(root) {
-    if (root.dataset.csReady) return;
-    root.dataset.csReady = "1";
-    if (reducedMotion()) return;          // the full transcript stays visible and scrollable
-
-    var screen = root.querySelector(".cs-term__screen");
-    var lines = Array.prototype.slice.call(screen.querySelectorAll(".l"));
-    var steps = Array.prototype.slice.call(root.querySelectorAll("[data-cs-step]"));
-    var cursor = document.createElement("span");
-    cursor.className = "cs-term__cursor";
-    var stopped = false, visible = true, gen = 0;
-
-    root.classList.add("is-live");
-
-    var observer = "IntersectionObserver" in window ? new IntersectionObserver(function (entries) {
-      visible = entries[0].isIntersecting;
-    }, { threshold: 0.15 }) : null;
-    if (observer) observer.observe(root);
-
-    function sleep(ms) {
-      var my = gen;
-      return new Promise(function (resolve) {
-        var left = ms;
-        (function tick() {
-          if (stopped || my !== gen) return;        // abandoned: never resolves, the loop just ends
-          var paused = !visible || document.hidden;
-          if (!paused) left -= 50;
-          if (left <= 0) resolve(); else setTimeout(tick, 50);
-        })();
-      });
-    }
-
-    function setStep(n) {
-      steps.forEach(function (s) { s.classList.toggle("is-active", String(n) === s.getAttribute("data-cs-step")); });
-    }
-
-    function scroll() { screen.scrollTop = screen.scrollHeight; }
-
-    async function typeCommand(line) {
-      var target = line.querySelector(".c");
-      var text = target.getAttribute("data-text") || target.textContent;
-      target.setAttribute("data-text", text);
-      target.textContent = "";
-      line.classList.add("on");
-      line.appendChild(cursor);
-      scroll();
-      await sleep(550);
-      for (var i = 0; i < text.length; i++) {
-        target.textContent = text.slice(0, i + 1);
-        await sleep(38 + Math.random() * 55);
-      }
-      await sleep(420);
-      if (cursor.parentNode) cursor.parentNode.removeChild(cursor);
-    }
-
-    async function play() {
-      var my = gen;
-      lines.forEach(function (l) { l.classList.remove("on"); });
-      screen.scrollTop = 0;
-      for (var i = 0; i < lines.length; i++) {
-        if (stopped || my !== gen) return;
-        var line = lines[i];
-        if (line.classList.contains("cmd")) {
-          setStep(line.getAttribute("data-step"));
-          await typeCommand(line);
-        } else {
-          await sleep(parseInt(line.getAttribute("data-d") || "140", 10));
-          line.classList.add("on");
-          scroll();
-        }
-      }
-      await sleep(5200);
-      if (stopped || my !== gen) return;
-      gen++;
-      play();
-    }
-
-    play();
-    running.push(function () { stopped = true; if (observer) observer.disconnect(); });
   }
 
   /* ---------------------------------------------------------------- copy buttons */
@@ -115,10 +31,15 @@
     button.addEventListener("click", function () {
       copyText(button.getAttribute("data-cs-copy")).then(function () {
         button.classList.add("is-copied");
+        var status = document.querySelector("[data-cs-copy-status]");
+        if (status) status.textContent = "Copied to clipboard.";
         var label = button.getAttribute("aria-label");
         button.setAttribute("aria-label", "Copied to clipboard");
         setTimeout(function () { button.classList.remove("is-copied"); button.setAttribute("aria-label", label); }, 1600);
-      }, function () {});
+      }, function () {
+        var status = document.querySelector("[data-cs-copy-status]");
+        if (status) status.textContent = "Copy unavailable. Select and copy the command manually.";
+      });
     });
   }
 
@@ -159,30 +80,6 @@
     var first = tabs.findIndex(function (t) { return t.getAttribute("aria-selected") === "true"; });
     select(first < 0 ? 0 : first, false);
     panels.forEach(function (p) { p.classList.remove("is-entering"); });
-  }
-
-  /* ---------------------------------------------------------------- GitHub stars
-   * Material already asks the GitHub API for the repository's facts (header widget) and caches them for the session
-   * (__source); reuse them instead of making a second request. */
-  function formatCount(n) {
-    return n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, "") + "k" : String(n);
-  }
-
-  function sourceFacts() {
-    try { return typeof window.__md_get === "function" ? window.__md_get("__source", sessionStorage) : null; } catch (e) { return null; }
-  }
-
-  function initStars(targets) {
-    if (!targets.length) return;
-    var tries = 0;
-    (function poll() {
-      var facts = sourceFacts();
-      if (facts && typeof facts.stars === "number") {
-        if (facts.stars > 0) targets.forEach(function (el) { el.textContent = formatCount(facts.stars); el.hidden = false; });
-        return;
-      }
-      if (++tries < 16 && document.contains(targets[0])) setTimeout(poll, 500);
-    })();
   }
 
   /* ---------------------------------------------------------------- inline code
@@ -242,12 +139,9 @@
     keepShortCodeTogether();
     var search = document.querySelector('.md-search[role="dialog"]:not([aria-label])');
     if (search) search.setAttribute("aria-label", "Search the documentation");   // Material leaves its dialog unnamed
-    running.splice(0).forEach(function (stop) { stop(); });
-    document.querySelectorAll("[data-cs-term]").forEach(initTerminal);
     document.querySelectorAll("[data-cs-copy]").forEach(initCopy);
     document.querySelectorAll("[data-cs-tabs]").forEach(initTabs);
     document.querySelectorAll(".cs-diagram").forEach(initDiagram);
-    initStars(Array.prototype.slice.call(document.querySelectorAll("[data-cs-stars-count]")));
   }
 
   if (typeof window.document$ !== "undefined" && window.document$.subscribe) {

@@ -106,8 +106,10 @@ class Scenarios(unittest.TestCase):
 
 
 class SiteLabels(unittest.TestCase):
-    """The site's landing page (overrides/home.html) and the scenario index card for each scenario carry the same
-    verification label as the scenario's own page."""
+    """Homepage entry points resolve, factual counts stay current, and scenario verification labels agree.
+
+    The homepage links to selected walkthroughs; the scenario index owns the full verification inventory.
+    """
     HOME = (ROOT / "overrides" / "home.html").read_text(encoding="utf-8")
     INDEX = (ROOT / "docs" / "scenarios" / "index.md").read_text(encoding="utf-8")
     BANNER = {"live": "Verified live on VMware", "local": "Verified live on macOS (local", "dry": "Verified with --dry-run"}
@@ -116,11 +118,11 @@ class SiteLabels(unittest.TestCase):
         page = (ROOT / "docs" / "scenarios" / f"{slug}.md").read_text(encoding="utf-8")
         return re.search(r'^!!! \w+ "(Verified[^"]*)"', page, re.M).group(1)
 
-    def test_landing_page_pills(self):
-        kinds = re.findall(r'\("(\d\d-[a-z0-9-]+)", "[^"]*", "[^"]*", "(live|local|dry)"\)', self.HOME)
-        self.assertEqual(len(kinds), 15)
-        for slug, kind in kinds:
-            self.assertTrue(self._banner(slug).startswith(self.BANNER[kind]), f"{slug}: {kind} vs '{self._banner(slug)}'")
+    def test_landing_page_scenario_links(self):
+        links = re.findall(r"['\"]scenarios/(\d\d-[a-z0-9-]+)/['\"]", self.HOME)
+        self.assertTrue(links)
+        for slug in links:
+            self.assertTrue((ROOT / "docs" / "scenarios" / (slug + ".md")).is_file(), slug)
 
     def test_scenario_index_cards(self):
         label = {"Live": "live", "Live (local)": "local", "Dry-run": "dry"}
@@ -133,12 +135,13 @@ class SiteLabels(unittest.TestCase):
     def test_landing_page_numbers(self):
         flat = " ".join(self.HOME.split())
         items = [n for n, spec in pl.CATALOG.items() if not spec.get("hidden")]
-        self.assertIn(f'cs-stats__num">{len(items)}</strong><span class="cs-stats__label">platform items', flat)
-        self.assertIn(f'cs-stats__num">{len(mcp.TOOLS)}</strong><span class="cs-stats__label">MCP tools', flat)
-        for m in re.finditer(r"\b(\d+) pinned items\b", flat):
-            self.assertEqual(int(m.group(1)), len(items), m.group(0))
-        self.assertIn(f"{ {5: 'five', 15: 'fifteen'}[undo.KEEP_TOTAL] } deep per environment", flat)
-        self.assertNotRegex(flat, r"\bfive (steps )?deep\b")
+        for pattern, count in ((r"\b(\d+) (?:pinned |platform )?items\b", len(items)),
+                               (r"\b(\d+) MCP tools\b", len(mcp.TOOLS))):
+            for m in re.finditer(pattern, flat):
+                self.assertEqual(int(m.group(1)), count, m.group(0))
+        walkthroughs = re.search(r"\ball (\d+) walkthroughs\b", flat)
+        self.assertIsNotNone(walkthroughs)
+        self.assertEqual(int(walkthroughs.group(1)), len(list((ROOT / "docs" / "scenarios").glob("[0-9][0-9]-*.md"))))
 
 
 class Claims(unittest.TestCase):
