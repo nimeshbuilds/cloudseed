@@ -438,6 +438,30 @@ class StdioSignalTests(unittest.TestCase):
     def test_sigterm_removes_parked_credentials_file(self):   # mcp#15 (file fallback: plaintext on disk)
         self._sigterm_session(force_file=True)
 
+    @unittest.skipIf(sys.platform == "win32", "POSIX signals")
+    def test_sigterm_as_the_server_starts_removes_parked_credentials_file(self):
+        """A SIGTERM right after serve() has replaced the session's own signal handlers - here while it logs its start,
+        the step that used to sit between those handlers and the try whose `finally` ends the session - must still
+        remove the parked credentials (the file fallback: plain text on disk until the next sweep otherwise)."""
+        marker = "FAKEsecretFIXMCPstart" + str(os.getpid())
+        code = (f"import os, signal, sys\nsys.path.insert(0, {str(ROOT)!r})\nfrom cloudseed import cli, mcp, secrets\n"
+                "secrets._start_broker = lambda parked: None\n"
+                "log = mcp._log\n"
+                "def _log(msg):\n"
+                "    log(msg)\n"
+                "    if msg == 'stdio server started':\n"
+                f"        parked = [f for f in secrets.SESSIONS_DIR.glob('*.json') if {marker!r} in f.read_text()]\n"
+                "        sys.stderr.write('PARKED ' + ' '.join(map(str, parked)) + '\\n'); sys.stderr.flush()\n"
+                "        os.kill(os.getpid(), signal.SIGTERM)\n"
+                "mcp._log = _log\n"
+                "sys.exit(cli.main(['mcp', 'serve']))\n")
+        env = dict(os.environ, CLOUDSEED_MCP_FORCE="1", AWS_SECRET_ACCESS_KEY=marker)
+        p = subprocess.run([sys.executable, "-c", code], input=b"", capture_output=True, env=env, timeout=60)
+        err = p.stderr.decode(errors="replace")
+        parked = next((line.split()[1:] for line in err.splitlines() if line.startswith("PARKED")), None)
+        self.assertTrue(parked, f"the parked-credentials session never appeared (exit {p.returncode}): {err[-2000:]}")
+        self.assertEqual([f for f in parked if Path(f).exists()], [], "SIGTERM left the parked credentials behind")
+
 
 # ------------------------------------------------------------------------------------------------ http transport
 class HttpTests(unittest.TestCase):

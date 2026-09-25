@@ -1648,9 +1648,12 @@ def serve() -> int:
         finally:    # always release the slot, or every later response would wait forever
             ordered.complete(seq, resp)
 
-    _exit_on_signals()
-    _log("stdio server started")
     try:
+        # inside the try: from the moment these handlers replace the ones that parked the session (secrets), a
+        # SIGTERM raises SystemExit here, and only the `finally` below still ends the session (its file fallback
+        # holds the credentials in plain text); the log line used to sit between the two, a window a quick SIGTERM hit
+        _exit_on_signals()
+        _log("stdio server started")
         for raw in inp:
             raw = raw.strip()
             if not raw:
