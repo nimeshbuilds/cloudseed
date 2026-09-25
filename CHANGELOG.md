@@ -7,7 +7,17 @@ commands or defaults; such changes are called out under **Changed**.
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- Redesigned GitHub Pages with a white-and-blue documentation theme, interactive architecture previews, clearer
+  guide entry points, and consistent SVG/PNG branding. Added an end-to-end engineering review and prioritized roadmap.
+- Build strict documentation on pull requests, explicitly install Node for tests, and retain failing CI logs.
+
+### Fixed
+
+- MCP stop/restart with long process paths, local server startup with slow DNS, and console job completion metadata ordering.
+- Explicit GCP credential diagnostics, Azure scanner login preflight, and VMware node/provision validation ordering.
+- Host-dependent test fixtures and dry-run scenario assumptions that failed across the Linux/macOS Actions matrix.
 
 ## [0.1.0] - 2026-09-24
 

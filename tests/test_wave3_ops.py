@@ -509,6 +509,7 @@ class LookupEnvTests(unittest.TestCase):
 
 FAKE_KUBECTL = r'''#!PYTHON
 import json, os, sys, urllib.parse
+from socketserver import TCPServer
 from http.server import BaseHTTPRequestHandler, HTTPServer
 mode = os.environ.get("FAKE_MODE", "ok")
 args = sys.argv[1:]
@@ -539,7 +540,13 @@ class H(BaseHTTPRequestHandler):
         self.send_response(code); self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
 
-srv = HTTPServer(("127.0.0.1", 0), H)
+# Match kubectl: the forwarding fixture must not wait for host reverse DNS.
+class LocalServer(HTTPServer):
+    def server_bind(self):
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+srv = LocalServer(("127.0.0.1", 0), H)
 print("Forwarding from 127.0.0.1:%d -> 9003" % srv.server_address[1], flush=True)
 srv.serve_forever()
 '''
@@ -548,6 +555,7 @@ srv.serve_forever()
 class OpenCostTests(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir, True)
         self.kubectl = self.dir / "kubectl"
         self.kubectl.write_text(FAKE_KUBECTL.replace("#!PYTHON", "#!" + sys.executable))
         self.kubectl.chmod(0o755)

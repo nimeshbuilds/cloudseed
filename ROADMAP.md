@@ -17,6 +17,10 @@ to you in [Discussions](https://github.com/nimeshbuilds/cloudseed/discussions) o
 
 ## Next (0.2)
 
+The [September 2026 engineering review](docs/development/index.md) maps every runtime and proposes acceptance
+criteria for the next work. Prioritize VMware lifecycle integrity, clear agent permission boundaries, a shared
+environment health report, and reproducible release evidence alongside the items below.
+
 - **Release artifacts**: publish the single-binary bundle (`cloudseed deps bundle`) for macOS and Linux on GitHub
   Releases with SHA-256 checksums, so trying cloudseed no longer needs a git clone.
 - **Recorded cloud runs**: run the AWS, GCP and Azure scenarios against real accounts and publish the evidence next

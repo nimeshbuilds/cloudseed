@@ -38,6 +38,10 @@ job() {
   echo "job $id did not finish"; return 124
 }
 
+# Keep the isolated console a background process, without a host login item.
+mkdir -p "$CLOUDSEED_HOME/ui"
+printf '%s\n' '{"service":"background"}' > "$CLOUDSEED_HOME/ui/server.json"
+
 step "1. Start the console"
 ok cs enable ui --no-open --port "$PORT"
 has "cloudseed console is up: $URL/"

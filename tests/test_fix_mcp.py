@@ -43,16 +43,20 @@ class _Home:
     """A throw-away $HOME for client-config tests."""
 
     def __enter__(self):
-        self.old = os.environ.get("HOME")
+        self.old = {key: os.environ.get(key) for key in ("HOME", "XDG_CONFIG_HOME")}
         self.home = Path(tempfile.mkdtemp(prefix="cs-fixmcp-home-"))
         os.environ["HOME"] = str(self.home)
+        os.environ["XDG_CONFIG_HOME"] = str(self.home / ".config")
         return self.home
 
     def __exit__(self, *exc):
-        if self.old is None:
-            os.environ.pop("HOME", None)
-        else:
-            os.environ["HOME"] = self.old
+        for key, value in self.old.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        import shutil
+        shutil.rmtree(self.home, ignore_errors=True)
 
 
 # ------------------------------------------------------------------------------------------------ validation & confirm

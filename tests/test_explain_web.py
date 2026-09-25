@@ -199,7 +199,7 @@ class Reflow(unittest.TestCase):
     """xpBlocks / xpListKind: help text laid out for a terminal, reflowed into a page."""
 
     def node(self, code: str):
-        r = subprocess.run([NODE, "-e", code], capture_output=True, text=True, timeout=60)
+        r = subprocess.run([NODE], input=code, capture_output=True, text=True, timeout=60)
         self.assertEqual(r.returncode, 0, r.stderr)
         return json.loads(r.stdout)
 
