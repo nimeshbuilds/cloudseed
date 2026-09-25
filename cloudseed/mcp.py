@@ -1648,9 +1648,12 @@ def serve() -> int:
         finally:    # always release the slot, or every later response would wait forever
             ordered.complete(seq, resp)
 
-    _exit_on_signals()
-    _log("stdio server started")
     try:
+        # inside the try: from the moment these handlers replace the ones that parked the session (secrets), a
+        # SIGTERM raises SystemExit here, and only the `finally` below still ends the session (its file fallback
+        # holds the credentials in plain text); the log line used to sit between the two, a window a quick SIGTERM hit
+        _exit_on_signals()
+        _log("stdio server started")
         for raw in inp:
             raw = raw.strip()
             if not raw:
@@ -2634,8 +2637,11 @@ def _app_support(name: str) -> Path:
     if sysname == "Darwin":
         return _cfg_home() / "Library" / "Application Support" / name
     if sysname == "Windows":
-        return Path(os.environ.get("APPDATA", str(_cfg_home() / "AppData" / "Roaming"))) / name
-    return Path(os.environ.get("XDG_CONFIG_HOME", str(_cfg_home() / ".config"))) / name
+        return Path(os.environ.get("APPDATA") or str(_cfg_home() / "AppData" / "Roaming")) / name
+    # Linux & co: $XDG_CONFIG_HOME (Claude Desktop builds, VS Code), ~/.config when it is unset, empty or relative (the
+    # XDG spec ignores those; a relative one would put the client config under whatever directory cloudseed runs in)
+    xdg = os.environ.get("XDG_CONFIG_HOME", "")
+    return (Path(xdg) if os.path.isabs(xdg) else _cfg_home() / ".config") / name
 
 
 CLIENTS: dict[str, dict] = {

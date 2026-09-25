@@ -438,6 +438,30 @@ class StdioSignalTests(unittest.TestCase):
     def test_sigterm_removes_parked_credentials_file(self):   # mcp#15 (file fallback: plaintext on disk)
         self._sigterm_session(force_file=True)
 
+    @unittest.skipIf(sys.platform == "win32", "POSIX signals")
+    def test_sigterm_as_the_server_starts_removes_parked_credentials_file(self):
+        """A SIGTERM right after serve() has replaced the session's own signal handlers - here while it logs its start,
+        the step that used to sit between those handlers and the try whose `finally` ends the session - must still
+        remove the parked credentials (the file fallback: plain text on disk until the next sweep otherwise)."""
+        marker = "FAKEsecretFIXMCPstart" + str(os.getpid())
+        code = (f"import os, signal, sys\nsys.path.insert(0, {str(ROOT)!r})\nfrom cloudseed import cli, mcp, secrets\n"
+                "secrets._start_broker = lambda parked: None\n"
+                "log = mcp._log\n"
+                "def _log(msg):\n"
+                "    log(msg)\n"
+                "    if msg == 'stdio server started':\n"
+                f"        parked = [f for f in secrets.SESSIONS_DIR.glob('*.json') if {marker!r} in f.read_text()]\n"
+                "        sys.stderr.write('PARKED ' + ' '.join(map(str, parked)) + '\\n'); sys.stderr.flush()\n"
+                "        os.kill(os.getpid(), signal.SIGTERM)\n"
+                "mcp._log = _log\n"
+                "sys.exit(cli.main(['mcp', 'serve']))\n")
+        env = dict(os.environ, CLOUDSEED_MCP_FORCE="1", AWS_SECRET_ACCESS_KEY=marker)
+        p = subprocess.run([sys.executable, "-c", code], input=b"", capture_output=True, env=env, timeout=60)
+        err = p.stderr.decode(errors="replace")
+        parked = next((line.split()[1:] for line in err.splitlines() if line.startswith("PARKED")), None)
+        self.assertTrue(parked, f"the parked-credentials session never appeared (exit {p.returncode}): {err[-2000:]}")
+        self.assertEqual([f for f in parked if Path(f).exists()], [], "SIGTERM left the parked credentials behind")
+
 
 # ------------------------------------------------------------------------------------------------ http transport
 class HttpTests(unittest.TestCase):
@@ -650,6 +674,24 @@ class ClientConfigTests(unittest.TestCase):
                 self.assertIsNotNone(mcp.disconnect("vscode"))
             data = json.loads(path.read_text())
             self.assertNotIn("cloudseed", data["servers"]); self.assertIn("other", data["servers"]); self.assertIn("inputs", data)
+
+    def test_linux_config_dir_follows_an_absolute_xdg_config_home_only(self):
+        # Claude Desktop builds and VS Code on Linux: $XDG_CONFIG_HOME/<app>, else ~/.config/<app>; an empty or relative
+        # value is ignored (XDG spec) instead of resolving against whatever directory cloudseed runs in
+        with _Home() as home, mock.patch.object(mcp.platform, "system", return_value="Linux"):
+            for value in (None, "", "relative/dir"):
+                with mock.patch.dict(os.environ):
+                    if value is None:
+                        os.environ.pop("XDG_CONFIG_HOME", None)
+                    else:
+                        os.environ["XDG_CONFIG_HOME"] = value
+                    self.assertEqual(mcp.CLIENTS["claude-desktop"]["path"](), home / ".config" / "Claude" / "claude_desktop_config.json")
+                    self.assertEqual(mcp.CLIENTS["vscode"]["path"](), home / ".config" / "Code" / "User" / "mcp.json")
+            with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(home / "xdg")}):
+                self.assertEqual(mcp.CLIENTS["claude-desktop"]["path"](), home / "xdg" / "Claude" / "claude_desktop_config.json")
+        with _Home() as home, mock.patch.object(mcp.platform, "system", return_value="Darwin"):
+            self.assertEqual(mcp.CLIENTS["claude-desktop"]["path"](),
+                             home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json")
 
     def test_gemini_comments_and_settings_survive(self):   # mcp#0
         with _Home() as home:

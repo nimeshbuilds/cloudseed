@@ -3190,9 +3190,13 @@ def _apply_manifest(ctx: Cluster, kubectl: str, name: str, ns: str, wait_ns: boo
 
 def _warn_pool_move(ctx: Cluster, kubectl: str, new_range: str) -> None:
     """Re-applying the MetalLB pool with a new range (it used to overlap the vmnet's DHCP pool) moves LoadBalancer
-    addresses: say so, so /etc/hosts entries for the ingress get refreshed."""
-    have = subprocess.run([kubectl, "-n", "metallb-system", "get", "ipaddresspool", "cloudseed", "-o", "jsonpath={.spec.addresses[0]}"],
-                          env=ctx.procenv(), capture_output=True, text=True).stdout.strip()
+    addresses: say so, so /etc/hosts entries for the ingress get refreshed. Only a warning: a kubectl that cannot run
+    or does not answer leaves it out, the apply that follows reports the real problem."""
+    try:
+        have = subprocess.run([kubectl, "-n", "metallb-system", "get", "ipaddresspool", "cloudseed", "-o", "jsonpath={.spec.addresses[0]}"],
+                              env=ctx.procenv(), capture_output=True, text=True, timeout=60).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return
     if have and have != new_range:
         ui.warn(f"MetalLB pool moves from {have} to {new_range} (kept clear of the vmnet's DHCP range): LoadBalancer services "
                 "get new addresses - run `cs platform ui` for the new ingress address and update /etc/hosts.")

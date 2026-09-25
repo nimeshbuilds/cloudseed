@@ -687,6 +687,19 @@ class TunnelTests(unittest.TestCase):
         with mock.patch.object(services, "_cmdline", return_value="ssh -fN -L 127.0.0.1:17001:10.0.0.1:443 ec2-user@x"):
             self.assertEqual(services.tunnel_info(env)["port"], 17001)
 
+    @unittest.skipIf(os.name == "nt", "ps-based process discovery is POSIX only")
+    def test_a_tunnel_behind_a_long_command_line_is_still_recognised(self):
+        # procps' ps (Linux) cuts `-o command=` at $COLUMNS even into a pipe: the -L spec after a long key path and
+        # the ssh options fell off, and the live tunnel was taken for a reused PID (a second tunnel, or none closed)
+        env = self._env("tun-long")
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)", "ssh", "-i", "/" + "k" * 2048,
+                                  "-fN", "-L", "127.0.0.1:17003:10.0.0.1:443", "ec2-user@x"])
+        self.addCleanup(lambda: (child.kill(), child.wait()))
+        services._tunnel_file(env).write_text(json.dumps({"pid": child.pid, "port": 17003, "host": "10.0.0.1", "rport": 443}))
+        with mock.patch.dict(os.environ, {"COLUMNS": "80"}):
+            info, seen = services.tunnel_info(env), services._cmdline(child.pid)
+        self.assertEqual((info or {}).get("port"), 17003, seen[-120:])
+
     def test_kubeconfig_is_fetched_once_then_cached(self):
         env = self._env("cache")
         env.save({"env": "cache", "region": "us-east-1", "vars": {"kubernetes_public_endpoint": True}})
