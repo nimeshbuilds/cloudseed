@@ -472,7 +472,7 @@ class SetupGuardTests(setup_base.SetupHarness):
 
     def test_no_detected_ip_without_a_terminal_is_one_clear_error(self):
         env = self.env("aws", _uid("ip"))
-        with mock.patch.object(cli.netutil, "detect_public_ip", lambda timeout=5.0: None):
+        with mock.patch.object(cli.netutil, "detect_public_ip", lambda timeout=5.0, **kwargs: None):
             rc, out = self.setup("aws", "-y", "--env", env.name, "--state", "local", "--dry-run")
         self.assertEqual(rc, 1, out)
         self.assertIn("pass --allow-ip", out)

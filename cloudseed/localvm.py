@@ -23,7 +23,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from . import deps, paths, secrets, ui
+from . import deps, netutil, paths, secrets, ui
 
 PROVIDER_VERSION = "0.1.0"
 PROVIDERS_DIR = paths.HOME / "providers"
@@ -413,7 +413,7 @@ def _download(url: str, dest: Path, expected: tuple[str, str] | None = None) -> 
     tmp = dest.with_name(f"{dest.name}.{os.getpid()}.part")
     digest = hashlib.new(expected[0]) if expected else None
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp, open(tmp, "wb") as fh:
+        with urllib.request.urlopen(req, timeout=60, context=netutil.https_context()) as resp, open(tmp, "wb") as fh:
             total = int(resp.headers.get("Content-Length") or 0)
             done = 0
             while True:
@@ -447,7 +447,7 @@ def _download(url: str, dest: Path, expected: tuple[str, str] | None = None) -> 
 def _expected_sum(sums_url: str, filename: str) -> tuple[str, str]:
     try:
         req = urllib.request.Request(sums_url, headers={"User-Agent": "cloudseed"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=30, context=netutil.https_context()) as resp:
             text = resp.read().decode(errors="replace")
     except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
         raise _FetchError(f"{sums_url}: {getattr(e, 'reason', None) or e or type(e).__name__}") from None

@@ -8,8 +8,11 @@ import getpass
 import ipaddress
 import os
 import re
+import ssl
 import subprocess
+import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -23,16 +26,71 @@ IP_SOURCES = (
 )
 
 
-def detect_public_ip(timeout: float = 5.0) -> str | None:
+def https_context() -> ssl.SSLContext:
+    """Keep platform trust and add the release's CA roots when running frozen.
+
+    A bundled OpenSSL can retain the build runner's certificate paths, which do
+    not exist on the user's machine. Source installs use their Python trust
+    store; releases carry certifi so HTTPS also works on a fresh machine.
+    Explicit trust configuration takes precedence over the bundled defaults.
+    Nothing is exported to child processes or a later bundle extraction.
+    """
+    context = ssl.create_default_context()
+    if getattr(sys, "frozen", False) and not any(name in os.environ for name in ("SSL_CERT_FILE", "SSL_CERT_DIR")):
+        import certifi  # bundled dependency; source installs remain standard-library only
+        context.load_verify_locations(cafile=certifi.where())
+    return context
+
+
+def detect_public_ip(timeout: float = 5.0, *, diagnostics: list[str] | None = None) -> str | None:
+    """Find an IPv4 address over verified HTTPS, optionally explaining failure.
+
+    Diagnostics contain fixed messages, never exception text (proxy URLs and
+    credentials can appear in urllib errors). Keep them local to this call so
+    concurrent console/MCP requests cannot exchange another request's error.
+    """
+    if diagnostics is not None:
+        diagnostics.clear()
+    try:
+        context = https_context()
+    except Exception:
+        if diagnostics is not None:
+            diagnostics.append("Could not load trusted HTTPS certificates. Check SSL_CERT_FILE / SSL_CERT_DIR, "
+                               "or reinstall the current Cloudseed release.")
+        return None
+    failures: set[str] = set()
     for url in IP_SOURCES:
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "cloudseed"})
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with urllib.request.urlopen(req, timeout=timeout, context=context) as resp:
                 text = resp.read(64).decode().strip()
             ipaddress.IPv4Address(text)
             return text
-        except Exception:
-            continue
+        except Exception as exc:
+            reason = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+            if isinstance(reason, ssl.SSLCertVerificationError):
+                failures.add("certificate")
+            elif isinstance(reason, ssl.SSLError):
+                failures.add("tls")
+            elif isinstance(reason, TimeoutError):
+                failures.add("timeout")
+            elif isinstance(reason, (ValueError, UnicodeError)):
+                failures.add("response")
+            else:
+                failures.add("network")
+    if diagnostics is not None:
+        if "certificate" in failures:
+            message = ("HTTPS certificate verification failed. Check your Python/Cloudseed CA trust store and any "
+                       "SSL_CERT_FILE / SSL_CERT_DIR override; a company proxy may need its trusted CA installed.")
+        elif "tls" in failures:
+            message = "Could not establish verified HTTPS connections to the IP services. Check your VPN/proxy TLS settings."
+        elif "timeout" in failures:
+            message = "Public-IP services timed out. Check internet connectivity, DNS, and VPN/proxy settings."
+        elif failures == {"response"}:
+            message = "The IP services returned no valid IPv4 address. Cloudseed's cloud access rules require IPv4."
+        else:
+            message = "Could not reach the public-IP services. Check internet connectivity, DNS, and VPN/proxy settings."
+        diagnostics.append(message)
     return None
 
 

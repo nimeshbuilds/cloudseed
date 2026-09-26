@@ -1385,7 +1385,8 @@ def _setup_allow_list(args, cloud: clouds.Cloud, env: paths.Env, existing: dict,
                 raise ui.Abort(f"The saved SSH allow-list of {env.id} is invalid ({problem}); pass --allow-ip <your-ip>.")
             ui.warn(f"The saved SSH allow-list of {env.id} is invalid ({problem}).")
             prev = []
-    detected = netutil.detect_public_ip()
+    diagnostics: list[str] = []
+    detected = netutil.detect_public_ip(diagnostics=diagnostics)
     if prev:
         default = prev
         if detected and not _ip_allowed(detected, prev):
@@ -1398,9 +1399,11 @@ def _setup_allow_list(args, cloud: clouds.Cloud, env: paths.Env, existing: dict,
         if detected:
             ui.info(f"Your public IP appears to be {detected}")
         elif not ui.interactive():      # no prompt to "enter it manually" at: say only what to pass
-            raise ui.Abort("Could not detect your public IP and none was given: pass --allow-ip <your-ip>.")
+            detail = " " + " ".join(diagnostics) if diagnostics else ""
+            raise ui.Abort("Could not detect your public IP and none was given: pass --allow-ip <your-ip>." + detail)
         else:
-            ui.warn("Could not auto-detect your public IP; enter it manually.")
+            detail = " " + " ".join(diagnostics) if diagnostics else ""
+            ui.warn("Could not auto-detect your public IP; enter it manually." + detail)
         default = [f"{detected}/32"] if detected else []
     cidrs = ui.ask_list("Allow SSH to the bastion from", default, validate=_allow_list_problem)
     result = _canonical_cidrs(cidrs)
@@ -7409,9 +7412,11 @@ def cmd_update_ip(args, settings) -> int:
     if args.allow_ip:
         raw = [x.strip() for item in args.allow_ip for x in item.split(",") if x.strip()]
     else:
-        detected = netutil.detect_public_ip()
+        diagnostics: list[str] = []
+        detected = netutil.detect_public_ip(diagnostics=diagnostics)
         if not detected:
-            raise ui.Abort("Could not detect your public IP. Pass it with --allow-ip.")
+            detail = " " + " ".join(diagnostics) if diagnostics else ""
+            raise ui.Abort("Could not detect your public IP. Pass it with --allow-ip." + detail)
         raw = [f"{detected}/32"]
     problem = netutil.validate_cidr_list(",".join(raw))
     if problem:

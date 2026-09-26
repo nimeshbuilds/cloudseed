@@ -1,6 +1,6 @@
 ---
-title: "Changelog - cloudseed v0.2.0 highlights"
-description: "Cloudseed v0.2.0 adds Well-Architected assessments, operational readiness, trusted runtime releases, expanded scenarios and runtime fixes."
+title: "Changelog - cloudseed v0.2.1 highlights"
+description: "Cloudseed v0.2.1 fixes certificate trust for automatic public-IP detection and HTTPS downloads in standalone releases."
 ---
 
 # Changelog
@@ -8,6 +8,13 @@ description: "Cloudseed v0.2.0 adds Well-Architected assessments, operational re
 The full, detailed history is in [CHANGELOG.md](https://github.com/nimeshbuilds/cloudseed/blob/main/CHANGELOG.md) on
 GitHub. cloudseed follows [Semantic Versioning](https://semver.org/); while it is 0.x, a minor release may change
 commands or defaults, and such changes are called out.
+
+## v0.2.1 - 2026-09-26
+
+Standalone binaries now include trusted CA certificates for public-IP discovery and HTTPS downloads on a fresh
+machine. AWS, GCP and Azure setup share the fix through the CLI, console, MCP and agent skills. Setup and
+`update-ip` now explain certificate and connectivity failures. Explicit CA overrides and saved SSH allow-lists
+remain authoritative. See [automatic public-IP troubleshooting](../guides/troubleshooting.md#automatic-public-ip-detection).
 
 ## v0.2.0 - 2026-09-25
 

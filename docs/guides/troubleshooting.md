@@ -40,6 +40,7 @@ and ends with one verdict line naming what keeps that cloud from working.
 |---|---|
 | "terraform is not installed" | `cs install terraform`, or run in the container: `cs --runtime container ...` |
 | No credentials detected | run the login command `doctor` prints (`aws configure`, `gcloud auth application-default login`, `az login`), or store keys with `cs creds set` |
+| Public-IP detection fails during setup | check the reported HTTPS/certificate or connectivity error; use a current release, or enter your public IPv4 with `--allow-ip` |
 | SSH to the bastion times out | your public IP changed: `cs update-ip <cloud> --env <name>` |
 | A plan is shown and nothing is applied (exit 3) | that is the approval gate: add `--auto-approve` (a plan with no changes exits 0) |
 | A `-y` run stops with exit 2 about a missing tool | install it first (`cs install <tool>`) or set `CLOUDSEED_AUTO_INSTALL=1` |
@@ -52,6 +53,28 @@ and ends with one verdict line naming what keeps that cloud from working.
 | "unknown command" for a sentence | natural language goes through the agent: `cs agentic "<sentence>"` |
 | "Unexpected error" | the redacted traceback is in the environment's log, or `~/.cloudseed/logs/<ts>-<cmd>-crash.log`; `CLOUDSEED_DEBUG=1` prints it |
 | A script or CI job must never prompt | `-y` on every command, or `CLOUDSEED_NONINTERACTIVE=1` |
+
+### Automatic public-IP detection
+
+AWS, GCP and Azure setup discover the public IPv4 egress address of the machine running Cloudseed. CLI, agent,
+MCP and console setup share this detector. The address becomes a single-host `/32` SSH rule. VMware uses its
+local private network and does not need this lookup.
+
+The v0.2.0 standalone binary can fail the first lookup because its Python/OpenSSL certificate paths refer to the
+build machine. Updated binaries include trusted CA roots for HTTPS requests. Source installations use their
+Python certificate store. Explicit `SSL_CERT_FILE` or `SSL_CERT_DIR` settings take precedence; if your company
+inspects HTTPS traffic, configure its trusted CA in the process running Cloudseed. Certificate verification stays on.
+
+On an older binary, or a network that blocks the IP services, supply the address explicitly:
+
+```bash
+cs setup aws --env learn --allow-ip YOUR_PUBLIC_IPV4
+```
+
+The console and MCP setup forms provide the same `allow_ip` field. Use an address you have independently confirmed
+for that machine's outbound connection. Existing environments keep their saved SSH allow-list on setup; use
+`cs update-ip <cloud> --env <name>` when your connection changes. A detection failure reports certificate, timeout,
+or connectivity guidance and never widens access to the whole internet.
 
 ### VMware
 

@@ -107,7 +107,7 @@ class SetupHarness(unittest.TestCase):
         FakeTF.calls, FakeTF.state, FakeTF.fail_apply = [], {}, False
         self.patches = [
             mock.patch.object(cli, "Terraform", FakeTF),
-            mock.patch.object(netutil, "detect_public_ip", lambda timeout=5.0: "192.0.2.10"),
+            mock.patch.object(netutil, "detect_public_ip", lambda timeout=5.0, **kwargs: "192.0.2.10"),
             mock.patch.object(netutil, "ensure_ssh_key", fake_ensure_ssh_key),
         ]
         for p in self.patches:

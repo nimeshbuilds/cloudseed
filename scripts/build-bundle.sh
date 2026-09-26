@@ -53,7 +53,7 @@ PY
 
 echo "▸ Preparing PyInstaller"
 python3 -m venv "$BUILD/venv"
-"$BUILD/venv/bin/pip" install --quiet "pyinstaller==6.22.3" "keyring==25.7.0"
+"$BUILD/venv/bin/pip" install --quiet "pyinstaller==6.22.3" "keyring==25.7.0" "certifi==2026.7.22"
 
 echo "▸ Building"
 PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" "$BUILD/venv/bin/pyinstaller" --onefile --clean --noconfirm \
@@ -63,6 +63,8 @@ PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" "$BUILD/venv/bin/pyinstaller" --on
   --collect-submodules cloudseed \
   --collect-submodules keyring.backends \
   --copy-metadata keyring \
+  --collect-data certifi \
+  --copy-metadata certifi \
   --add-data "$STAGE/terraform:terraform" \
   --add-data "$STAGE/skills:skills" \
   --add-data "$STAGE/ansible:ansible" \
@@ -102,7 +104,7 @@ PY
   || { echo "smoke test failed: platform template (templates/ not bundled?)" >&2; exit 1; }
 LISTING="$("$BUILD/venv/bin/pyi-archive_viewer" -l "$BIN" 2>/dev/null || true)"
 if [[ -n "$LISTING" ]]; then
-  for f in cloudseed/web/index.html cloudseed/web/app.js assets/icon.svg templates/gitlab-ci/.gitlab-ci.yml tfbin/terraform; do
+  for f in cloudseed/web/index.html cloudseed/web/app.js assets/icon.svg templates/gitlab-ci/.gitlab-ci.yml tfbin/terraform certifi/cacert.pem; do
     grep -q "$f" <<<"$LISTING" || { echo "smoke test failed: $f is missing from the bundle" >&2; exit 1; }
   done
   if grep -q "/\.terraform/" <<<"$LISTING"; then echo "smoke test failed: .terraform caches were bundled" >&2; exit 1; fi

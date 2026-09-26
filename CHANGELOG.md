@@ -7,6 +7,16 @@ commands or defaults; such changes are called out under **Changed**.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-26
+
+### Fixed
+
+- Standalone releases now carry trusted CA roots for public-IP discovery and outbound HTTPS downloads. The frozen
+  Python/OpenSSL runtime could otherwise look for certificates on the build machine and fail first-time AWS/GCP/Azure
+  setup. Explicit certificate overrides remain authoritative; TLS and hostname verification stay enabled.
+- Setup and `update-ip` explain HTTPS trust, timeout and connectivity failures while preserving saved allow-lists and
+  the manual `--allow-ip` option. CLI, MCP, console and agent setup share the corrected detector.
+
 ## [0.2.0] - 2026-09-25
 
 ### Added
@@ -117,6 +127,7 @@ The first public release.
   the mocked `terraform test` suites, `go vet`/`test`/`build` for the VMware provider, and the scenario scripts in
   dry-run mode.
 
-[Unreleased]: https://github.com/nimeshbuilds/cloudseed/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/nimeshbuilds/cloudseed/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/nimeshbuilds/cloudseed/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/nimeshbuilds/cloudseed/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nimeshbuilds/cloudseed/releases/tag/v0.1.0

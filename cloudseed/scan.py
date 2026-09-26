@@ -232,7 +232,7 @@ def _kubectl(ctx, *args: str, input: str | None = None, timeout: int = 300) -> s
 
 def _fetch(url: str, timeout: int = 60) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "cloudseed"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with urllib.request.urlopen(req, timeout=timeout, context=netutil.https_context()) as resp:
         return resp.read()
 
 
@@ -242,7 +242,7 @@ def _latest_tag(repo: str) -> str:
         return str(json.loads(_fetch(f"https://api.github.com/repos/{repo}/releases/latest", 30))["tag_name"])
     except (urllib.error.URLError, OSError, ValueError, KeyError):
         req = urllib.request.Request(f"https://github.com/{repo}/releases/latest", headers={"User-Agent": "cloudseed"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=30, context=netutil.https_context()) as resp:
             final = resp.geturl()
         m = re.search(r"/releases/tag/([^/?#]+)", final)
         if not m:
@@ -858,7 +858,8 @@ def images(ctx) -> Path:
 
 def _ssg_version() -> str:
     try:
-        with urllib.request.urlopen("https://api.github.com/repos/ComplianceAsCode/content/releases/latest", timeout=10) as r:
+        with urllib.request.urlopen("https://api.github.com/repos/ComplianceAsCode/content/releases/latest", timeout=10,
+                                    context=netutil.https_context()) as r:
             return json.load(r)["tag_name"].lstrip("v")
     except Exception:  # noqa: BLE001
         return SSG_FALLBACK
