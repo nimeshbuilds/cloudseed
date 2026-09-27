@@ -560,7 +560,7 @@ def _check_owner(env: paths.Env, cfg: dict) -> None:
 # commands that may act on the current environment (`cs env use`) when only <cloud> is given: the ones that default to
 # it without a cloud too (_ENV_SCOPED), and the reports. setup, destroy, apply, update-ip and provision never do: a
 # destructive command must not quietly retarget at whatever environment was selected last.
-_CURRENT_ENV_COMMANDS = ("status", "inventory", "output", "troubleshoot", "plan", "ssh", "k8s", "vpn", "finops", "scan")
+_CURRENT_ENV_COMMANDS = ("status", "inventory", "output", "troubleshoot", "plan", "ssh", "k8s", "vpn", "finops", "scan", "evidence")
 
 
 def _command_words(args) -> str:
@@ -6064,6 +6064,48 @@ def cmd_ops(args, settings) -> int:
         raise ui.Abort(str(exc), code=2) from exc
 
 
+def cmd_evidence(args, settings) -> int:
+    """Read saved evidence without preparing tools, credentials or cloud connections."""
+    from . import evidence
+    if args.evidence_cmd == "list" and args.artifact:
+        raise ui.Abort("evidence list does not use --artifact.", code=2)
+    if args.evidence_cmd == "read" and (not args.artifact or args.area):
+        raise ui.Abort("evidence read requires --artifact from evidence list and does not use --area.", code=2)
+    with _json_stdout(args):
+        _resolve_plain_env(args, settings, "evidence " + args.evidence_cmd)
+        cloud = clouds.get(args.cloud)
+        name = args.env or _pick_env_name(args, cloud)
+        env = paths.Env(cloud.key, name)
+        if not env.exists() and name.startswith(cloud.key + "-"):
+            alternate = paths.Env(cloud.key, name[len(cloud.key) + 1:])
+            if alternate.exists():
+                env = alternate
+        if not env.exists():
+            raise _missing_env(args, cloud, name)
+        _check_owner(env, env.load())
+        # Keep this invocation in the global audit trail. Attaching it to the
+        # selected environment would create a log and append audit.jsonl while
+        # paging those same artifacts, invalidating every continuation revision.
+        audit.tag(evidence_env=env.id)
+    try:
+        if args.evidence_cmd == "list":
+            result = evidence.list_artifacts(env, area=args.area, offset=args.offset,
+                                             limit=args.limit if args.limit is not None else 50, revision=args.revision)
+        else:
+            result = evidence.read_artifact(env, args.artifact, offset=args.offset,
+                                           limit=args.limit if args.limit is not None else 16000,
+                                           revision=args.revision)
+    except (OSError, ValueError) as exc:
+        raise ui.Abort(str(exc), code=2) from exc
+    if args.json or args.evidence_cmd == "list":
+        print(json.dumps(result, separators=(",", ":"), ensure_ascii=True, allow_nan=False))
+    else:
+        print(result.get("content", ""))
+        metadata = {k: v for k, v in result.items() if k != "content"}
+        print("\nEvidence metadata: " + json.dumps(metadata, ensure_ascii=False))
+    return 0
+
+
 def cmd_scan(args, settings) -> int:
     """Exits 1 when a verdict is FAIL (or, for `all`, a scan could not run), like `cs chaos run` and `cs dr test`."""
     sub = args.scan_cmd
@@ -7959,7 +8001,7 @@ def cmd_deps(args, settings) -> int:
 
 # ---------------------------------------------------------------- agentic layer
 
-FEATURES = ("agentic", "headliner", "mcp", "ui")
+FEATURES = ("agentic", "headroom", "headliner", "mcp", "ui")
 
 
 def _agent_session() -> bool:
@@ -9461,6 +9503,15 @@ def _mcp_uninstall(args, settings) -> int:
 
 def cmd_enable(args, settings) -> int:
     feature = args.feature
+    if feature == "headroom":
+        from . import headroom
+        headroom.install()
+        if settings.get("headroom") is False:
+            undo.record(undo.GLOBAL, "enable headroom", "argv", {"argv": ["disable", "headroom"]})
+        settings["headroom"] = True
+        paths.save_settings(settings)
+        ui.ok("Headroom ready: lossless context compression starts with supported agentic tasks.")
+        return 0
     if feature == "ui":
         return cmd_ui(argparse.Namespace(ui_cmd="start", port=getattr(args, "port", None), host=None,
                                          no_open=bool(getattr(args, "no_open", False)), lines=50, rotate=False), settings)
@@ -9485,12 +9536,16 @@ def cmd_enable(args, settings) -> int:
             undo.record(undo.GLOBAL, "enable headliner", "argv", {"argv": ["disable", "headliner"]})
         settings["headliner"] = True
         paths.save_settings(settings)
-        ui.ok("Headliner enabled: agent prompts get a compact, secret-free research brief (saves tokens).")
+        ui.ok("Context brief enabled (legacy setting: headliner). This brief is separate from Headroom compression.")
         return 0
-    keys = ["agentic", "headliner", "agent"]
+    keys = ["agentic", "headroom", "headliner", "agent"]
     snap = undo.snapshot_settings(keys)
     spec = _ensure_agent_ready(args.agent, settings)     # may abort: then nothing is recorded or switched on
+    if settings.get("headroom", True) and agents.headroom_unsupported(spec) is None:
+        from . import headroom
+        headroom.install()
     settings["agentic"] = True
+    settings.setdefault("headroom", True)
     settings.setdefault("headliner", True)
     paths.save_settings(settings)
     if any(snap["settings"].get(k) != settings.get(k) for k in keys):
@@ -9505,8 +9560,9 @@ def cmd_enable(args, settings) -> int:
 
 
 def cmd_disable(args, settings) -> int:
-    # the headliner is on by default (a fresh home has no key for it); the other features default to off
-    was_on = headliner.enabled(settings) if args.feature == "headliner" else settings.get(args.feature)
+    # Context brief and Headroom are on by default; other features default to off.
+    was_on = (headliner.enabled(settings) if args.feature == "headliner" else
+              settings.get("headroom", True) if args.feature == "headroom" else settings.get(args.feature))
     if was_on:
         # `ui start --no-open` is the exact inverse of `disable ui` (enable ui would also open a browser tab)
         inverse = ["ui", "start", "--no-open"] if args.feature == "ui" else ["enable", args.feature]
@@ -9527,8 +9583,10 @@ def cmd_disable(args, settings) -> int:
         ui.ok("MCP disabled: the server " + ("was stopped and " if stopped else "") + "refuses to start until `cs enable mcp` / `cs setup mcp`.")
         ui.info("Client entries are kept (they will show 'failed' until re-enabled); remove them with: cs mcp disconnect all   ·   remove everything: cs destroy mcp")
         return 0
-    if args.feature == "headliner":
-        ui.ok("Headliner disabled: tasks go to the agent without the research brief.")
+    if args.feature == "headroom":
+        ui.ok("Headroom disabled for future tasks. The context brief has its own headliner setting.")
+    elif args.feature == "headliner":
+        ui.ok("Context brief disabled (legacy setting: headliner). Headroom compression is controlled separately.")
     else:
         ui.ok("Agentic mode disabled. Only deterministic commands run now.")
     return 0
@@ -9536,6 +9594,15 @@ def cmd_disable(args, settings) -> int:
 
 def cmd_agents(args, settings) -> int:
     print(agents.agents_page(settings))
+    from . import headroom
+    status = headroom.status()
+    try:
+        unsupported = agents.headroom_unsupported(agents.get(settings.get("agent") or "builtin"))
+    except ui.Abort:
+        unsupported = "The selected agent is unavailable"
+    ui.kv("Headroom", ("off" if not settings.get("headroom", True) else
+                      "unsupported · " + unsupported if unsupported else
+                      "ready · lossless (starts with supported tasks)" if status["ready"] else status["reason"]))
     return 0
 
 
@@ -9654,17 +9721,23 @@ def cmd_do(args, settings) -> int:
                 raise ui.Abort(builtin_agent.no_creds_msg(state))
             ui.info("No Anthropic API key: this task runs through your Claude Code CLI (the built-in agent stays selected).")
     model = args.model or agents.selected_model(spec, settings)
+    use_headroom = settings.get("headroom", True) and not getattr(args, "no_headroom", False)
+    unsupported = agents.headroom_unsupported(run_spec, args.interactive) if use_headroom else None
+    if use_headroom and unsupported is None:
+        from . import headroom
+        headroom.install()
     use_headliner = headliner.enabled(settings) and not args.no_headliner
     prompt = headliner.build(task, settings) if use_headliner else \
         headliner.plain(task, skills_in_prompt=bool(run_spec.get("skills_in_prompt")))
     ui.header("cloudseed · agentic")
     agents.describe(spec, settings)
-    ui.kv("Headliner", "on" if use_headliner else "off")
+    ui.kv("Context brief", "on" if use_headliner else "off")
+    ui.kv("Headroom", "off" if not use_headroom else ("unsupported · " + unsupported) if unsupported else "ready · lossless")
     ui.kv("Credentials", "stripped from agent env; output redacted")
     if args.show_prompt:
         print(ui.dim(prompt))
     print()
-    return agents.run(run_spec, prompt, model, interactive=args.interactive, task=task)
+    return agents.run(run_spec, prompt, model, interactive=args.interactive, task=task, headroom_enabled=use_headroom)
 
 
 def _skill_short(name: str) -> str:
@@ -10578,7 +10651,7 @@ def _ssh_post(ns, parser) -> None:
     ns.ssh_args = rest
 
 
-_AGENTIC_SWITCHES = {"--force": "force", "--show-prompt": "show_prompt", "--no-headliner": "no_headliner",
+_AGENTIC_SWITCHES = {"--force": "force", "--show-prompt": "show_prompt", "--no-headliner": "no_headliner", "--no-headroom": "no_headroom",
                      "--interactive": "interactive", "-i": "interactive"}
 _AGENTIC_VALUED = {"--agent": "agent", "--model": "model"}
 
@@ -10987,12 +11060,12 @@ def build_parser() -> argparse.ArgumentParser:
     dr.add_argument("mode", choices=["auto", "local", "container"], help="auto | local | container")
     dr.add_argument("--engine", choices=["docker", "podman"], default=argparse.SUPPRESS, help="container engine (docker|podman)")
 
-    en = sub.add_parser("enable", help="enable a feature: agentic | headliner | mcp | ui")
+    en = sub.add_parser("enable", help="enable a feature: agentic | headroom | headliner | mcp | ui")
     en.add_argument("feature", choices=FEATURES)
     en.add_argument("--agent", help="agent to use: builtin, claude, codex, gemini, grok (see: cloudseed agents)")
     en.add_argument("--port", type=_tcp_port, help="[ui] port for the local console (default 7434)")
     en.add_argument("--no-open", action="store_true", help="[ui] do not open the browser")
-    dis = sub.add_parser("disable", help="disable a feature: agentic | headliner | mcp | ui")
+    dis = sub.add_parser("disable", help="disable a feature: agentic | headroom | headliner | mcp | ui")
     dis.add_argument("feature", choices=FEATURES)
 
     use = sub.add_parser("use", help="select the agent CLI (and optionally its model), installing skills if needed")
@@ -11014,6 +11087,7 @@ def build_parser() -> argparse.ArgumentParser:
     do.add_argument("--interactive", "-i", action="store_true",
                     help="open the agent's interactive session instead of exec mode (external agents only)")
     do.add_argument("--no-headliner", action="store_true", help="send the task without the research brief")
+    do.add_argument("--no-headroom", action="store_true", help="run this task without Headroom context compression")
     do.add_argument("--show-prompt", action="store_true", help="print the (redacted) prompt that is sent")
     do.add_argument("--force", action="store_true", help="run even if agentic mode is disabled")
     do.post_parse = _agentic_post
@@ -11126,6 +11200,17 @@ def build_parser() -> argparse.ArgumentParser:
     sc.add_argument("--max-age-days", type=_architecture_days, default=None, help="architecture: saved evidence freshness, 1..3650 days (default 30)")
     sc.add_argument("--json", action="store_true", help="architecture: print the complete assessment as JSON")
 
+    ev = sub.add_parser("evidence", help="read saved reports and logs with redaction and complete pagination")
+    ev.add_argument("evidence_cmd", choices=["list", "read"])
+    ev.add_argument("cloud", nargs="?", choices=CLOUD_KEYS)
+    ev.add_argument("-e", "--env", default=None, help=ENV_HELP)
+    ev.add_argument("--area", choices=["scans", "logs", "operations", "finops", "chaos", "dr"], help="list: restrict to one evidence area")
+    ev.add_argument("--artifact", help="read: exact environment-relative artifact from evidence list")
+    ev.add_argument("--offset", type=int, default=0, help="next_offset returned by the previous page (default 0)")
+    ev.add_argument("--limit", type=_positive_int, help="list: 1..100 entries, default 50; read: up to 16000 redacted characters")
+    ev.add_argument("--revision", help="revision returned by the first page; required for continued pages")
+    ev.add_argument("--json", action="store_true", help="return evidence content and continuation metadata as JSON")
+
     # Pass-through commands: argparse never interprets their arguments (see _CmdParser.passthrough).
     for svc in ("databricks", "snowflake"):
         sp = sub.add_parser(svc, help=f"{svc}: cs {svc} connect | test | status | <{svc} CLI args>   (profile per environment)")
@@ -11220,7 +11305,8 @@ HANDLERS = {
     "troubleshoot": cmd_troubleshoot, "inventory": cmd_inventory, "env": cmd_env, "node": cmd_node,
     "platform": cmd_platform, "kubectl": cmd_ktool, "helm": cmd_ktool, "k9s": cmd_ktool,
     "databricks": cmd_managed, "snowflake": cmd_managed, "finops": cmd_finops, "explain": cmd_explain, "mcp": cmd_mcp,
-    "ops": cmd_ops, "chaos": cmd_chaos, "dr": cmd_dr, "scan": cmd_scan, "ui": cmd_ui, "creds": cmd_creds, "undo": cmd_undo,
+    "ops": cmd_ops, "chaos": cmd_chaos, "dr": cmd_dr, "scan": cmd_scan, "evidence": cmd_evidence,
+    "ui": cmd_ui, "creds": cmd_creds, "undo": cmd_undo,
 }
 
 # ---------------------------------------------------------------- human-only commands
@@ -11313,7 +11399,7 @@ def _changes_nothing(args) -> bool:
         if args.ops_cmd == "list":
             return True
         return not operations.OPERATIONS[args.ops_cmd].changing(operations.parameters(args))
-    if cmd in ("help", "explain", "list", "status", "output", "inventory", "troubleshoot", "doctor", "agents", "plan"):
+    if cmd in ("help", "explain", "list", "status", "output", "inventory", "troubleshoot", "doctor", "agents", "plan", "evidence"):
         return True
     sub = {"mcp": ("mcp_cmd", ("status", "guide", "tools", "config", "logs", "test")), "ui": ("ui_cmd", ("status", "logs")),
            "creds": ("creds_cmd", ("list",)), "skill": ("skill_cmd", ("list", "show")), "deps": ("deps_cmd", ("status",)),

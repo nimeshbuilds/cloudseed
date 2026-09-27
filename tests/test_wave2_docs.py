@@ -156,7 +156,11 @@ class Pages(unittest.TestCase):
 
     def test_mcp_page_and_readme_list_the_confirmations(self):
         page = _flat(h.COMMANDS["mcp"])
-        self.assertIn(f"{len(mcp.TOOLS)} tools", page)
+        self.assertIn("cs mcp tools", page)
+        # Documentation directs readers to discovery instead of freezing a tool count.
+        discovered = {tool["name"] for tool in mcp.tool_list()}
+        self.assertEqual(discovered, set(mcp.TOOLS))
+        self.assertIn("cloudseed_evidence", discovered)
         for part in ("update-ip", "provision", "vpn add-user/revoke/provision", "status/test/list/get/describe",
                      "every kind except architecture, fips and reports", "input schema", "cs undo --global", "MCP_TOOL_TIMEOUT=3600000",
                      "1-hour tool timeout"):

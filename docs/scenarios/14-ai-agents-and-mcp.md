@@ -12,9 +12,12 @@ and Windsurf every cloudseed feature as a tool, with confirmation required for a
 
 !!! success "Verified live on macOS (local services, no cloud or VMs needed)"
     [`tests/scenarios/14-ai-agents-and-mcp.sh`](https://github.com/nimeshbuilds/cloudseed/blob/main/tests/scenarios/14-ai-agents-and-mcp.sh)
-    runs every command below in a throw-away home: it deploys a real MCP server (launchd on macOS, systemd or a
-    background process on Linux), round-trips the protocol over stdio and HTTP, wires a client, rotates the token
-    and removes it. The step that sends a task to a real model runs when `ANTHROPIC_API_KEY` is set.
+    checks the local workflow in a throw-away home: it starts a real MCP server without installing a login service,
+    round-trips the protocol over stdio and HTTP, wires a client, rotates the token and removes it. The step that
+    sends a task to a real model runs when `ANTHROPIC_API_KEY` is set. Reviewing your own saved report additionally
+    requires an existing environment and artifact; no cloud deployment is needed for the local interface checks.
+    This scenario disables Headroom to avoid package downloads; separate tests exercise its real lossless proxy
+    against a local provider stub. The echo agent is not evidence of model-provider compression.
 
 | :material-clock-outline: Time | :material-cash: Cost | :material-signal-cellular-1: Level | :material-robot-outline: Needs |
 |---|---|---|---|
@@ -25,12 +28,12 @@ and Windsurf every cloudseed feature as a tool, with confirmation required for a
 ```mermaid
 flowchart TB
   subgraph agentic["cs agentic #quot;...#quot;"]
-    brief["Headliner brief<br/>environments, outputs, tools"] --> prompt["Prompt<br/>(redacted)"]
+    brief["Context brief<br/>environments, outputs, tools"] --> prompt["Prompt<br/>(redacted)"]
     task["Your task"] --> prompt
     prompt --> agent["Agent: builtin / claude / codex /<br/>gemini / grok + cloudseed skills"]
   end
   subgraph mcp["cs setup mcp"]
-    clients["Claude Code · Claude Desktop · Cursor<br/>VS Code · Codex · Gemini CLI · Windsurf"] -- "HTTP :7433 + bearer token<br/>or stdio" --> server["cloudseed MCP server<br/>48 tools · resources · prompts"]
+    clients["Claude Code · Claude Desktop · Cursor<br/>VS Code · Codex · Gemini CLI · Windsurf"] -- "HTTP :7433 + bearer token<br/>or stdio" --> server["cloudseed MCP server<br/>typed tools · resources · prompts"]
   end
   agent -- "cloudseed ... only<br/>destructive steps wait for you" --> cli["cloudseed CLI"]
   server --> cli
@@ -39,7 +42,8 @@ flowchart TB
 
 ## Before you start
 
-- cloudseed installed; nothing else for steps 1 to 4 and 6 to 8.
+- cloudseed installed. Headroom preparation needs Python 3.10+ and a package download; for the local demonstration
+  without that dependency, run `cs disable headroom` before step 2. You can enable it later.
 - For step 5 (a real task): `ANTHROPIC_API_KEY` for the built-in agent, or a logged-in Claude Code (`claude`),
   Codex (`codex login`), Gemini CLI (`gemini`) or Grok CLI (`GROK_API_KEY`).
 
@@ -60,6 +64,25 @@ cs use builtin --model claude-sonnet-5
 cs model
 cs model claude-opus-5
 ```
+
+The task display separates **Context brief** from **Headroom**. The brief is Cloudseed's deterministic research;
+Headroom is the actual lossless context-compression integration. Headroom defaults on for supported agentic runs,
+with a session-only loopback proxy and a managed Python 3.10+ environment. These controls are independent:
+
+```bash
+cs enable headroom
+cs agentic --no-headroom --show-prompt "list my environments"
+cs disable headroom
+```
+
+Use `cs enable headroom` again when you want compression. Built-in Claude, direct-Anthropic Claude Code and default
+noninteractive Codex `exec` with explicit `CODEX_API_KEY` are supported when routing can be verified.
+`OPENAI_API_KEY` alone does not select Codex API auth and is never implicitly copied. Interactive Codex,
+subscription/WIF authentication and unverified custom/provider/managed routing are unsupported, as are Gemini,
+Grok and custom agents. Only an **active** session status confirms a ready, supported proxy. See the
+[Headroom guide](../guides/agentic.md#headroom-context-compression) for lifecycle and support limits. Compression
+does not replace reading the report's evidence and coverage limits. If a supported route cannot prepare Headroom,
+the task stops; fix the reported problem or explicitly opt out with `--no-headroom` / `cs disable headroom`.
 
 Prefer Claude Code with your claude.ai subscription? `cs use claude` (or `codex`, `gemini`, `grok`). Store an API key
 in the vault with hidden input:
@@ -83,7 +106,8 @@ automatically; `--project` puts them in `./.claude/skills` of the current reposi
 
 ## Step 4: See exactly what an agent receives (no API key needed)
 
-A custom agent in `~/.cloudseed/agents.json` can be any command. This one only reports what it was given:
+A custom agent in `~/.cloudseed/agents.json` can be any command. This one only reports what it was given.
+If that file already exists, merge the `echo` entry into it instead of replacing your agents:
 
 ```bash
 cat > ~/.cloudseed/agents.json <<'EOF'
@@ -104,7 +128,7 @@ unset AWS_SECRET_ACCESS_KEY
       ━━ cloudseed · agentic ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         Agent                  Echo agent (echo)
         Status                 ✔ ready
-        Headliner              on
+        Context brief          on
         Credentials            stripped from agent env; output redacted
 
     $ sh ... (exec mode, model=default)
@@ -118,9 +142,12 @@ unset AWS_SECRET_ACCESS_KEY
     human-only refused: exit 2
     ```
 
-- **Headliner**: a compact brief (environments, outputs, tool and credential status, a command cheat-sheet) is put in
-  front of every task, so the agent starts informed instead of spending tokens exploring. Compare with
-  `cs disable headliner`, then turn it back on with `cs enable headliner`.
+- **Context brief**: a compact brief (environments, outputs, tool and credential status, a command cheat-sheet) is
+  put in front of every task. It is deterministic research, not conversation compression. The legacy `headliner`
+  setting still controls it: compare with `cs disable headliner`, then restore `cs enable headliner`.
+- **Command access**: the external agent receives temporary `cloudseed` and `cs` launchers for the installation
+  running this task, even when you started a standalone binary by its full path. If its shell resets `PATH`, use
+  the absolute launcher path printed in the prompt. Do not guess another executable or search credential folders.
 - **Redaction**: the database password in the task never reaches the agent (AWS keys, tokens, private keys and
   signed URLs are masked the same way).
 - **Credential stripping**: `AWS_SECRET_ACCESS_KEY` and every vault secret are removed from the agent's
@@ -170,7 +197,7 @@ changes and restores first run as a preview. `-i` opens the interactive session 
     ```text
       ◆ 1/3  Server   how the MCP server runs: one shared local HTTP service, or stdio launched by each client
       ● Starting the MCP server on http://127.0.0.1:7433/mcp...
-      ✔ MCP server up: http://127.0.0.1:7433/mcp   (launchd, protocol 2025-06-18, 48 tools, 11 resources, 4 prompts)
+      ✔ MCP server up: http://127.0.0.1:7433/mcp   (transport, protocol and installed tool/resource counts follow)
 
       ◆ 2/3  Clients   register the server with the MCP clients on this machine
       ◆ 3/3  How to use it   the guide below is also saved to ~/.cloudseed/mcp/CONNECT.md
@@ -201,9 +228,41 @@ cs mcp guide
 
 ??? example "Expected output of `cs mcp test --http`"
     ```text
-      ✔ MCP round-trip over http://127.0.0.1:7433/mcp: initialize, tools/list (48 tools), resources/read skill,
+      ✔ MCP round-trip over http://127.0.0.1:7433/mcp: initialize, tools/list, resources/read skill,
         tools/call cloudseed_list
     ```
+
+## Step 7a: Explain a saved scan without running it again
+
+Use an environment with a saved scan, such as one from [scenario 10](10-compliance-scans.md). Replace `aws` and `dev`
+with that environment, then select a JSON artifact returned by the list:
+
+```bash
+cs evidence list aws --env dev --area scans --json
+cs evidence read aws --env dev --artifact scans/NAME.json --offset 0 --limit 8000 --json
+```
+
+`scans/NAME.json` is a placeholder, not a filename to invent. When `complete` is false, repeat the read with the
+returned `next_offset` and the same `revision`. Keep reading until `complete` is true. If the revision changes,
+restart at offset 0. This reads redacted, saved evidence; it makes no cloud query and changes no infrastructure.
+
+Then give your agent this task:
+
+> Review the saved cloud scan for aws-dev. Use evidence list/read and follow every page with the same revision.
+> Explain failed and manual controls, the recorded time and scope, and the diagnostics and coverage limits.
+> Do not infer complete coverage from unknown=0. Do not run another scan or make changes.
+
+Over MCP, call `cloudseed_evidence` with `action=list`, `cloud=aws`, `env=dev`, `area=scans`. Then use `action=read`
+with the returned `artifact`; pass `offset`, `limit` and `revision` for subsequent pages. These calls need no
+confirmation. [The MCP guide](../guides/mcp.md#read-saved-reports) shows the JSON calls and size limits.
+
+In the console, select the same environment and open **Reports**. Read its findings and coverage limits, then use
+**View full JSON** or **View full Markdown** when the preview is truncated. The Agents & MCP task box can run the
+same prompt; its agent reads evidence on the machine hosting the console.
+
+Verify that the explanation cites findings from the actual report and distinguishes **all pages read** from
+**all cloud resources assessed**. `unknown=0` only describes counted observations, and saved evidence may be stale.
+If a file or page cannot be read, the agent should name that gap instead of inventing a complete result.
 
 ## Step 8: Operate the server
 
@@ -234,7 +293,7 @@ Follow the same numbered steps and verification/cleanup conditions through your 
 [interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
 placeholders before any live request.
 
-**Agent prompt:** “Inspect my cloudseed agent and MCP setup, list the available tools and load the architecture/platform skills. Demonstrate read-only environment discovery and explain the permissions for changes. Ask me to complete host login or service bootstrap steps that cannot run inside an agent.”
+**Agent prompt:** “Inspect my cloudseed agent and MCP setup, list the available tools and load the architecture/platform skills. Demonstrate read-only environment discovery, then use evidence list/read to review a saved report completely, including its scope and coverage limits. Explain the permissions for changes. Ask me to complete host login or service bootstrap steps that cannot run inside an agent.”
 
 **MCP starter:** `cloudseed_skill` with:
 
@@ -246,7 +305,8 @@ placeholders before any live request.
 
 Use the matching tool for each remaining step in this page; the [command-to-tool map](interfaces-and-coverage.md#command-to-interface-map)
 lists the tool family. Keep `vmware-lab` selected. Preview first; add `confirm:true` only to the specific change
-you have authorized. Host bootstrap, provider login and interactive applications retain their documented human steps.
+you have authorized. For the saved-report exercise, select the environment that owns the artifact instead of assuming
+`vmware-lab`. Host bootstrap, provider login and interactive applications retain their documented human steps.
 
 **UI:** Open Agents & MCP to select the agent/model, inspect MCP status and connect clients; use its task box for the page’s agent prompt. Host authentication/service installation is performed by the human. After connection, use All actions for equivalent deterministic tools and inspect Activity.
 
@@ -267,8 +327,10 @@ cs undo --list
 ```bash
 cs destroy mcp
 cs disable agentic
-rm ~/.cloudseed/agents.json
 ```
+
+Remove the temporary `echo` entry from `~/.cloudseed/agents.json`. Remove the file itself only if this exercise
+created it and it contains no other agents.
 
 `destroy mcp` (the same as `cs mcp uninstall`) stops the server, removes the service, the token and every client
 entry it wrote. Unattended: `cs destroy mcp -y --auto-approve`.

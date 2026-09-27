@@ -87,6 +87,10 @@ Each macOS job imports the secret into its own temporary keychain with a random 
 
 The build passes this identity to PyInstaller so the embedded Python libraries are signed while packaging. Signing only the outer executable afterward cannot sign libraries already inside a one-file archive. PyInstaller also enables hardened runtime when a real identity is selected; see its [macOS signing documentation](https://pyinstaller.org/en/stable/feature-notes.html#macos-binary-code-signing). The workflow verifies the finished signature, expected team, hardened-runtime flag and secure timestamp, then runs the binary tests. Inventories, checksums and attestations describe those final signed bytes.
 
+The packaging wrapper retries only recognized Apple timestamp-service errors, at most three attempts per signing
+operation with one- and two-second waits. All signing arguments stay unchanged. Exhausted retries and other errors
+stop the build; the wrapper does not remove timestamps, weaken hardened runtime, or bypass final verification.
+
 Use a manual **Trusted releases** workflow run first. When both secrets are configured, it exercises signing and produces inspectable signed artifacts without publishing a release or version-tag attestations. When neither secret is configured, manual runs explicitly produce ad-hoc signed macOS builds; supplying only one secret is an error. Tagged releases always require Developer ID signing and never silently fall back to ad-hoc signing.
 
 For a local build using an identity already in your keychain:

@@ -254,7 +254,7 @@ cloudseed chaos run|list|status|stop|report [<cloud> --env N]      # Chaos Mesh 
 cloudseed scan cis|kube|images|host|stig|cloud|fips|all|reports [<cloud> --env N]   # compliance + vulnerability scans
 cloudseed scan architecture [<cloud> --env N] [--profile production|lab] [--max-age-days 30] [--json]
 cloudseed undo [<cloud> --env <name> | --global | --id ID] [--drop] [--list]   # revert (or drop) the previous action
-cloudseed creds list|set|unset|clear  ·  cloudseed enable|disable agentic|headliner|mcp|ui
+cloudseed creds list|set|unset|clear  ·  cloudseed enable|disable agentic|headroom|headliner|mcp|ui
 cloudseed list | doctor [cloud] | explain [name] [--json] | help [command|topic]
 ```
 
@@ -262,7 +262,7 @@ cloudseed list | doctor [cloud] | explain [name] [--json] | help [command|topic]
 the environment named by `--env`, else the current one (`cs env use`), else the only one. `--env` also takes an
 environment id as `cloudseed list` shows it (`--env aws-prod`, or `cs status aws-prod`). `<cloud>` without `--env`
 means the only environment of that cloud; with several, `status`, `output`, `inventory`, `troubleshoot`, `plan`, `ssh`,
-`k8s`, `vpn`, `finops` and `scan` use the current one, a terminal asks, and a script gets `dev` when it exists -
+`k8s`, `vpn`, `finops`, `scan` and `evidence` use the current one, a terminal asks, and a script gets `dev` when it exists -
 never a guess: several without a `dev` (or a current one that is not `dev`, for a command that changes things) stop
 with the list. For `setup`, `--env` defaults to `dev`.
 
@@ -320,7 +320,7 @@ cloudseed model                       # shows available models for the selected 
 cloudseed model claude-sonnet-5       # pick one
 cloudseed agentic "create a staging env on aws in us-west-2 with 3 AZs"
 cs agentic "list my environments"     # cs = short alias installed by scripts/install.sh; `do` also works
-cloudseed disable headliner           # turn off the research brief (on by default)
+cloudseed disable headliner           # turn off the context brief (compatible setting name; on by default)
 cloudseed disable agentic
 ```
 
@@ -356,9 +356,27 @@ cloudseed disable agentic
   core skill and the task's skills in each Grok prompt, and `skill install --agent grok` installs them for Claude
   Code. With `cloudseed install skills ...` the words right after
   `skills` name skills (`install skills vmware` is the vmware skill, not the VMware tools).
-- **Headliner**: before a task is handed to the agent, the CLI does the research itself — environments,
+- **Context brief**: before a task is handed to the agent, the CLI does the research itself — environments,
   outputs, tool/credential status, a command cheat-sheet — and prepends a compact brief, so the agent
-  spends few tokens exploring. `cloudseed disable headliner` sends the bare task instead.
+  spends fewer tokens exploring. This does not compress conversations. The compatible setting is still
+  `headliner`; `cloudseed disable headliner` sends the task without this research brief.
+- **Command access**: external agents receive private `cloudseed` and `cs` session launchers for the current
+  installation, including standalone binaries launched by full path. The prompt gives an absolute launcher path
+  if their shell resets `PATH`; no global installation or shell alias is needed for the child agent.
+- **Headroom**: actual lossless context compression through a session-only local proxy, separate from the context
+  brief. It defaults on for supported agentic routes; `cloudseed enable|disable headroom` and `agentic --no-headroom`
+  control it. Built-in Claude, direct-Anthropic Claude Code and default noninteractive Codex `exec` with explicit
+  `CODEX_API_KEY` are supported when routing is verifiable. `OPENAI_API_KEY` alone does not select Codex API auth;
+  Cloudseed does not copy keys or switch subscription billing. Interactive Codex, subscription/WIF auth and
+  unverified custom/provider/managed routing stay unsupported. Read the active/off/unsupported/unavailable status and the
+  [support details](agentic.md#headroom-context-compression). Adding Cloudseed MCP to an independently launched
+  client does not route that client's model-provider requests through this proxy.
+- **Saved evidence**: use `cloudseed evidence list|read <cloud> --env NAME --json` or MCP `cloudseed_evidence` to
+  inspect redacted reports and logs. Choose an artifact from the list; follow `next_offset` with the same `revision`
+  until `complete=true`. This marks the final page; reading every page from offset 0 is required for a full read.
+  It does not mean that all resources were assessed.
+  `unknown=0` does not prove complete coverage. Inspect recorded times, diagnostics and coverage limits before
+  explaining historical results. See [the report-review walkthrough](../scenarios/14-ai-agents-and-mcp.md#step-7a-explain-a-saved-scan-without-running-it-again).
 - **Agents**: `cloudseed agents` shows what each agent is and whether it is installed and logged in, with the
   exact fix when not (`npm install -g ...`, `gemini` login, `GROK_API_KEY`, ...). Each agent keeps only its own
   API key in its environment; every other secret is stripped. `cloudseed install <agent>` installs one and selects it
@@ -426,7 +444,8 @@ templates/gitlab-ci/       CI pipeline template (cs platform template gitlab-ci)
 skills/                    agent skills (SKILL.md)
 scripts/                   install.sh, build-bundle.sh, container-entrypoint.sh, gen-docs.py (docs/reference/ pages),
                            build-brand-assets.py (SVG artwork and optional PNG exports), live-acceptance.py, release-manifest.py, generate-sbom.py,
-                           apple-signing.py (temporary macOS release keychain and signature verification)
+                           apple-signing.py (temporary macOS release keychain and signature verification),
+                           pyinstaller-signing-retry.py (bounded retries for Apple timestamp-service failures)
 Makefile                   install, uninstall, fmt, validate, tftest, provider, test, image, bundle, clean
 Dockerfile                 all-in-one runtime image
 docs/ + mkdocs.yml         documentation site (MkDocs Material, theme overrides in overrides/): getting started,
@@ -521,12 +540,15 @@ cs mcp connect codex cursor  # add clients later (all | claude-code claude-deskt
 cs destroy mcp               # stop + remove the service, the token and every client entry
 ```
 
-`setup mcp` turns cloudseed into a Model Context Protocol server exposing **every feature as a tool** (48 tools; `cs mcp tools`
+`setup mcp` turns cloudseed into a Model Context Protocol server exposing feature tools and saved evidence (`cs mcp tools`
 lists them: list / doctor / status / output / inventory / env, setup / plan / apply / update-ip / provision / install,
 k8s / node / platform / kubectl / helm, ssh / vpn / managed (Databricks, Snowflake), finops / troubleshoot / explain /
-help / skill, dr / chaos / scan, undo / destroy), plus **resources**
+help / skill, dr / chaos / scan / evidence, operations/readiness tools, undo / destroy), plus **resources**
 (`cloudseed://environments`, `cloudseed://skills/<name>` - the operating manuals), the **resource template**
-`cloudseed://explain/{query}` (how anything works, as JSON) and **prompts** (create-environment, review-environment,
+`cloudseed://explain/{query}` (how anything works, as JSON), saved-evidence templates
+`cloudseed://evidence/{cloud}/{env}{?area,offset,limit,revision}` and
+`cloudseed://evidence/{cloud}/{env}/{artifact}{?offset,limit,revision}` (redacted, revision-bound report pages),
+and **prompts** (create-environment, review-environment,
 troubleshoot, teardown).
 
 - **Deployment**: a Streamable-HTTP server on `http://127.0.0.1:7433/mcp` (legacy SSE at `/sse`) run as a launchd

@@ -491,8 +491,11 @@ class McpTests(Quiet):
     def test_resource_template(self):
         session = mcp.Session(dict(os.environ))
         res = mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "resources/templates/list"}, session)["result"]
-        self.assertEqual([t["uriTemplate"] for t in res["resourceTemplates"]], ["cloudseed://explain/{query}"])
-        self.assertEqual(res["resourceTemplates"][0]["mimeType"], "application/json")
+        templates = {t["uriTemplate"]: t for t in res["resourceTemplates"]}
+        for uri in ("cloudseed://explain/{query}", "cloudseed://evidence/{cloud}/{env}{?area,offset,limit,revision}",
+                    "cloudseed://evidence/{cloud}/{env}/{artifact}{?offset,limit,revision}"):
+            self.assertIn(uri, templates)
+            self.assertEqual(templates[uri]["mimeType"], "application/json")
         cases = {"cloudseed://explain/vpn": ("feature", "vpn"), "cloudseed://explain/target%20vmware": ("target", "vmware"),
                  "cloudseed://explain/group/security": ("group", "security"),
                  "cloudseed://explain/variable/aws/az_count": ("variable", "aws az_count"),

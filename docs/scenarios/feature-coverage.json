@@ -679,6 +679,18 @@
     },
     {
       "command": "enable",
+      "subcommand": "headroom",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "enable",
       "subcommand": "headliner",
       "scenarios": [
         "14"
@@ -716,6 +728,18 @@
     {
       "command": "disable",
       "subcommand": "agentic",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-bootstrap-or-interactive",
+      "mcp_tool": null,
+      "ui": "host-bootstrap-or-native-interaction",
+      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
+    },
+    {
+      "command": "disable",
+      "subcommand": "headroom",
       "scenarios": [
         "14"
       ],
@@ -1409,6 +1433,30 @@
       "cli": true,
       "agent": "bundled-skill-guided",
       "mcp_tool": "cloudseed_scan",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "evidence",
+      "subcommand": "list",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_evidence",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "evidence",
+      "subcommand": "read",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_evidence",
       "ui": "typed-action-or-dedicated-page",
       "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
     },

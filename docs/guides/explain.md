@@ -136,7 +136,7 @@ MCP clients get the same pages two ways:
 | Tool `cloudseed_explain` | argument `what` (`vpn`, `target vmware`, `variable aws az_count`; empty for the index) and `format`: `text` (default, the terminal page) or `json` (the structured page). Nothing found sets `isError` with the suggestions. |
 | Resource template `cloudseed://explain/{query}` | the JSON page. `{query}` is what `cs explain` takes, URL-encoded or with `/` between words: `cloudseed://explain/vpn`, `cloudseed://explain/target%20vmware`, `cloudseed://explain/group/security`, `cloudseed://explain/variable/aws/single_nat_gateway`. `cloudseed://explain` alone is the index. |
 
-The server's instructions, the bundled skills and the headliner brief all tell agents to look a thing up here before
+The server's instructions, the bundled skills and the context brief all tell agents to look a thing up here before
 guessing how it works. See [MCP server](mcp.md) and [Agentic mode](agentic.md).
 
 ## Explain vs help

@@ -380,7 +380,7 @@ class SkillAndAgentTest(unittest.TestCase):
         self.assertIn("npm install -g @anthropic-ai/claude-code", out)
 
     def run_do(self, spec, settings, task, argv=None):
-        args = argparse.Namespace(agent=None, task=task, force=False, model=None, no_headliner=True, show_prompt=False,
+        args = argparse.Namespace(agent=None, task=task, force=False, model=None, no_headliner=True, no_headroom=True, show_prompt=False,
                                   interactive=False, cmd="agentic")
         run = mock.Mock(return_value=0)
         with mock.patch.object(cli, "_ensure_agent_ready", return_value=spec), mock.patch.object(agents, "describe"), \

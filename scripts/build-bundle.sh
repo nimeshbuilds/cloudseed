@@ -76,7 +76,7 @@ python3 -m venv "$BUILD/venv"
 "$BUILD/venv/bin/pip" install --quiet "pyinstaller==6.22.3" "keyring==25.7.0" "certifi==2026.7.22"
 
 echo "▸ Building"
-PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" "$BUILD/venv/bin/pyinstaller" --onefile --clean --noconfirm \
+PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" "$BUILD/venv/bin/python" "$ROOT/scripts/pyinstaller-signing-retry.py" --onefile --clean --noconfirm \
   ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} \
   --name "$NAME" \
   --distpath "$ROOT/dist" --workpath "$BUILD/pyi" --specpath "$BUILD" \

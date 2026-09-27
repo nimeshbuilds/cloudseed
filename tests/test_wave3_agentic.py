@@ -448,7 +448,10 @@ class TemplateTests(unittest.TestCase):
                 mock.patch.object(agents.subprocess, "Popen", _P), contextlib.redirect_stdout(io.StringIO()):
             rc = agents.run(agents.get("myagent"), "list my envs", None, interactive=False)
         self.assertEqual(rc, 0)
-        self.assertEqual(seen[0], ["/usr/local/bin/myagent", "list my envs"])
+        self.assertEqual(seen[0][0], "/usr/local/bin/myagent")
+        self.assertEqual(len(seen[0]), 2)
+        self.assertTrue(seen[0][1].endswith("list my envs"))
+        self.assertIn("Cloudseed runtime and saved evidence", seen[0][1])
 
 
 class ClaudeBillingTests(_TmpHome):
@@ -477,7 +480,7 @@ class ClaudeBillingTests(_TmpHome):
         keep, note = agents._agent_keys(spec, "/usr/local/bin/claude")   # exported in the shell: the user's choice
         self.assertIn("ANTHROPIC_API_KEY", keep)
         self.assertIsNone(note)
-        self.assertEqual(agents._agent_keys(agents.get("codex"), "codex"), (("OPENAI_API_KEY",), None))
+        self.assertEqual(agents._agent_keys(agents.get("codex"), "codex"), (("CODEX_API_KEY", "OPENAI_API_KEY"), None))
 
 
 class GrokTests(_TmpHome):
@@ -532,7 +535,7 @@ class GrokTests(_TmpHome):
                 mock.patch.object(agents.subprocess, "Popen", _P), contextlib.redirect_stdout(io.StringIO()):
             agents.run(spec, prompt, None, interactive=False, task="destroy my aws dev env")
         sent = seen[0][seen[0].index("-p") + 1]
-        self.assertTrue(sent.startswith(agents.SKILLS_INTRO))
+        self.assertIn(agents.SKILLS_INTRO, sent)
         self.assertIn('<skill name="cloudseed">', sent)
         self.assertIn('<skill name="cloudseed-destroy">', sent)
         self.assertIn("cloudseed skill show <name>", sent)

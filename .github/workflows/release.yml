@@ -104,10 +104,18 @@ jobs:
           export SCN_BINARY="$CLOUDSEED_TEST_BINARY"
           export PATH="$PWD/build/tfbin:$PATH"
           export CLOUDSEED_HOME="$(mktemp -d)"
-          python3 -m unittest tests.test_cli_e2e tests.test_bundle_lifecycle tests.test_architecture_cli tests.test_operations_interfaces.OperationCLITests
+          python3 -m unittest tests.test_agent_evidence_e2e tests.test_cli_e2e tests.test_bundle_lifecycle tests.test_architecture_cli tests.test_operations_interfaces.OperationCLITests
           bash tests/scenarios/14-ai-agents-and-mcp.sh
           bash tests/scenarios/15-web-console-and-finops.sh
           bash tests/scenarios/run.sh 16 17 18 19
+      - name: Verify managed Headroom on every binary platform
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          export CLOUDSEED_HOME="$(mktemp -d)"
+          "$PWD/dist/cloudseed-$PLATFORM" enable headroom
+          export CLOUDSEED_HEADROOM_TEST_VENV="$CLOUDSEED_HOME/venv-headroom"
+          python3 -m unittest tests.test_headroom_runtime
       - name: Remove temporary Apple signing credentials
         if: always() && runner.os == 'macOS'
         run: python3 scripts/apple-signing.py cleanup
@@ -152,7 +160,7 @@ jobs:
           docker run --rm cloudseed:release --version
           docker run --rm --entrypoint /bin/bash cloudseed:release -euo pipefail -c '
             export CLOUDSEED_HOME="$(mktemp -d)"
-            python3 -m unittest tests.test_cli_e2e tests.test_architecture_cli tests.test_operations_interfaces.OperationCLITests
+            python3 -m unittest tests.test_agent_evidence_e2e tests.test_cli_e2e tests.test_architecture_cli tests.test_operations_interfaces.OperationCLITests
             bash tests/scenarios/14-ai-agents-and-mcp.sh
             bash tests/scenarios/15-web-console-and-finops.sh
             bash tests/scenarios/run.sh 16 17 18 19
