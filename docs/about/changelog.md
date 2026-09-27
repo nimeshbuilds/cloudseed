@@ -1,6 +1,6 @@
 ---
-title: "Changelog - cloudseed v0.2.1 highlights"
-description: "Cloudseed v0.2.1 fixes public-IP detection, bastion CLI provisioning, private cluster access and scan reporting, with explicit host-kubeconfig administration."
+title: "Changelog - cloudseed v0.2.2 highlights"
+description: "Cloudseed v0.2.2 adds Headroom context compression, complete saved-evidence access, reliable agent command discovery and retained scanner diagnostics."
 ---
 
 # Changelog
@@ -8,6 +8,36 @@ description: "Cloudseed v0.2.1 fixes public-IP detection, bastion CLI provisioni
 The full, detailed history is in [CHANGELOG.md](https://github.com/nimeshbuilds/cloudseed/blob/main/CHANGELOG.md) on
 GitHub. cloudseed follows [Semantic Versioning](https://semver.org/); while it is 0.x, a minor release may change
 commands or defaults, and such changes are called out.
+
+## v0.2.2 - 2026-09-27
+
+Cloudseed now manages **Headroom AI 0.39.1** through a session-only loopback proxy for supported agent connections.
+Lossless compression is enabled by default for agentic tasks and is separate from the deterministic **Context
+brief**, previously displayed as Headliner. `cs enable headroom`, `cs disable headroom` and `--no-headroom` control
+compression; the legacy `headliner` setting still controls the brief. Readiness and active-session status remain
+distinct, and unsupported routes explain their limitation without changing provider configuration or billing.
+Codex support requires default noninteractive execution with explicit `CODEX_API_KEY`; independently launched MCP
+clients retain their own model connection. See [Headroom support and controls](../guides/agentic.md#headroom-context-compression).
+
+Agents receive private `cloudseed` and `cs` launchers for the exact installation running the task, including
+standalone binaries absent from `PATH`. An absolute launcher path provides a fallback when the agent's shell
+resets `PATH`. This avoids command-discovery failures without installing another copy or granting broad file access.
+
+`cs evidence list/read` and MCP `cloudseed_evidence` expose saved reports and diagnostic logs through redacted,
+revision-bound pages. Follow every page before explaining the report, and inspect its observation time, scope,
+diagnostics and coverage limits. `unknown=0` does not prove every resource or control was assessed. The interface
+excludes arbitrary files, credentials and Terraform state. See [saved reports over MCP](../guides/mcp.md#read-saved-reports)
+and [scenario 14's report-review exercise](../scenarios/14-ai-agents-and-mcp.md#step-7a-explain-a-saved-scan-without-running-it-again).
+
+New cloud scans retain bounded, redacted diagnostic excerpts and a private `prowler.log`, including failed or
+timed-out collection, with explicit omitted-output counts. Historical scanner output that was discarded cannot
+be recovered. Zero-error counters and ordinary prose mentioning errors no longer create false incomplete verdicts.
+The built-in agent preserves full evidence pages and reports interrupted or truncated tool output.
+
+macOS signing retries recognized Apple timestamp-service failures up to three times per signing operation.
+Other signing failures still stop immediately; secure timestamps, hardened runtime and final verification remain
+required. Developer ID signing remains separate from notarization. Compression savings depend on eligible content,
+and these improvements do not establish live deployment acceptance across all cloud providers.
 
 ## v0.2.1 - 2026-09-26
 
