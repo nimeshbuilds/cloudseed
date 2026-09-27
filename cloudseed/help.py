@@ -1159,17 +1159,22 @@ cloudseed scan all [<cloud> --env NAME] · cloudseed scan reports [--last N]
   host    OpenSCAP + SCAP Security Guide on every SSH-reachable host (bastion, VPN, local Kubernetes nodes): CIS level 1/2
           server profile (or --profile stig); Ubuntu 22.04 through the Ubuntu Security Guide (needs Ubuntu Pro). Score, failed
           rules, HTML report per host under <workdir>/scans/openscap-<run>/. A host with no content for the profile is n/a.
+          Empty results, unchecked/manual rules and collection errors are INCOMPLETE unless evaluated rules fail.
   stig    DISA STIG: hosts with a stig profile (Ubuntu 24.04, Ubuntu 22.04 with Ubuntu Pro, RHEL 8/9; not AL2023 or Debian 12,
           which report n/a - the default AWS/GCP bastions); on EKS also kube-bench's
           eks-stig-kubernetes benchmark. Managed GKE/AKS/EKS nodes are not SSH-reachable (provider-hardened) - use `cis` there.
   cloud   prowler against the account: newest CIS benchmark for the provider by default (--framework for another id).
           In an AWS FIPS environment only its region is audited, through the FIPS endpoints (the summary says so).
+          Every failed benchmark observation contributes to FAIL, including medium/low severity. With no failures,
+          manual/unknown checks, empty results or execution/coverage errors produce INCOMPLETE. Account/project/
+          subscription scope includes resources outside this environment; inspect scope and resource context.
   fips    verifies FIPS mode end to end: config, SSH key type, kernel fips_enabled and sshd/OpenSSL algorithms on every host,
           FIPS endpoints / node images, RKE2 build, TLS policy on the shared Gateway, FIPS capability of every installed item
           (crypto-restricted ones - cert-manager, sealed-secrets, velero, cloudnative-pg - are reported as not
           FIPS-validated). In AWS FIPS environments also, on the live cluster: AWS_USE_FIPS_ENDPOINT on the AWS
           controllers, Velero's s3-fips endpoint, Karpenter EC2NodeClass AMIs and '-fips' Bottlerocket node images.
           On an environment created without fips_mode the verdict is N/A.
+          Required runtime checks that could not be verified remain UNKNOWN; with no failures, these give INCOMPLETE.
   architecture  Well-Architected assessment of saved configuration and local evidence. AWS/GCP: six pillars;
           Azure: five pillars plus separate sustainability guidance; VMware: local infrastructure best practices.
           Defaults: --profile production, --max-age-days 30. Lab relaxes production availability expectations;
@@ -1181,10 +1186,15 @@ cloudseed scan all [<cloud> --env NAME] · cloudseed scan reports [--last N]
           Architecture is explicit: run `cs scan architecture` separately.
 
 --host takes bastion, vpn and k8s, comma-separated or repeated (any case); an unknown value stops with exit code 2.
-Reports: <workdir>/scans/<kind>-<run>.json + .md; raw tool output under <workdir>/scans/raw/. Every scan is logged in
-the audit trail. Exit code: 1 when a verdict is FAIL or `scan all` could not run one of its scans (like chaos run and
-dr test), else 0. Architecture exits 0 on PASS, 1 on definite findings (FAIL), or 3 when evidence is missing,
-stale or needs manual review (INCOMPLETE); invalid arguments exit 2. FAIL takes precedence over INCOMPLETE.
+Reports: <workdir>/scans/<kind>-<run>.json + .md; raw tool output under <workdir>/scans/raw/. JSON and Markdown retain
+the saved findings, details and remediation; the terminal is a summary. Coverage limits and fuller findings are also
+available in console Reports. Every scan is logged in the audit trail. Read the scanner's policy and coverage:
+PASS describes the checks performed, not complete compliance or live verification of every resource.
+Exit code: 0 for PASS or explicit N/A, 1 for FAIL or a `scan all` action that could not run, 3 for INCOMPLETE
+(missing, manual, unknown or partial evidence), 2 for invalid arguments. FAIL takes precedence over INCOMPLETE.
+Each scanner retains its own failure policy; cloud scans fail on any failed benchmark observation.
+For architecture, --max-age-days controls saved-evidence freshness only. Run `cs scan cloud` first when its evidence
+is needed, then `cs scan architecture`; a later cloud scan never rewrites an earlier architecture report.
 
 EXAMPLES
   cs scan all

@@ -1,6 +1,6 @@
 ---
 title: "Changelog - cloudseed v0.2.1 highlights"
-description: "Cloudseed v0.2.1 fixes certificate trust for automatic public-IP detection and HTTPS downloads in standalone releases."
+description: "Cloudseed v0.2.1 fixes automatic public-IP detection, incomplete scan verdicts and detailed reporting across CLI, MCP, agents and the web console."
 ---
 
 # Changelog
@@ -15,6 +15,13 @@ Standalone binaries now include trusted CA certificates for public-IP discovery 
 machine. AWS, GCP and Azure setup share the fix through the CLI, console, MCP and agent skills. Setup and
 `update-ip` now explain certificate and connectivity failures. Explicit CA overrides and saved SSH allow-lists
 remain authoritative. See [automatic public-IP troubleshooting](../guides/troubleshooting.md#automatic-public-ip-detection).
+
+Scan reports now retain detailed findings and remediation, including lower-severity cloud findings and manual
+checks. Empty and partial scan evidence remains incomplete, with exit code 3. The console exposes report details,
+coverage and preview limits with full saved artifacts. Architecture correctly skips Kubernetes diagnostics when
+Kubernetes is explicitly disabled. See [scan reporting](../guides/resilience.md),
+[Well-Architected evidence](../guides/well-architected.md) and the expanded
+[AWS cloud-scan walkthrough](../scenarios/10-compliance-scans.md#step-6-the-cloud-account-cloud-environments).
 
 ## v0.2.0 - 2026-09-25
 

@@ -199,9 +199,15 @@ _DIAGNOSTIC_CHECKS = {
 }
 
 
-def _diagnostic_evidence(target, env, now, days, add):
+def _diagnostic_evidence(target, env, now, days, add, k8s=None):
     """Supplemental historical observations, never substitutes for architecture or workload assurance."""
     for kind in ("health", "network"):
+        if k8s is False:
+            add(f"evidence.{kind}", "operational_excellence", "NOT_APPLICABLE", f"Saved live {kind} diagnostics",
+                "Kubernetes is disabled in the declared configuration; these diagnostics inspect the cluster and its probe workloads.",
+                "Review host, service and application health separately; no Kubernetes diagnostics are required for this configuration.",
+                [{"type": "declared_configuration", "source": "config.json", "fields": ["enable_kubernetes"], "live_verified": False}])
+            continue
         report, source = _latest(env, "scans", kind, now, days)
         valid = report is not None and type(report.get("schema_version")) is int and report.get("schema_version") == 1 and report.get("kind") == kind and \
             report.get("cloud") == target and report.get("env") == env.id and report.get("live") is True and \
@@ -389,13 +395,22 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
         summary = _object(report.get("summary")) if report else {}
         passed = _integer(summary.get("pass"))
         failed = _integer(summary.get("fail"))
+        identified = report is not None and ("cloud" in report or "env" in report)
+        matching = not identified or report.get("cloud") == target and report.get("env") == env.id
         valid = report is not None and report.get("kind") == "cloud" and summary.get("provider") == target and \
-                passed is not None and passed >= 0 and failed is not None and failed >= 0
+                matching and passed is not None and passed >= 0 and failed is not None and failed >= 0
         status = "FAIL" if valid and failed > 0 else "UNKNOWN"
         detail = "The latest fresh cloud benchmark records failed checks (including medium/low findings)." if status == "FAIL" else \
                  "The latest report cannot establish complete security coverage: existing cloud reports do not attest to skipped, unreachable or missing checks."
         if valid:
-            evidence.update({"checks_passed": passed, "checks_failed": failed})
+            evidence.update({"checks_passed": passed, "checks_failed": failed,
+                             "environment_identity": "matched" if identified else "not_recorded"})
+            detail += " Cloud benchmarks cover provider account, project or subscription scope; findings are not necessarily owned by this environment."
+            if not identified:
+                evidence["provenance_limit"] = "Legacy report does not record cloud/environment identity; only its provider and saved location can be checked."
+                detail += " This legacy report does not record the originating environment identity."
+        elif identified and not matching:
+            evidence["reason"] = "latest cloud report identity is missing or does not match this environment"
         add("security.saved_cloud_scan", "security", status, "Saved cloud security evidence", detail,
             "Run cs scan cloud, resolve findings and separately verify permissions, scope and checks that could not run.", [evidence], "HIGH")
 
@@ -460,7 +475,7 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
     ):
         add(id_, pillar, "UNKNOWN", title, detail, remediation)
 
-    _diagnostic_evidence(target, env, now, max_age_days, add)
+    _diagnostic_evidence(target, env, now, max_age_days, add, _flag(cfg, "enable_kubernetes", None))
 
     counts = {status: sum(f["status"] == status for f in findings) for status in ("PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE")}
     verdict = "FAIL" if counts["FAIL"] else "INCOMPLETE" if counts["UNKNOWN"] else "PASS"

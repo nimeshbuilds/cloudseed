@@ -123,7 +123,7 @@ class ArchitectureReportTests(unittest.TestCase):
             self.assertEqual(webui.scan_verdict("architecture", data), "INCOMPLETE")
         self.assertEqual(webui.scan_verdict("architecture", {"findings": [{"status": "FAIL"}]}), "FAIL")
         self.assertEqual(webui.scan_verdict("architecture", {"summary": {"failed": 2}}), "FAIL")
-        self.assertEqual(webui.scan_verdict("architecture", {"verdict": "PASS"}), "PASS")
+        self.assertEqual(webui.scan_verdict("architecture", {"verdict": "PASS"}), "INCOMPLETE")
 
 
 JS = (Path(webui.WEB_ROOT) / "app.js").read_text()
@@ -165,7 +165,7 @@ console.log(JSON.stringify({chip, unknown:verdictClass('UNKNOWN'), profiles:scan
         self.assertEqual(result["profiles"], ["production", "lab"])
         self.assertEqual(result["host"], ["cis", "stig"])
 
-    def test_assessment_exit_three_is_incomplete_other_commands_still_fail(self):
+    def test_scan_exit_three_is_incomplete_other_commands_still_fail(self):
         result = self.node(["interrupted", "jobState", "jobStatusText"], """
 const base = {id:'a', running:false, rc:3, seconds:1};
 const j = {...base, argv:['scan','architecture','aws']};
@@ -173,7 +173,7 @@ console.log(JSON.stringify({state:jobState(j), status:jobStatusText(j), other:jo
 """, "const INTERRUPTED = new Set();")
         self.assertEqual(result["state"], "incomplete")
         self.assertIn("incomplete assessment", result["status"])
-        self.assertEqual(result["other"], "bad")
+        self.assertEqual(result["other"], "incomplete")
         self.assertEqual(result["failed"], "bad")
 
     def test_raw_assessment_jobs_skip_only_recognized_leading_global_options(self):
@@ -182,19 +182,19 @@ const base = {id:'a', running:false, rc:3, seconds:1};
 const assessments = [
  ['-y','scan','architecture','aws'], ['--yes','scan','architecture','gcp'],
  ['-y','--runtime','local','--engine','docker','scan','architecture','azure'],
- ['--runtime=local','--engine=podman','--yes','scan','architecture','vmware']
+ ['--runtime=local','--engine=podman','--yes','scan','architecture','vmware'], ['-y','scan','cloud','aws']
 ];
 const others = [
- ['-y','scan','cloud','aws'], ['--runtime','architecture','scan','cloud'],
- ['--engine','scan','architecture'], ['--runtime=architecture','scan','cloud'],
+ ['--runtime','architecture','scan','reports'],
+ ['--engine','scan','architecture'], ['--runtime=architecture','scan','reports'],
  ['ssh','aws','--','scan','architecture'], ['-y','--','scan','architecture'],
  ['--unknown','scan','architecture'], ['scan','reports','architecture'],
  ['--runtime'], ['--engine'], []
 ];
 console.log(JSON.stringify({assessments:assessments.map(argv=>jobState({...base,argv})),others:others.map(argv=>jobState({...base,argv}))}));
 """, "const INTERRUPTED = new Set();")
-        self.assertEqual(result["assessments"], ["incomplete"] * 4)
-        self.assertEqual(result["others"], ["bad"] * 11)
+        self.assertEqual(result["assessments"], ["incomplete"] * 5)
+        self.assertEqual(result["others"], ["bad"] * 10)
 
     def test_report_renders_pillars_status_evidence_and_remediation(self):
         prelude = """

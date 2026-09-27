@@ -154,7 +154,10 @@ when Kubernetes is turned on, and only warns for a cluster that already runs the
   controllers, Velero's s3-fips endpoint, Karpenter EC2NodeClass AMIs and '-fips' Bottlerocket node images; N/A on
   non-FIPS environments), `all` (FIPS verification only on FIPS environments). `--host bastion,vpn,k8s` picks the hosts
   (comma-separated; an unknown value exits 2). Reports under `<workdir>/scans/`, raw tool output
-  under `<workdir>/scans/raw/`; `cs scan` exits 1 when a verdict is FAIL or `scan all` could not run a scan.
+  under `<workdir>/scans/raw/` or scanner-specific subdirectories. JSON and Markdown retain detailed findings;
+  the console labels bounded previews and provides full saved reports. `cs scan` exits 1 when a verdict is FAIL or
+  `scan all` could not run a scan, 3 for incomplete evidence without failures, and 0 for PASS/N/A. Cloud scans fail
+  on any failed observation and include account-wide resources outside this environment; read scope and coverage limits.
 - **Well-Architected assessment** (`cs scan architecture <cloud> --env NAME --profile production --max-age-days 30 --json`):
   evaluates saved configuration and local evidence, with provider pillar mappings, findings and remediation.
   `--profile lab` relaxes production availability expectations. No cloud queries, installations or infrastructure

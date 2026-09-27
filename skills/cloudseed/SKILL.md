@@ -108,6 +108,12 @@ console, so quote it when you explain something to them.
 
 ## Workflow
 
+For security scans, read the full saved JSON/Markdown report, including lower-severity findings, manual checks,
+remediation, failure policy and coverage limits. Exit 3 means incomplete evidence, never success. Cloud scans cover
+account/project/subscription resources beyond the selected environment; establish ownership before proposing changes.
+Run the cloud scan before architecture if you want the latter to use that evidence. The console previews may be
+bounded; use their full report buttons or the saved artifact to review every retained finding.
+
 For an architecture assessment, use `cloudseed scan architecture` directly on the selected saved environment.
 It queries no clouds and installs no tools; it saves reports. PASS / exit 0 covers the assessed checks only,
 FAIL / 1 means definite findings, INCOMPLETE / 3 means missing/stale/manual evidence, and invalid arguments exit 2.

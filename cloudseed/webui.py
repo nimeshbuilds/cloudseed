@@ -1769,32 +1769,53 @@ def chaos_verdict(data: dict) -> tuple[str, str]:
 
 
 def scan_verdict(kind: str, data: dict) -> str:
-    """The same verdict the CLI prints for the scan (stored in the report when the scan saved one)."""
+    """Use the recorded policy, without presenting empty or incomplete legacy evidence as clean."""
+    if kind == "cloud":
+        from .scan import cloud_verdict
+        return cloud_verdict(data)
     stored = _stored_verdict(data)
-    if stored:
+    if stored and stored != "PASS":
         return stored
     sm = data.get("summary") if isinstance(data.get("summary"), dict) else {}
     findings = [f for f in _items(data, "findings") if isinstance(f, dict)]
+    checks = [c for c in _items(data, "checks") if isinstance(c, dict)]
+    hosts = [h for h in (data.get("hosts") if isinstance(data.get("hosts"), dict) else {}).values() if isinstance(h, dict)]
+    host_scan = kind.startswith("host") or kind == "stig-host"
+    if host_scan and hosts and all(h.get("skipped") for h in hosts):
+        return "N/A"
+    # An all-zero vulnerability summary can be clean only if some images/reports
+    # were observed. A zero failed count alone is not proof that a scan ran.
+    counted = any(_num(sm.get(key)) > 0 for key in (
+        "pass", "passed", "fail", "failed", "controls passed", "controls failed", "checks", "observations",
+        "reports observed", "critical", "high", "medium", "low"))
+    host_evidence = any(not h.get("skipped") and not h.get("error") and
+                        (isinstance(h.get("score"), (int, float)) or _num(h.get("pass")) or _num(h.get("fail"))) for h in hosts)
+    has_evidence = bool(counted or findings or checks or _items(data, "results") or host_evidence)
+    gaps = any(_num(sm.get(key)) for key in ("manual", "unknown", "skipped", "errors", "not evaluated"))
+    gaps = gaps or any(str(f.get("status", "")).upper() in ("MANUAL", "UNKNOWN", "SKIP", "SKIPPED", "ERROR", "WARN") for f in findings)
+    if isinstance(data.get("diagnostics"), list):
+        gaps = gaps or bool(data["diagnostics"])
+    if kind in ("cis", "stig-k8s"):
+        gaps = gaps or _num(sm.get("warn")) or _num(sm.get("info"))
+    if host_scan:
+        gaps = gaps or _num(data.get("ansible_rc")) or any(h.get("error") and not h.get("skipped") for h in hosts)
+    if stored == "PASS":
+        return "PASS" if has_evidence and not gaps else "INCOMPLETE"
+    failed = any(str(f.get("status", "FAIL")).upper() in ("FAIL", "FAILED") for f in findings)
     if kind in ("architecture", "health", "network"):
-        if _num(sm.get("failed")) or _num(sm.get("fail")) or any(f.get("status") == "FAIL" for f in findings):
+        if _num(sm.get("failed")) or _num(sm.get("fail")) or failed:
             return "FAIL"
-        # A damaged / incomplete assessment without its recorded verdict cannot prove that all checks passed.
-        return "INCOMPLETE"
-    high = any(str(f.get("severity", "")).upper() in ("CRITICAL", "HIGH") for f in findings)
-    if kind == "kube" or kind == "cloud":
-        return "FAIL" if high else "PASS"
+        return "INCOMPLETE"   # these assessments always record their verdict
+    high = any(str(f.get("severity", "")).upper() in ("CRITICAL", "HIGH") and
+               str(f.get("status", "FAIL")).upper() in ("FAIL", "FAILED") for f in findings)
+    if kind == "kube":
+        return "FAIL" if high else "INCOMPLETE" if gaps or not has_evidence else "PASS"
     if kind == "images":
-        return "FAIL" if _num(sm.get("critical")) or any(str(f.get("severity", "")).upper() == "CRITICAL" for f in findings) else "PASS"
-    if kind.startswith("host") or kind == "stig-host":
-        hosts = [h for h in (data.get("hosts") if isinstance(data.get("hosts"), dict) else {}).values() if isinstance(h, dict)]
-        if hosts and all(h.get("skipped") for h in hosts):
-            return "N/A"            # no scanned host has content for this profile (e.g. no DISA STIG for the OS)
-        if "ansible_rc" in data:    # what the CLI printed: PASS when Ansible succeeded and no rule failed
-            return "FAIL" if findings or _num(data.get("ansible_rc")) else "PASS"
-        # an old report without the Ansible exit code: a host without results is not a clean one
-        broken = any("error" in h and not h.get("skipped") for h in hosts)
-        return "FAIL" if findings or broken else "PASS"
-    return "FAIL" if _num(sm.get("fail")) or _num(sm.get("controls failed")) else "PASS"   # cis, stig-k8s, fips
+        critical = _num(sm.get("critical")) or any(str(f.get("severity", "")).upper() == "CRITICAL" for f in findings)
+        return "FAIL" if critical else "INCOMPLETE" if gaps or not has_evidence else "PASS"
+    if host_scan:
+        return "FAIL" if failed or _num(sm.get("fail")) else "INCOMPLETE" if gaps or not has_evidence else "PASS"
+    return "FAIL" if _num(sm.get("fail")) or _num(sm.get("controls failed")) or failed else "INCOMPLETE" if gaps or not has_evidence else "PASS"
 
 
 def _scan_kind(p: Path) -> str:
@@ -1909,7 +1930,32 @@ def reports(env_id: str) -> dict:
                    "run": data.get("run") if isinstance(data.get("run"), str) else None,
                    "results": _items(data, "results", 200) or _items(data, "steps", 200), "findings": _items(data, "findings", 100),
                    "checks": _items(data, "checks", 200)}
+            # The compact API remains bounded, but never silently hides how much
+            # was omitted. Saved JSON/Markdown can be opened separately in full.
+            for field in ("findings", "checks", "results"):
+                source = "steps" if field == "results" and not _items(data, "results") else field
+                total = max(len(_items(data, source)), _num(data.get(field + "_total")))
+                row[field + "_total"] = total
+                row[field + "_truncated"] = total > len(row[field]) or data.get(field + "_truncated") is True
+            markdown = p.with_suffix(".md")
+            if markdown.is_file():
+                row["markdown_path"] = str(markdown)
+            if isinstance(data.get("scope"), str):
+                row["scope"] = data["scope"]
+            if isinstance(data.get("failure_policy"), str):
+                row["failure_policy"] = data["failure_policy"]
+            if isinstance(data.get("generated_at"), str):
+                row["generated_at"] = data["generated_at"]
+            if isinstance(data.get("diagnostics"), dict):
+                row["diagnostics"] = {key: value for key, value in data["diagnostics"].items()
+                                      if isinstance(key, str) and _is_num(value)}
+            elif isinstance(data.get("diagnostics"), list):
+                row["diagnostics"] = [secrets.redact(item) for item in data["diagnostics"] if isinstance(item, str)]
             row["coverage_limits"] = [item for item in _items(data, "coverage_limits", 20) if isinstance(item, str)]
+            if kind == "scans" and row["kind"] == "cloud" and "schema_version" not in data:
+                row["legacy_cloud_report"] = True
+                row["coverage_limits"].append("This older cloud report may retain only high/critical failures. "
+                                              "Rerun the cloud scan for complete findings and explanations; existing raw output may contain more detail.")
             if kind == "operations":
                 row["operation"] = str(data.get("operation") or data.get("action") or data.get("kind") or "operation")
                 row["generated_at"] = data.get("generated_at") if isinstance(data.get("generated_at"), str) else None
@@ -1963,6 +2009,10 @@ def read_env_file(path: str) -> str | None:
         if len(rel) < 2 or rel[0] not in READABLE or p.suffix not in READABLE[rel[0]] or "ssh" in rel or "tfstate" in p.name or not p.is_file():
             return None
         try:
+            if rel[0] != "logs" and p.suffix in (".json", ".md"):
+                if p.stat().st_size > MAX_REPORT_BYTES:
+                    raise ValueError("This report exceeds the console's 32 MiB display limit. Open the saved report locally.")
+                return secrets.redact(p.read_text(errors="replace"))
             return secrets.redact(p.read_text(errors="replace")[-400000:])
         except OSError:
             return None

@@ -704,20 +704,21 @@ class ScanTests(unittest.TestCase):
         self.assertIn("FAILED", out.getvalue())
         self.assertNotIn('ANSIBLE_HOST_KEY_CHECKING="False"', (ROOT / "cloudseed" / "provision.py").read_text())
 
-    def test_images_keep_every_critical_and_say_when_truncated(self):
+    def test_images_keep_every_finding_in_the_saved_report(self):
         items = []
         for i in range(3):
             vulns = [{"severity": "HIGH", "vulnerabilityID": f"CVE-H-{i}-{j}"} for j in range(10)] + [{"severity": "CRITICAL", "vulnerabilityID": f"CVE-C-{i}"}]
             items.append({"metadata": {"namespace": "ns", "name": f"w{i}"}, "report": {"summary": {"criticalCount": 1, "highCount": 10}, "vulnerabilities": vulns}})
         ctx = make_ctx()
         with mock.patch.object(scan, "_kubectl", return_value=cp(0, json.dumps({"items": items}))), mock.patch.object(scan, "_ensure_kubectl"), \
-                mock.patch.object(scan, "IMAGE_FINDINGS_MAX", 5), silenced() as (out, _):
+                silenced() as (out, _):
             path = scan.images(ctx)
         rep = json.loads(path.read_text())
         self.assertEqual(rep["findings_total"], 33)
-        self.assertEqual(len(rep["findings"]), 5)
+        self.assertEqual(len(rep["findings"]), 33)
         self.assertEqual([f["severity"] for f in rep["findings"][:3]], ["CRITICAL"] * 3)
-        self.assertIn("first 5 of 33", ui._strip(out.getvalue()))
+        self.assertIn("retains every reported severity", ui._strip(out.getvalue()))
+        self.assertTrue(Path(rep["raw"]).exists())
         self.assertEqual(rep["verdict"], "FAIL")
 
     def test_prowler_python_choice(self):
@@ -792,7 +793,7 @@ class ScanTests(unittest.TestCase):
             p = scan.fips(gcp, env, {"vars": {"fips_mode": True}, "ssh_public_key": "ecdsa-sha2-nistp384 AAAA"}, {})
             rep = json.loads(p.read_text())
             self.assertEqual({c["check"]: c["status"] for c in rep["checks"]}["bastion image is Ubuntu Pro FIPS"], "PASS")
-            self.assertEqual(rep["verdict"], "PASS")
+            self.assertEqual(rep["verdict"], "INCOMPLETE")  # declared image; no host runtime evidence
             p = scan.fips(gcp, env, {"vars": {}}, {})
             rep = json.loads(p.read_text())
             self.assertEqual(rep["verdict"], "N/A")

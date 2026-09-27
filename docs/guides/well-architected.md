@@ -29,7 +29,7 @@ and `--env` explicitly when several environments exist. No cloud credentials are
 |---|---|
 | `--profile production` | Default assessment policy, including production availability expectations. |
 | `--profile lab` | Relax production availability expectations for a lab; missing evidence still remains unknown. |
-| `--max-age-days 30` | Maximum age of saved evidence; 1–3650 days, default 30. |
+| `--max-age-days 30` | Accept saved evidence no older than 30 days; 1–3650 days, default 30. This does not choose a cloud billing/log window or launch new scans. |
 | `--json` | Print the assessment as structured JSON for scripts and agents. |
 
 These are **assessment profiles**, not deployment presets. To preview/save actual topology settings, use
@@ -55,6 +55,9 @@ an assessment with no definite failures is `INCOMPLETE`; individual configuratio
 Reports are saved in the environment's `<workdir>/scans/architecture-<run>.json` and `.md`, alongside security scan
 reports. Use `cs scan reports` or the console's **Reports** view to find them. Re-run the assessment after changing
 configuration or collecting evidence; it does not silently refresh evidence with live scans or recovery drills.
+For cloud benchmark evidence, run `cs scan cloud <cloud> --env <name>` first, then run the architecture assessment.
+A cloud scan completed afterward does not update an earlier architecture report. Running the architecture scanner
+alone remains useful: missing evidence is reported explicitly rather than collected automatically.
 
 ## What the scanner checks
 
@@ -62,15 +65,17 @@ configuration or collecting evidence; it does not silently refresh evidence with
 |---|---|
 | Saved configuration | SSH source ranges, Kubernetes API exposure and provider logging settings. A pass describes declared intent. |
 | Provider topology | AWS zones and NAT layout; GKE zonal/regional location and node zones; AKS Free/Standard tier and node zones; VMware's single physical host. Production expectations are explicit. |
-| Latest cloud security report | Freshness and failed checks. Even a security `PASS` cannot prove complete coverage or permissions. |
+| Latest cloud security report | Freshness, provider and recorded environment identity, and failed checks. Account/project/subscription-wide findings do not establish ownership by this environment. Even a security `PASS` cannot prove complete coverage or permissions. |
 | Latest Kubernetes DR drill | A complete, recent sample restore with verified volume contents. It does not establish application recovery targets. |
 | Inventory installation notes | Whether Vault or Kyverno policies were recently installed. Effective values and overrides remain unknown. |
-| Saved operational diagnostics | Fresh, matching health/network reports contribute supplemental live observations; they do not satisfy every manual review or authenticate themselves. |
+| Saved operational diagnostics | Fresh, matching health/network reports contribute supplemental live observations; they do not satisfy every manual review or authenticate themselves. Cluster diagnostics are not applicable when Kubernetes is explicitly disabled. |
 | Manual review | Baseline ownership, alerts, recovery objectives, drift/upgrades, performance, cost allocation/budgets and sustainability remain unknown. |
 
 Only the newest saved report is considered, so an older success cannot conceal a newer failure or unreadable report.
 Missing, stale, future-dated or unreadable evidence remains unknown. Evidence is bounded and local; reports are not
 independently authenticated attestations. The scanner does not read Terraform state or credentials.
+Legacy cloud reports without cloud/environment identity remain usable as historical evidence, with that provenance
+limit shown explicitly. A report containing incomplete or mismatched identity is not accepted for this environment.
 
 ## Provider guidance
 

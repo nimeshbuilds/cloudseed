@@ -16,6 +16,16 @@ commands or defaults; such changes are called out under **Changed**.
   setup. Explicit certificate overrides remain authoritative; TLS and hostname verification stay enabled.
 - Setup and `update-ip` explain HTTPS trust, timeout and connectivity failures while preserving saved allow-lists and
   the manual `--allow-ip` option. CLI, MCP, console and agent setup share the corrected detector.
+- Cloud reports retain every failed and manual observation, including lower severities, with check identifiers,
+  resource scope, explanations and remediation. All cloud providers share conservative handling of empty, partial
+  or erroneous scanner output. Account-wide findings are clearly distinguished from environment ownership.
+- Security scan exports retain full normalized findings and scanner evidence. The web console shows report details,
+  coverage limits and explicit preview limits with access to full saved artifacts. Incomplete scans return exit 3;
+  severity thresholds remain explicit for Kubernetes posture and image vulnerability scans.
+- Architecture assessments no longer request Kubernetes diagnostics for configurations that explicitly disable
+  Kubernetes, validate identity on new cloud evidence, and document evidence freshness and scan ordering.
+- Release attestation verification avoids mutually exclusive GitHub CLI flags while retaining the anchored,
+  tag-only release workflow identity and hosted-runner requirement.
 
 ## [0.2.0] - 2026-09-25
 

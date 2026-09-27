@@ -42,6 +42,10 @@ Read finding evidence and remediation before recommending changes. Saved configu
 it does not prove deployed state. Manual workload requirements, recovery objectives and operational processes need
 owner review. Do not invent evidence, weaken policy, suppress unknowns or provision resources to produce a green verdict.
 
+`--max-age-days 30` accepts saved evidence no older than 30 days. It does not schedule scans or query 30 days of cloud
+activity. Run a cloud benchmark first, then rerun architecture to consume its saved evidence. Account-level findings
+may concern resources outside Cloudseed; do not infer ownership from the environment where the report is stored.
+
 Every interface reaches the same scanner: MCP `cloudseed_scan` with `kind=architecture`, `cloud`, `env`,
 `profile=production|lab`, `max_age_days=30` and `json=true`; the console's Architecture scan form and Reports view;
 or the CLI above. The MCP architecture call does not need `confirm=true`. Use `cloudseed explain architecture --json`

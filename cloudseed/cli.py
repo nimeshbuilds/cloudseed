@@ -5947,7 +5947,10 @@ def _record_kept_drill(cloud, env: paths.Env, drill) -> None:
 
 def _report_verdict(path) -> str | None:
     try:
-        return str(json.loads(Path(path).read_text()).get("verdict") or "").upper() or None
+        report = json.loads(Path(path).read_text())
+        if report.get("kind") == "cloud" or Path(path).name.startswith("cloud-"):
+            return scan.cloud_verdict(report)
+        return str(report.get("verdict") or "").upper() or None
     except (OSError, ValueError, AttributeError, TypeError):
         return None
 
@@ -6130,8 +6133,10 @@ def cmd_scan(args, settings) -> int:
         produced = _scan_outputs(env, made + list(claimed))
         if produced:
             undo.record(env.id, f"scan {sub} on {env.id}", "delete-paths", {"paths": produced}, minor=True)
-    failed = [Path(p).stem for p in made if p and _report_verdict(p) == "FAIL"]
-    return 1 if failed or errors else 0
+    verdicts = [_report_verdict(p) for p in made if p]
+    if "FAIL" in verdicts or errors:
+        return 1
+    return 3 if not verdicts or any(v not in ("PASS", "N/A") for v in verdicts) else 0
 
 
 # ---------------------------------------------------------------- kubectl / helm / k9s passthrough

@@ -663,7 +663,7 @@ class FipsAwsLiveTests(unittest.TestCase):
         for item in ("karpenter", "external-dns"):
             self.assertEqual(row(item)["status"], "FAIL", item)
             self.assertIn(f"cs platform install {item} --upgrade", row(item)["detail"])
-        self.assertEqual(row("cluster-autoscaler")["status"], "INFO")   # no Deployment found for its release
+        self.assertEqual(row("cluster-autoscaler")["status"], "UNKNOWN")   # no Deployment found for its release
         nc = checks["karpenter: EC2NodeClass default selects Bottlerocket FIPS AMIs"]
         self.assertEqual(nc["status"], "FAIL")
         self.assertIn("bottlerocket@latest", nc["detail"])
@@ -701,9 +701,9 @@ class FipsAwsLiveTests(unittest.TestCase):
         self.assertFalse([c for c in checks if "AWS API calls go through FIPS endpoints" in c or "EC2NodeClass" in c or "backup location" in c])
         checks, _, _ = fips_checks("aws", fake, rel("kube-system/karpenter"))
         row = checks["karpenter: AWS API calls go through FIPS endpoints (AWS_USE_FIPS_ENDPOINT=true)"]
-        self.assertEqual(row["status"], "INFO")
+        self.assertEqual(row["status"], "UNKNOWN")
         self.assertIn("could not be read", row["detail"])
-        self.assertEqual(checks["karpenter: EC2NodeClasses select Bottlerocket FIPS AMIs"]["status"], "INFO")
+        self.assertEqual(checks["karpenter: EC2NodeClasses select Bottlerocket FIPS AMIs"]["status"], "UNKNOWN")
 
 
 if __name__ == "__main__":

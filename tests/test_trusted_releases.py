@@ -55,7 +55,9 @@ class ReleaseVerificationTests(unittest.TestCase):
         argv = run.call_args.args[0]
         self.assertEqual(argv[:3], ["/mock/gh", "attestation", "verify"])
         self.assertEqual(argv[argv.index("--repo") + 1], "nimeshbuilds/cloudseed")
-        self.assertEqual(argv[argv.index("--signer-workflow") + 1], "nimeshbuilds/cloudseed/.github/workflows/release.yml")
+        # gh rejects signer-workflow combined with a certificate identity matcher.
+        # The anchored identity below already binds the repository, workflow and tag.
+        self.assertNotIn("--signer-workflow", argv)
         self.assertIn("--deny-self-hosted-runners", argv)
         regex = argv[argv.index("--cert-identity-regex") + 1]
         self.assertRegex("https://github.com/nimeshbuilds/cloudseed/.github/workflows/release.yml@refs/tags/v0.1.0", regex)

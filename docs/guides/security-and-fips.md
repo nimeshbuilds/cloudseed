@@ -99,8 +99,11 @@ cs scan reports --last 5
 
 - Reports go to `<workdir>/scans/<kind>-<run>.json` and `.md`, raw tool output to `<workdir>/scans/raw/`, and they
   show up in the web console's **Reports** view.
-- The exit code is **1** when a verdict is FAIL or `scan all` could not run one of its scans, else 0, so scans can
-  gate a CI pipeline.
+- The exit code is **1** when a verdict is FAIL or `scan all` could not run one of its scans, **3** for incomplete
+  evidence without failures, and **0** for PASS/N/A. CI must handle incomplete scans explicitly.
+- Saved JSON and Markdown preserve findings and remediation. The console reports when its preview is limited and
+  links to the full report. Check the scanner's failure policy and coverage limits: a threshold pass does not mean
+  there are no lower-severity findings or that every requirement was inspected.
 - Hosts without content for a profile report n/a rather than failing: the Amazon Linux 2023 bastion and the Debian 12
   GCP bastion have no STIG content, and managed GKE / AKS / EKS nodes are not SSH-reachable (use `cis` there).
 - kube-bench's policy checks run with a temporary read-only ClusterRole that cannot read Secrets, removed when the scan

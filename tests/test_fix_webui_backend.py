@@ -427,7 +427,7 @@ class ReportTests(Isolated):
         (scans / "fips-20250101-000000.json").write_text(json.dumps({"kind": "fips", "summary": {"fail": 0}}))
         r = webui.reports("aws-dev")
         self.assertEqual([s["name"] for s in r["scans"]], ["cis-20260102-000000", "kube-20260101-000000", "fips-20250101-000000"])
-        self.assertEqual({s["name"]: s["verdict"] for s in r["scans"]}, {"cis-20260102-000000": "FAIL", "kube-20260101-000000": "PASS", "fips-20250101-000000": "PASS"})
+        self.assertEqual({s["name"]: s["verdict"] for s in r["scans"]}, {"cis-20260102-000000": "FAIL", "kube-20260101-000000": "PASS", "fips-20250101-000000": "INCOMPLETE"})
         self.assertEqual(len(r["scans"][0]["results"]), 200)
 
     def test_verdicts_match_the_cli(self):                                  # webui-backend#19
@@ -458,7 +458,7 @@ class ReportTests(Isolated):
         self.assertEqual({s["name"] for s in r["scans"]}, {"kube-20260101-000000", "images-20260101-000000"})
         self.assertTrue(all(s["findings"] == [] and s["checks"] == [] and s["results"] == [] for s in r["scans"]))
         v = webui.verdicts(paths.Env("aws", "dev"))
-        self.assertEqual(v["kube"]["verdict"], "PASS")
+        self.assertEqual(v["kube"]["verdict"], "INCOMPLETE")
         self.assertEqual(v["chaos"]["verdict"], "INCONCLUSIVE")
 
     def test_read_env_file_allowlist(self):                                 # webui-backend#9

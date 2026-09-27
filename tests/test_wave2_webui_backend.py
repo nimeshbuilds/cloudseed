@@ -275,10 +275,10 @@ class ReportTests(Isolated):
     def test_host_scan_fallback_matches_the_cli(self):                       # remaining: legacy host reports
         f = {"status": "FAIL", "severity": "HIGH"}
         broken = {"a": {"error": "no results (see the log above)"}}
-        self.assertEqual(webui.scan_verdict("host-cis", {"hosts": broken, "ansible_rc": 0, "findings": []}), "PASS")
-        self.assertEqual(webui.scan_verdict("host-cis", {"hosts": broken, "ansible_rc": 2, "findings": []}), "FAIL")
+        self.assertEqual(webui.scan_verdict("host-cis", {"hosts": broken, "ansible_rc": 0, "findings": []}), "INCOMPLETE")
+        self.assertEqual(webui.scan_verdict("host-cis", {"hosts": broken, "ansible_rc": 2, "findings": []}), "INCOMPLETE")
         self.assertEqual(webui.scan_verdict("host-cis", {"hosts": {"a": {"score": 90}}, "ansible_rc": 0, "findings": [f]}), "FAIL")
-        self.assertEqual(webui.scan_verdict("host-cis", {"hosts": broken, "findings": []}), "FAIL")             # no rc recorded: not clean
+        self.assertEqual(webui.scan_verdict("host-cis", {"hosts": broken, "findings": []}), "INCOMPLETE")             # no rc recorded: not clean
         skipped = {"a": {"error": "n/a - no STIG", "skipped": "no STIG"}, "b": {"error": "n/a - x", "skipped": "x"}}
         self.assertEqual(webui.scan_verdict("stig-host", {"hosts": skipped, "ansible_rc": 0, "findings": []}), "N/A")
         mixed = dict(skipped, c={"score": 100})

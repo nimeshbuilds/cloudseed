@@ -294,7 +294,7 @@
       else if (argv[i] === '--runtime' || argv[i] === '--engine') i += 2;
       else break;
     }
-    return j.rc === 3 && ((argv[i] === 'scan' && argv[i + 1] === 'architecture') || argv[i] === 'ops') ? 'incomplete' : 'bad';
+    return j.rc === 3 && ((argv[i] === 'scan' && ['architecture', 'cis', 'kube', 'images', 'host', 'stig', 'cloud', 'fips', 'all'].includes(argv[i + 1])) || argv[i] === 'ops') ? 'incomplete' : 'bad';
   };
   function renderTabs() {
     const tabs = $('#job-tabs'); tabs.innerHTML = '';
@@ -688,7 +688,7 @@
   const verdictClass = (v) => {
     const t = String(v === undefined || v === null ? '' : v).trim().toUpperCase().split(/[\s:,]/)[0];
     return /^(PASS|PASSED|OK)$/.test(t) ? 'leaf' : /^(FAIL|FAILED|INTERRUPTED|ERROR|CRITICAL|HIGH)$/.test(t) ? 'rose'
-      : /^(INCOMPLETE|UNKNOWN|INCONCLUSIVE|NOT_APPLICABLE|N\/A|NA|SKIP|SKIPPED|WARN|WARNING|MEDIUM|PARTIAL)$/.test(t) ? 'seed' : '';
+      : /^(INCOMPLETE|UNKNOWN|MANUAL|INCONCLUSIVE|NOT_APPLICABLE|N\/A|NA|SKIP|SKIPPED|WARN|WARNING|MEDIUM|PARTIAL)$/.test(t) ? 'seed' : '';
   };
   const verdictChip = (label, v) => !v ? el('span', { class: 'chip' }, label + ': —') : el('span', { class: 'chip ' + verdictClass(v.verdict), title: v.detail }, `${label} ${v.verdict}`);
 
@@ -1989,7 +1989,7 @@
   function scanResult(it) {
     const s = it.summary || {};
     let p = num(s.pass ?? s.passed ?? s['controls passed']), f = num(s.fail ?? s.failed ?? s['controls failed'] ?? s.critical);
-    const w = (num(s.warn) || 0) + (num(s.unknown) || 0), errors = num(s.errors) || 0;
+    const w = (num(s.warn) || 0) + (num(s.manual) || 0) + (num(s.unknown) || 0), errors = num(s.errors) || 0;
     if (f === null) {   // OpenSCAP host/STIG reports written before totals were stored: "score 61.2%  pass 180  fail 95" per host
       let pp = 0, ff = 0, seen = false;
       for (const val of Object.values(s)) { if (typeof val !== 'string') continue; const mf = /\bfail (\d+)/.exec(val), mp = /\bpass (\d+)/.exec(val); if (mf) { ff += Number(mf[1]); seen = true; } if (mp) pp += Number(mp[1]); }
@@ -2004,7 +2004,8 @@
   function scanChip(it) {
     const { p, f, w, errors } = scanResult(it);
     const architecture = it.kind === 'architecture' || /^architecture-/.test(it.name || '');
-    const counts = [p ? `${p} passed` : '', f ? `${f} failed` : '', w ? `${w} ${architecture ? 'unknown' : 'warnings'}` : '', errors ? `${errors} host(s) not scanned` : ''].filter(Boolean).join(', ');
+    const cloud = it.kind === 'cloud' || /^cloud-/.test(it.name || '');
+    const counts = [p ? `${p} passed` : '', f ? `${f} failed` : '', w ? `${w} ${architecture ? 'unknown' : cloud ? 'manual / unknown' : 'warnings'}` : '', errors ? `${errors} host(s) not scanned` : ''].filter(Boolean).join(', ');
     const verdict = String(it.verdict || '').trim().toUpperCase().split(/\s/)[0];
     const failed = () => [f ? `${f} failed` : 'failed', errors ? `${errors} host(s) not scanned` : ''].filter(Boolean).join(', ');
     let label, cls, title;
@@ -2107,20 +2108,40 @@
   const reportCell = (k, v) => v === undefined || v === null || v === '' ? '' : (k === 'verdict' || k === 'status') ? cellChip(v) : typeof v === 'boolean' ? el('span', { class: 'chip ' + (v ? 'leaf' : 'rose') }, v ? '✔ yes' : '✖ no')
     : /availability$/.test(k) && typeof v === 'number' && v >= 0 && v <= 1 ? Math.round(100 * v) + '%' : typeof v === 'object' ? JSON.stringify(v) : String(v);
   function showReport(it) {
-    const body = el('div', {}), kind = it.operation || runKind(it.name), sm = reportSummary(it);
+    const body = el('div', { class: 'report-detail' }), kind = it.operation || runKind(it.name), sm = reportSummary(it);
     body.append(el('div', { class: 'row', style: 'margin-bottom:10px' }, it.verdict || !REPORT_KIND[kind] ? reportChip(it) : null, el('span', { class: 'muted small mono' }, it.name)));
+    const savedReport = (path, format) => el('button', { class: 'btn small ghost', onclick: async () => {
+      try { const file = await api(`/api/file?path=${encodeURIComponent(path)}`); modal(`Saved ${format} report`, [el('p', { class: 'muted small mono' }, path), el('pre', { class: 'help' }, file.text)], { explain: 'scan' }); }
+      catch (err) { fail(err); }
+    } }, `View full ${format}`);
+    if (it.path) body.append(el('div', { class: 'row', style: 'margin-bottom:10px' }, savedReport(it.path, 'JSON'), it.markdown_path ? savedReport(it.markdown_path, 'Markdown') : null));
+    if (typeof it.scope === 'string' && it.scope) body.append(el('p', { class: 'small' }, el('b', {}, 'Scope: '), it.scope));
+    if (it.legacy_cloud_report) body.append(el('p', { class: 'callout warn small', role: 'status' }, 'This older cloud report may show only high/critical failures. Rerun the cloud scan to export every finding and explanation; its saved raw output may contain more detail.'));
     if (kind === 'architecture') {
       body.append(el('p', { class: 'muted small' }, `Profile: ${it.profile || 'unspecified'}. Assesses saved configuration and evidence; it does not verify live infrastructure. Missing evidence stays unknown.${it.max_age_days ? ` Evidence freshness: ${it.max_age_days} days.` : ''}`));
       if ((it.coverage_limits || []).length) body.append(el('details', {}, el('summary', {}, 'Assessment coverage and limits'), el('ul', {}, ...it.coverage_limits.map((limit) => el('li', { class: 'small' }, limit)))));
     }
     if (kind !== 'architecture' && (it.coverage_limits || []).length) body.append(el('details', {}, el('summary', {}, 'Coverage and limits'), el('ul', {}, ...it.coverage_limits.map((limit) => el('li', { class: 'small' }, limit)))));
     if (Object.keys(sm).length) body.append(kv(...Object.entries(sm).map(([k, val]) => [colLabel(k), String(val)])));
+    if (it.failure_policy) body.append(el('p', { class: 'small' }, el('b', {}, 'Verdict policy: '), it.failure_policy));
+    if (it.diagnostics && Object.keys(it.diagnostics).length) body.append(el('details', {}, el('summary', {}, 'Scanner diagnostics'), Array.isArray(it.diagnostics) ? el('ul', {}, ...it.diagnostics.map((item) => el('li', { class: 'small' }, item))) : kv(...Object.entries(it.diagnostics).map(([key, value]) => [colLabel(key), String(value)]))));
+    for (const key of ['findings', 'results', 'checks']) {
+      const visible = Array.isArray(it[key]) ? it[key].length : 0, total = Math.max(visible, num(it[key + '_total']) || 0);
+      if (it[key + '_truncated'] || total > visible) body.append(el('p', { class: 'callout warn small', role: 'status' },
+        `Showing ${visible} of ${total} ${key} in this view. Open the saved JSON or Markdown report for the remaining retained data and any scanner raw-output location.`));
+    }
+    const reportValue = (value) => {
+      if (value === undefined || value === null || value === '') return '—';
+      if (Array.isArray(value)) return value.length ? el('ul', {}, ...value.map((item) => el('li', {}, reportValue(item)))) : '—';
+      if (typeof value === 'object') return el('dl', {}, ...Object.entries(value).flatMap(([key, item]) => [el('dt', { class: 'muted small' }, colLabel(key)), el('dd', {}, reportValue(item))]));
+      return String(value);
+    };
     // columns: the union over all rows, the meaningful ones first (verdict and reason are never cut off); description as a row tooltip
     const table = (rows) => {
-      const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))].filter((k) => !['kind', 'desc', 'started', 'probes'].includes(k));
-      const cols = [...REPORT_COLS.filter((k) => keys.includes(k)), ...keys.filter((k) => !REPORT_COLS.includes(k))].slice(0, 8);
+      const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+      const cols = [...REPORT_COLS.filter((k) => keys.includes(k)), ...keys.filter((k) => !REPORT_COLS.includes(k))];
       const t = el('table', {}, el('tr', {}, ...cols.map((c) => el('th', {}, colLabel(c)))));
-      for (const r of rows) t.append(el('tr', { title: r.desc || null }, ...cols.map((c) => el('td', { class: 'small' }, reportCell(c, r[c])))));
+      for (const r of rows) t.append(el('tr', { title: r.desc || null }, ...cols.map((c) => el('td', { class: 'small' }, typeof r[c] === 'object' ? reportValue(r[c]) : reportCell(c, r[c])))));
       return el('div', { class: 'table-wrap' }, t);
     };
     if ((it.changes || []).length) body.append(el('h4', {}, 'Proposed configuration changes'), table(it.changes));
@@ -2145,13 +2166,30 @@
       for (const f of it.findings) {
         const evidence = Array.isArray(f.evidence) ? f.evidence : f.evidence ? [f.evidence] : [];
         const refs = Array.isArray(f.references) ? f.references : [];
-        t.append(el('tr', {}, el('td', {}, cellChip(f.status || 'UNKNOWN')), el('td', { class: 'small' }, el('b', {}, f.title), el('p', { class: 'muted small' }, colLabel(f.pillar || f.id || 'check'))),
-          el('td', { class: 'small' }, f.detail, ...evidence.map((item) => el('p', { class: 'muted small' }, evidenceText(item)))),
+        const extra = Object.fromEntries(Object.entries(f).filter(([key]) => !['id', 'status', 'severity', 'title', 'pillar', 'detail', 'evidence', 'remediation', 'references'].includes(key)));
+        t.append(el('tr', {}, el('td', {}, cellChip(f.status || 'UNKNOWN'), f.severity ? cellChip(f.severity) : null), el('td', { class: 'small' }, el('b', {}, f.title), el('p', { class: 'muted small' }, colLabel(f.pillar || 'check')), f.id ? el('p', { class: 'muted small mono' }, f.id) : null),
+          el('td', { class: 'small' }, f.detail, ...evidence.map((item) => el('p', { class: 'muted small' }, evidenceText(item))), Object.keys(extra).length ? reportValue(extra) : null),
           el('td', { class: 'small' }, f.remediation || '—', ...refs.map(guidance))));
       }
       body.append(el('div', { class: 'table-wrap' }, t));
-    } else if (it.findings && it.findings.length && !(it.checks && it.checks.length)) { body.append(el('h4', {}, `Findings (${it.findings.length})`)); const t = el('table', {}, el('tr', {}, el('th', {}, 'severity'), el('th', {}, 'finding'), el('th', {}, 'detail'))); for (const f of it.findings) t.append(el('tr', {}, el('td', {}, el('span', { class: 'chip ' + ({ CRITICAL: 'rose', HIGH: 'rose', MEDIUM: 'seed', LOW: '', INFO: '' }[f.severity] || '') }, f.severity || f.status)), el('td', { class: 'small' }, f.title), el('td', { class: 'small muted' }, f.detail))); body.append(el('div', { class: 'table-wrap' }, t)); }
-    if (it.checks && it.checks.length) { body.append(el('h4', {}, 'Checks')); const t = el('table', {}, el('tr', {}, el('th', {}, 'status'), el('th', {}, 'area'), el('th', {}, 'check'), el('th', {}, 'detail'))); for (const c of it.checks) t.append(el('tr', {}, el('td', {}, cellChip(c.status || 'INFO')), el('td', {}, c.area || it.operation || kind), el('td', { class: 'small' }, c.check || c.id), el('td', { class: 'small muted' }, c.detail))); body.append(el('div', { class: 'table-wrap' }, t)); }
+    } else if (Array.isArray(it.findings) && it.findings.length) {
+      body.append(el('h4', {}, `Findings (${it.findings.length})`));
+      for (const [index, finding] of it.findings.entries()) {
+        const f = finding && typeof finding === 'object' ? finding : { detail: finding };
+        const card = el('details', { class: 'card report-finding', open: index < 3 }, el('summary', {}, cellChip(f.status || 'UNKNOWN'), f.severity ? cellChip(f.severity) : null, ' ', f.title || f.id || 'Finding'));
+        if (f.detail) card.append(el('p', { class: 'small' }, reportValue(f.detail)));
+        const fields = Object.entries(f).filter(([key]) => !['title', 'detail', 'status', 'severity', 'references'].includes(key));
+        if (fields.length) card.append(el('dl', {}, ...fields.flatMap(([key, value]) => [el('dt', { class: 'muted small' }, key === 'id' ? 'Check ID' : colLabel(key)), el('dd', { class: 'small', style: 'overflow-wrap:anywhere;white-space:pre-wrap' }, reportValue(value))])));
+        if (Array.isArray(f.references) && f.references.length) card.append(el('div', { class: 'small' }, el('b', {}, 'References'), el('ul', {}, ...f.references.map((ref) => {
+          const url = typeof ref === 'string' ? ref : ref && ref.url;
+          let safe = false;
+          try { const parsed = new URL(url); safe = parsed.protocol === 'https:' && !!parsed.hostname && !parsed.username && !parsed.password; } catch { /* display unrecognized references as text */ }
+          return el('li', {}, safe ? el('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, url) : reportValue(ref), ref && typeof ref === 'object' && ref.scope ? ` · ${ref.scope}` : '');
+        }))));
+        body.append(card);
+      }
+    }
+    if (it.checks && it.checks.length) body.append(el('h4', {}, 'Checks'), table(it.checks));
     body.append(el('p', { class: 'muted small mono', style: 'margin-top:12px' }, it.path));
     const e = currentEnv();
     modal(`${it.operation ? colLabel(kind) : REPORT_KIND[kind] || scanTitle(kind)} · ${it.generated_at ? fmtTime(it.generated_at) : runLabel(it.name)}${e ? ' · ' + e.id : ''}`, body, { explain: XQ_REPORT[it.operation ? 'operations' : REPORT_KIND[kind] ? kind : 'scan'] });
