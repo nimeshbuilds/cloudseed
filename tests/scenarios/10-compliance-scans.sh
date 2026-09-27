@@ -2,14 +2,14 @@
 # Scenario 10 - Compliance scans (docs/scenarios/10-compliance-scans.md)
 # Default: isolated; FIPS verification, scan all and the reports list run offline against the rendered cluster, and the
 # cluster / host scans are checked to say there is nothing to scan yet. CLOUDSEED_LIVE=1: every scan against vmware-lab
-# (a FAIL verdict is a finding, not a script failure: exit 0 or 1 are both accepted, the report must exist).
+# (a FAIL/INCOMPLETE verdict is a result, not a script failure: exit 0, 1 or 3 are accepted, the report must exist).
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 scn_begin 10-compliance-scans "Compliance scans" vmware
 need python3 terraform go
 
-verdict() {   # a scan that ran: exit 0 (PASS) or 1 (FAIL verdict), never a crash or a usage error
+verdict() {   # exit 0 (PASS), 1 (FAIL) or 3 (INCOMPLETE); never a crash or a usage error
   SCN_CHECKS=$((SCN_CHECKS + 1))
-  [[ "$SCN_RC" == "0" || "$SCN_RC" == "1" ]] || _scn_fail "expected a verdict (exit 0 or 1), got $SCN_RC"
+  [[ "$SCN_RC" == "0" || "$SCN_RC" == "1" || "$SCN_RC" == "3" ]] || _scn_fail "expected a verdict (exit 0, 1 or 3), got $SCN_RC"
 }
 
 step "Before you start: the scenario 05 cluster"
@@ -65,7 +65,8 @@ has "N/A - vmware-lab is not a FIPS environment"
 if [[ "$SCN_LIVE" == "1" ]]; then
   any cs scan all; verdict
 else
-  ok cs scan all
+  rc 3 cs scan all
+  has "nothing ran"
 fi
 has "Scan summary · vmware-lab"
 ok cs scan reports --last 5

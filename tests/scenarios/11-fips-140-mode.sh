@@ -31,9 +31,11 @@ ok cs list
 hasnt "fips-eu|fipsts"
 
 step "4. Verify offline"
-ok cs scan fips aws --env fips
+rc 3 cs scan fips aws --env fips
 has "AWS provider uses FIPS endpoints"
-has "PASS - 3 passed, 0 failed"
+has "INCOMPLETE - 3 passed, 0 failed, 2 unknown"
+has "No host addresses are available"
+has "No cluster connection is available"
 
 step "5. The platform catalog in a FIPS environment"
 ok cs platform plan basek8s aws --env fips
@@ -56,13 +58,14 @@ if [[ "$SCN_LIVE" == "1" && -n "${UBUNTU_PRO_TOKEN:-}" ]]; then
   has "^ *│ PASS"
 else
   skip "cs setup vmware --env fipslab --var fips_mode=true + host checks (CLOUDSEED_LIVE=1 and an Ubuntu Pro token)"
-  ok cs scan fips vmware --env fipslab
-  has "PASS - 2 passed, 0 failed"
+  rc 3 cs scan fips vmware --env fipslab
+  has "INCOMPLETE - 2 passed, 0 failed"
+  has "No host addresses are available"
 fi
 
 step "Verify it worked"
 ok cs scan reports aws --env fips --last 3
-has "fips-[0-9]{8}-[0-9]{6} +PASS"
+has "fips-[0-9]{8}-[0-9]{6} +INCOMPLETE"
 
 step "Clean up"
 ok cs destroy aws -y --env fips --purge --auto-approve

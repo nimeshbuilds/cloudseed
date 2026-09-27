@@ -6,14 +6,15 @@ description: "FIPS 140 environments with cloudseed: FIPS endpoints, images and k
 # 11 · FIPS 140 mode
 
 **Outcome:** you see exactly what one switch, `--var fips_mode=true`, changes in an environment, what it refuses,
-and how to prove it end to end: an AWS FIPS environment rendered and verified offline, the refusals that keep a
+and how to inspect its evidence: an AWS FIPS environment rendered offline, the refusals that keep a
 configuration honest, the platform catalog's FIPS tiers, and (with an Ubuntu Pro token) a FIPS lab on VMware whose
-kernel, sshd and keys pass `cs scan fips`.
+kernel, sshd and keys can be checked by `cs scan fips`. Offline configuration checks do not establish runtime assurance.
 
 !!! info "Verified with --dry-run (Terraform render + validate); run for real with cloud credentials"
     [`tests/scenarios/11-fips-140-mode.sh`](https://github.com/nimeshbuilds/cloudseed/blob/main/tests/scenarios/11-fips-140-mode.sh)
     renders the AWS and VMware FIPS environments, checks every refusal below and runs `cs scan fips` offline (the
-    configuration, key and endpoint checks pass). The live host checks of step 6 are not part of that verification:
+    configuration, key and declared endpoint checks pass, while missing runtime evidence makes the overall result
+    `INCOMPLETE` / exit 3). The live host checks of step 6 are not part of that verification:
     they need an Ubuntu Pro token, and the script runs them on VMware only with `CLOUDSEED_LIVE=1` and
     `UBUNTU_PRO_TOKEN` set.
 
@@ -30,7 +31,7 @@ flowchart LR
   hosts["Hosts<br/>kernel fips=1, FIPS crypto policy<br/>sshd: AES-GCM/CTR, SHA-2, ECDH P-curves<br/>RSA-4096 SSH key"]
   k8s["Kubernetes<br/>EKS: Bottlerocket FIPS AMIs · AKS: fips_enabled pools<br/>GKE: COS · VMware: RKE2 only"]
   plat["Platform catalog<br/>compatible · tls-restricted · crypto-restricted · refused"]
-  aws & hosts & k8s & plat --> verify["cs scan fips<br/>PASS / FAIL / N/A"]
+  aws & hosts & k8s & plat --> verify["cs scan fips<br/>PASS / FAIL / INCOMPLETE / N/A"]
 ```
 
 ## Before you start
@@ -93,7 +94,7 @@ cs setup gcp -y --env fipsts --project-id my-gcp-project --allow-ip 203.0.113.7 
 
 FIPS mode is chosen at creation (the SSH key type depends on it) and cannot be toggled on an existing environment.
 
-## Step 4: Verify offline
+## Step 4: Inspect offline evidence
 
 ```bash
 cs scan fips aws --env fips
@@ -107,11 +108,16 @@ cs scan fips aws --env fips
       │               GCP/VMware)   ssh-rsa (4096 bits)                                │
       │ ✔ cloud       AWS provider uses FIPS endpoints   provider.aws.use_fips_endpoint │
       │                                                                                │
-      │ PASS - 3 passed, 0 failed, 0 informational                                     │
+      │ ? hosts       host runtime not checked   no deployed host evidence            │
+      │ ? k8s         cluster not checked   no reachable cluster evidence             │
+      │ INCOMPLETE - 3 passed, 0 failed, 2 unknown                                    │
       ╰────────────────────────────────────────────────────────────────────────────────╯
     ```
 
-On a deployed environment the same command also checks every host (kernel `fips_enabled`, sshd and OpenSSL
+Expect exit **3** here: the dry run has created configuration, not running hosts or a cluster. Keep those unknowns
+visible. With no failed checks, a runtime gap remains `INCOMPLETE`; any definite failed check makes the result `FAIL`.
+
+On a deployed environment the same command also checks reachable hosts (kernel `fips_enabled`, sshd and OpenSSL
 algorithms), the node images, the RKE2 build, the TLS policy on the shared Gateway and the FIPS capability of every
 installed platform item.
 
@@ -178,7 +184,9 @@ you have authorized. Host bootstrap, provider login and interactive applications
 cs scan reports aws --env fips --last 3
 ```
 
-- `scan fips` ends with **PASS** on a FIPS environment and **N/A** on any other.
+- `scan fips` ends with **INCOMPLETE** / exit 3 for this offline preview. A FIPS-enabled environment can return
+  **PASS**, **FAIL** or **INCOMPLETE** based on the collected checks; enablement alone is not a pass. A non-FIPS
+  environment returns **N/A**. Read unknowns, coverage limits and remediation in the full JSON/Markdown report.
 - On the live lab: `/proc/sys/crypto/fips_enabled` is `1` and `sshd -T` lists only FIPS-approved ciphers and MACs.
 
 ## Clean up
