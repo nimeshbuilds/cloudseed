@@ -31,7 +31,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import audit, deps, paths, ui
+from . import audit, deps, netutil, paths, ui
 
 VELERO_DEFAULT = "v1.18.2"  # appVersion of the pinned chart (velero 12.2.0); used when the server image has no version tag
 # the project moved from vmware-tanzu to velero-io; the old URL only works through GitHub's rename redirect
@@ -284,7 +284,7 @@ def _cli_version(binary: Path) -> tuple[int, ...] | None:
 
 def _get(url: str, timeout: int) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "cloudseed"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with urllib.request.urlopen(req, timeout=timeout, context=netutil.https_context()) as resp:
         return resp.read()
 
 

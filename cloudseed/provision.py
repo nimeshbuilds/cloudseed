@@ -819,7 +819,10 @@ def cluster_version(cloud, cfg: dict, outputs: dict) -> str:
         running = str(outputs.get("kubernetes_master_version") or "").strip()
         if running:
             return running
-    return str((cfg.get("vars") or {}).get("kubernetes_version") or "").strip()
+    configured = str((cfg.get("vars") or {}).get("kubernetes_version") or "").strip()
+    if not configured and getattr(cloud, "key", "") == "vmware" and (cfg.get("vars") or {}).get("kubernetes_distro", "rke2") == "kubeadm":
+        return "1.35"  # ansible/roles/kubeadm/tasks/main.yml: the same supported default as the control plane
+    return configured
 
 
 def provision(cloud, env, cfg: dict, outputs: dict, *, harden: bool = True, firewall: bool = True,

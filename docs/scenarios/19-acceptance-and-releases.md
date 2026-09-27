@@ -138,11 +138,31 @@ checksums, through CLI, MCP or the console. A tagged release signs their file di
 inventory into GitHub's 16 MiB embedded-SBOM predicate. Inventories are preserved without truncation, up to a
 128 MiB generation limit. Checksums and manifests for container inventories are included in the release downloads.
 
-A manual build-only run produces inspectable artifacts without publishing or signing a version-tag release.
-Its checksum-only check remains INCOMPLETE. Requesting attestation verification with a working `gh` CLI returns
-FAIL for these unsigned artifacts, because they have no version-tag release provenance.
+A manual build-only run produces inspectable artifacts without publishing or attesting a version-tag release.
+It can still Apple-sign macOS binaries when the signing secrets are configured. Its checksum-only check remains
+INCOMPLETE. Requesting attestation verification with a working `gh` CLI returns FAIL for these build-only artifacts,
+because they have no version-tag release provenance.
 
-The [runtime acceptance guide](../development/acceptance.md) explains what the packaged-runtime CI exercises.
+For a macOS binary, also inspect its Apple signature before executing it:
+
+```bash
+codesign --verify --strict --verbose=2 /path/cloudseed-darwin-arm64
+codesign --display --verbose=4 /path/cloudseed-darwin-arm64
+```
+
+The display should identify **Developer ID Application: Nimesh Pandeya (QPF2VF2885)**, show
+`TeamIdentifier=QPF2VF2885`, a secure `Timestamp`, and `runtime` in the `CodeDirectory` flags. Use the matching
+`darwin-amd64` path on Intel. Tagged releases built by the current workflow require this signature; older releases
+may be ad-hoc signed. Apple signing identifies the publisher and protects the signed executable, while GitHub
+attestation binds the artifact to its build. Neither alone proves cloud acceptance. Notarization is a separate
+Apple service and is not performed by this workflow.
+
+An agent can run these read-only native checks and explain their output. Cloudseed's CLI, MCP and console
+`release-verify` operation checks checksums and GitHub provenance; it does not perform an Apple-signature or
+notarization assessment. The isolated scenario uses release fixtures and does not access a signing private key.
+
+The [runtime acceptance guide](../development/acceptance.md#maintaining-apple-signed-macos-releases) explains the
+maintainer secret setup, signing requirements and cleanup, alongside what packaged-runtime CI exercises.
 
 ## Use an agent, MCP or the UI
 

@@ -54,6 +54,36 @@
     group: "{{ ssh_user }}"
     mode: "0755"
 
+- name: Require the portable Cloudseed launcher and source payload
+  ansible.builtin.assert:
+    that:
+      - (repo_dir + '/bin/cloudseed') is file
+      - (repo_dir + '/cloudseed/__init__.py') is file
+      - (repo_dir + '/cloudseed/cli.py') is file
+    fail_msg: "The provisioned Cloudseed payload is incomplete. Re-run provisioning from a current Cloudseed checkout or rebuilt release binary."
+    quiet: true
+
+- name: Inspect existing Cloudseed command paths
+  ansible.builtin.stat:
+    path: "/home/{{ ssh_user }}/.local/bin/{{ item }}"
+    follow: false
+  loop: [cloudseed, cs]
+  register: cloudseed_command_paths
+
+- name: Keep unrelated commands intact
+  ansible.builtin.assert:
+    that: >-
+      not item.stat.exists | default(false) or
+      (item.stat.islnk | default(false) and item.stat.lnk_source | default('') == ((repo_dir + '/bin/cloudseed') | realpath))
+    fail_msg: "{{ item.item }} already exists in the login user's ~/.local/bin and is not this Cloudseed install. Move or rename that command before re-provisioning; it was left unchanged."
+    quiet: true
+  loop: "{{ cloudseed_command_paths.results }}"
+
+- name: Make the portable Cloudseed launcher executable
+  ansible.builtin.file:
+    path: "{{ repo_dir }}/bin/cloudseed"
+    mode: "0755"
+
 - name: Link cloudseed and cs into ~/.local/bin
   ansible.builtin.file:
     src: "{{ repo_dir }}/bin/cloudseed"
@@ -63,13 +93,46 @@
     owner: "{{ ssh_user }}"
     group: "{{ ssh_user }}"
   loop: [cloudseed, cs]
-  when: (repo_dir + '/bin/cloudseed') is file
 
-- name: PATH includes ~/.local/bin
-  ansible.builtin.lineinfile:
-    path: "/home/{{ ssh_user }}/.profile"
-    line: 'export PATH="$HOME/.local/bin:$PATH"'
+- name: PATH includes ~/.local/bin before noninteractive shell guards
+  ansible.builtin.blockinfile:
+    path: "/home/{{ ssh_user }}/{{ item }}"
+    block: 'export PATH="$HOME/.local/bin:$HOME/.cloudseed/bin:$PATH"'
+    marker: "# {mark} cloudseed command path"
+    insertbefore: BOF
     create: true
     owner: "{{ ssh_user }}"
     group: "{{ ssh_user }}"
     mode: "0644"
+  loop: [.profile, .bashrc]
+
+- name: Inspect an existing Bash login profile
+  ansible.builtin.stat:
+    path: "/home/{{ ssh_user }}/.bash_profile"
+  register: cloudseed_bash_profile
+
+- name: PATH includes ~/.local/bin when Bash uses its own login profile
+  ansible.builtin.blockinfile:
+    path: "/home/{{ ssh_user }}/.bash_profile"
+    block: 'export PATH="$HOME/.local/bin:$HOME/.cloudseed/bin:$PATH"'
+    marker: "# {mark} cloudseed command path"
+    insertbefore: BOF
+    owner: "{{ ssh_user }}"
+    group: "{{ ssh_user }}"
+    mode: "0644"
+  when: cloudseed_bash_profile.stat.exists
+
+- name: Verify both Cloudseed commands without using the login user's configuration
+  become: false
+  ansible.builtin.shell: |
+    set -eu
+    check_home=$(mktemp -d)
+    trap 'rm -rf "$check_home"' EXIT
+    export CLOUDSEED_HOME="$check_home" PYTHONDONTWRITEBYTECODE=1
+    "{{ repo_dir }}/bin/cloudseed" --version
+    "/home/{{ ssh_user }}/.local/bin/cloudseed" --version
+    "/home/{{ ssh_user }}/.local/bin/cs" --version
+    "/home/{{ ssh_user }}/.local/bin/cs" help >/dev/null
+  args:
+    executable: /bin/bash
+  changed_when: false

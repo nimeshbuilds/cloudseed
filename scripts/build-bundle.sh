@@ -19,6 +19,11 @@ case "$(uname -m)" in
 esac
 NAME="cloudseed-${OS}-${ARCH}"
 BIN="$ROOT/dist/$NAME"
+SIGN_ARGS=()
+if [[ -n "${CLOUDSEED_CODESIGN_IDENTITY:-}" ]]; then
+  [[ "$OS" == darwin ]] || { echo "Apple code signing is only supported on macOS" >&2; exit 2; }
+  SIGN_ARGS=(--codesign-identity "$CLOUDSEED_CODESIGN_IDENTITY")
+fi
 
 TF_VERSION="${TF_VERSION:-1.16.4}"
 [[ "$TF_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "TF_VERSION must be X.Y.Z" >&2; exit 2; }
@@ -49,29 +54,55 @@ junk = shutil.ignore_patterns(
 # every directory the code reads from REPO_ROOT (paths.REPO_ROOT is the unpack dir in a bundle)
 for d in ("terraform", "skills", "ansible", "providers", "templates", "assets", "cloudseed/web"):
     shutil.copytree(root / d, stage / d, ignore=junk)
+# Provisioning runs this exact Cloudseed version on Linux bastions, even when the
+# controller is a macOS executable. PYZ bytecode and native Python libraries are
+# not portable source: ship only the launcher and package .py files alongside web data.
+(stage / "bin").mkdir()
+shutil.copy2(root / "bin/cloudseed", stage / "bin/cloudseed")
+for source in (root / "cloudseed").rglob("*.py"):
+    relative = source.relative_to(root)
+    if source.is_symlink() or any(part.startswith(".") or part == "__pycache__" for part in relative.parts):
+        continue
+    if any(parent.is_symlink() or ((parent / "config.json").is_file() and (parent / "ssh").is_dir())
+           for parent in source.parents if parent != root and root in parent.parents):
+        continue
+    destination = stage / relative
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
 PY
 
 echo "▸ Preparing PyInstaller"
 python3 -m venv "$BUILD/venv"
-"$BUILD/venv/bin/pip" install --quiet "pyinstaller==6.22.3" "keyring==25.7.0"
+"$BUILD/venv/bin/pip" install --quiet "pyinstaller==6.22.3" "keyring==25.7.0" "certifi==2026.7.22"
 
 echo "▸ Building"
 PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" "$BUILD/venv/bin/pyinstaller" --onefile --clean --noconfirm \
+  ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} \
   --name "$NAME" \
   --distpath "$ROOT/dist" --workpath "$BUILD/pyi" --specpath "$BUILD" \
   --paths "$ROOT" \
   --collect-submodules cloudseed \
   --collect-submodules keyring.backends \
   --copy-metadata keyring \
+  --collect-data certifi \
+  --copy-metadata certifi \
   --add-data "$STAGE/terraform:terraform" \
   --add-data "$STAGE/skills:skills" \
   --add-data "$STAGE/ansible:ansible" \
   --add-data "$STAGE/providers:providers" \
   --add-data "$STAGE/templates:templates" \
   --add-data "$STAGE/assets:assets" \
-  --add-data "$STAGE/cloudseed/web:cloudseed/web" \
+  --add-data "$STAGE/bin:bin" \
+  --add-data "$STAGE/cloudseed:cloudseed" \
   --add-data "$BUILD/tfbin/terraform:tfbin" \
   "$ROOT/bin/cloudseed"
+
+if [[ -n "${CLOUDSEED_CODESIGN_IDENTITY:-}" ]]; then
+  # Sign embedded Python libraries during packaging, then verify the finished
+  # executable. Signing only the outer onefile executable is insufficient.
+  codesign --verify --strict --verbose=2 "$BIN"
+  codesign --display --verbose=4 "$BIN" 2>&1 | grep -E '^(Authority|TeamIdentifier|Timestamp|CodeDirectory)='
+fi
 
 echo "▸ Smoke test"
 SMOKE="$(mktemp -d)"
@@ -102,7 +133,7 @@ PY
   || { echo "smoke test failed: platform template (templates/ not bundled?)" >&2; exit 1; }
 LISTING="$("$BUILD/venv/bin/pyi-archive_viewer" -l "$BIN" 2>/dev/null || true)"
 if [[ -n "$LISTING" ]]; then
-  for f in cloudseed/web/index.html cloudseed/web/app.js assets/icon.svg templates/gitlab-ci/.gitlab-ci.yml tfbin/terraform; do
+  for f in cloudseed/web/index.html cloudseed/web/app.js assets/icon.svg templates/gitlab-ci/.gitlab-ci.yml tfbin/terraform certifi/cacert.pem bin/cloudseed cloudseed/cli.py cloudseed/__init__.py; do
     grep -q "$f" <<<"$LISTING" || { echo "smoke test failed: $f is missing from the bundle" >&2; exit 1; }
   done
   if grep -q "/\.terraform/" <<<"$LISTING"; then echo "smoke test failed: .terraform caches were bundled" >&2; exit 1; fi

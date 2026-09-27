@@ -26,7 +26,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from . import paths, ui
+from . import netutil, paths, ui
 
 TERRAFORM_FALLBACK_VERSION = "1.13.3"
 HELM_FALLBACK_VERSION = "v4.3.0"
@@ -283,7 +283,7 @@ def _download(url: str, timeout: int = 120) -> bytes:
     ui.info(f"Downloading {url}")
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "cloudseed"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout, context=netutil.https_context()) as resp:
             return resp.read()
     except urllib.error.HTTPError as e:
         raise DownloadError(f"Download of {url} failed: HTTP {e.code} {e.reason}.") from None
@@ -300,7 +300,7 @@ def _latest_github_tag(repo: str, fallback: str) -> str:
     """Tag of a repo's latest release, from the /releases/latest redirect (no API rate limit)."""
     try:
         req = urllib.request.Request(f"https://github.com/{repo}/releases/latest", headers={"User-Agent": "cloudseed"}, method="HEAD")
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=30, context=netutil.https_context()) as resp:
             tag = resp.geturl().rstrip("/").rsplit("/", 1)[-1]
         return tag if re.fullmatch(r"v?\d+\.\d+\.\d+[\w.-]*", tag) else fallback
     except Exception:  # noqa: BLE001 - offline / rate limited: a pinned known-good release

@@ -382,6 +382,14 @@ dl.defs dd { margin: 0; color: var(--muted); }
 .modal { position: fixed; inset: 0; background: rgba(2,6,23,.55); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 12px; }
 .modal-card { background: var(--card); border-radius: 16px; width: min(960px, 94vw); max-height: 90vh; overflow: auto; padding: 20px; box-shadow: var(--shadow-2); border: 1px solid var(--line); animation: fade .2s var(--ease); }
 .modal-card.narrow { width: min(640px, 94vw); }
+.report-detail { min-width: 0; overflow-wrap: anywhere; }
+.report-detail .row > * { min-width: 0; max-width: 100%; }
+.report-detail .table-wrap { max-width: 100%; min-width: 0; }
+.report-detail dl, .report-detail dd { min-width: 0; }
+.report-detail dd { margin: 0 0 10px; overflow-wrap: anywhere; }
+.report-detail ul { padding-inline-start: 20px; }
+.report-finding { margin-bottom: 10px; }
+.report-finding > summary { cursor: pointer; overflow-wrap: anywhere; }
 /* the header (and its close button) stays in view while a long dialog scrolls */
 .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; position: sticky; top: -20px; margin: -20px 0 0; padding: 20px 0 12px; background: var(--card); z-index: 2; }
 .modal-title { margin: 0; font-size: 16px; font-weight: 700; min-width: 0; overflow-wrap: anywhere; }

@@ -225,6 +225,7 @@ cs help k8s
 
 ## Next steps
 
+- [Kubernetes access and bastions](../guides/kubernetes-access.md): keep the workstation's admin kubeconfig on the controller; explicitly authorize any separate bastion user.
 - [06 · A production platform in one command](06-platform-in-one-command.md) on this cluster.
 - [13 · Day-2 operations](13-day-2-operations.md): add and remove nodes.
 - [03 · Private GKE](03-gcp-private-gke.md): the same commands against a managed cluster.

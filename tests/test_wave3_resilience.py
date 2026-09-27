@@ -754,10 +754,10 @@ class HostSelectionTests(unittest.TestCase):
                 mock.patch.object(scan.subprocess, "Popen", Proc), mock.patch.object(scan, "audit"), silenced() as (out, _):
             path = scan.host(cloud, env, {"name": "a", "env": "w3"}, {}, ["bastion", "vpn"], "cis")
         text = text_of(out)
-        self.assertIn("ERROR - no host could be scanned", text)
+        self.assertIn("INCOMPLETE - no host could be scanned", text)
         self.assertNotIn("lowest score", text)
         self.assertNotIn("report.html", text)
-        self.assertEqual(json.loads(Path(path).read_text())["verdict"], "FAIL")   # still fails the command
+        self.assertEqual(json.loads(Path(path).read_text())["verdict"], "INCOMPLETE")   # remains a non-success exit
 
 
 # ---------------------------------------------------------------- a2-resilience#17 + a2-azure#11: prowler environment
@@ -862,7 +862,7 @@ class FipsVerifierTests(unittest.TestCase):
         self.assertIn("label absent", checks["node n2: Azure Linux 2.0"]["detail"])
         self.assertNotIn("AKS node pool is fips_enabled", checks)          # the node rows are the live check
         checks = self._fips("azure", "", rc=1)
-        self.assertEqual(checks["AKS node pool is fips_enabled"]["status"], "INFO")   # never PASS from the config alone
+        self.assertEqual(checks["AKS node pool is fips_enabled"]["status"], "UNKNOWN")   # never PASS from the config alone
         self.assertIn("not verified live", checks["AKS node pool is fips_enabled"]["detail"])
 
     def test_eks_nodes_need_a_fips_bottlerocket_variant(self):
@@ -878,7 +878,7 @@ class FipsVerifierTests(unittest.TestCase):
                 mock.patch.object(scan, "_hosts", return_value=[]), silenced():
             path = scan.fips(clouds.get("aws"), env, {"vars": {"fips_mode": True}, "ssh_public_key": ""}, {"kubernetes_cluster_name": "c"}, ctx=ctx)
         checks = {c["check"]: c for c in json.loads(path.read_text())["checks"]}
-        self.assertEqual(checks["cluster not checked"]["status"], "INFO")
+        self.assertEqual(checks["cluster not checked"]["status"], "UNKNOWN")
         self.assertIn("fips_mode enabled for the environment", checks)
 
 

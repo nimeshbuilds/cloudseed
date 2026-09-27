@@ -145,6 +145,44 @@ prowler runs the newest CIS benchmark for the provider against the account, proj
 environment (in an AWS FIPS environment, only its region, through the FIPS endpoints). `--framework` picks another
 prowler compliance id.
 
+You can complete this step on a base AWS landing zone with Kubernetes disabled. For example, for an existing
+`aws-demo` environment:
+
+```bash
+cs scan cloud aws --env demo
+cs scan architecture aws --env demo --profile lab --max-age-days 30
+cs scan reports aws --env demo --last 5
+```
+
+Run the cloud scan first: architecture reads saved evidence and never starts a live scan itself. `--max-age-days 30`
+accepts evidence at most 30 days old; it is not a scan schedule or a 30-day AWS activity query. Use `--profile production`
+to discuss production availability requirements such as per-zone NAT gateways, without changing the deployment.
+
+Cloud results cover the account/project/subscription selected by your credentials, including resources created outside
+Cloudseed. AWS normally includes Prowler's scanned regions and global services, even when the environment belongs to
+one region. The report records scope, failed and manual observations, check IDs, resources, explanations and remediation.
+One check may produce several resource observations. A check title describes the desired state; read the detail to see
+why the resource failed.
+
+For cloud scans, any failed observation yields **FAIL / exit 1**. With no failures, manual/unknown observations,
+empty output or detected execution errors yield **INCOMPLETE / exit 3**. A completed scanner process is not proof of
+complete benchmark coverage. Keep real account findings visible: for example, missing root MFA requires the account
+owner's attention, and a permissive NACL needs review alongside routing and security groups before concluding that a
+private instance is publicly reachable. Review recommendations before changing a shared account or adding paid services.
+
+**Agent:** “For aws-demo, run the cloud scan, then the lab architecture assessment with evidence age 30 days.
+Explain every failed/manual finding, separate account-wide findings from known environment resources, and propose
+changes without applying them.”
+
+**MCP:** use `cloudseed_scan` with `{"kind":"cloud","cloud":"aws","env":"demo"}`, then
+`{"kind":"architecture","cloud":"aws","env":"demo","profile":"lab","max_age_days":30,"json":true}`.
+Complete any prerequisite tool installation through the normal host flow first.
+
+**UI:** select aws-demo, run **Cloud CIS** from **Resilience → Scans**, then run the **Well-Architected** lab assessment.
+Open both in **Reports**. Inspect status, severity, resources, evidence and remediation; use the full saved JSON/Markdown
+when the preview says it is limited. Legacy reports may contain fewer normalized details; a new scan produces the
+expanded report without rewriting older evidence.
+
 ## Step 7: Assess architecture using local evidence
 
 ```bash

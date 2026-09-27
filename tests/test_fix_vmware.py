@@ -416,7 +416,7 @@ class ImageCacheTests(unittest.TestCase):
         self.src, self.vmdk = self.d / "test.img", self.d / "t-os-arm64.vmdk"
 
     def _urlopen(self, payload=None, fail_sums=False, cut=None):
-        def urlopen(req, timeout=0):
+        def urlopen(req, timeout=0, context=None):
             url = req.full_url if hasattr(req, "full_url") else req
             if url.endswith("SHA256SUMS"):
                 if fail_sums:

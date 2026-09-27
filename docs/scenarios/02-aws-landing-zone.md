@@ -303,6 +303,7 @@ cs explain security-baseline
 
 ## Next steps
 
+- [Kubernetes access and bastions](../guides/kubernetes-access.md): controller access or cluster administration using the bastion's authorized identity.
 - [03 · GCP landing zone with private GKE](03-gcp-private-gke.md) and [04 · Azure with private AKS](04-azure-private-aks.md).
 - [12 · Private access with OpenVPN or Tailscale](12-private-access-vpn.md): reach the private subnets from your laptop.
 - [11 · FIPS 140 mode](11-fips-140-mode.md): the same landing zone with FIPS endpoints and a FIPS bastion.

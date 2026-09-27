@@ -5,6 +5,8 @@ import shlex
 import socket
 import subprocess
 import tempfile
+import sys
+import tarfile
 import time
 import unittest
 import urllib.request
@@ -13,6 +15,59 @@ from pathlib import Path
 
 @unittest.skipUnless(os.environ.get("CLOUDSEED_TEST_BINARY"), "requires a built cloudseed binary")
 class BundleLifecycleTests(unittest.TestCase):
+    def test_frozen_provisioning_ships_a_runnable_portable_bastion_cli(self):
+        binary = str(Path(os.environ["CLOUDSEED_TEST_BINARY"]).resolve())
+        with tempfile.TemporaryDirectory(prefix="cs-bundle-bastion-") as temporary:
+            home = Path(temporary)
+            state = home / "controller"
+            (state / "bin").mkdir(parents=True)
+            env_dir = state / "envs/aws-fixture"
+            archive = home / "payload.tar.gz"
+            ssh = state / "bin/ssh"
+            ssh.write_text(f"#!{sys.executable}\nimport pathlib,sys\n"
+                           f"if 'tar xzf' in sys.argv[-1]: pathlib.Path({str(archive)!r}).write_bytes(sys.stdin.buffer.read())\n")
+            ssh.chmod(0o755)
+            env = dict(os.environ, HOME=str(home), CLOUDSEED_HOME=str(state), NO_COLOR="1", PYTHONDONTWRITEBYTECODE="1",
+                       PATH=str(state / "bin") + os.pathsep + os.environ["PATH"])
+            for key in list(env):
+                if key.startswith(("AWS_", "GOOGLE_", "CLOUDSDK_", "GCLOUD_", "ARM_", "AZURE_")) or key in ("CLOUDSEED_SESSION", "CLOUDSEED_REDACT", "CLOUDSEED_IN_CONTAINER"):
+                    env.pop(key, None)
+            setup = subprocess.run([binary, "setup", "aws", "--dry-run", "--no-provision", "--state", "local",
+                                    "--allow-ip", "192.0.2.1", "--cidr", "10.240.0.0/16", "--env", "fixture",
+                                    "--name", "cs", "--region", "us-west-2", "-y"],
+                                   env=env, cwd=home, capture_output=True, text=True, timeout=600)
+            self.assertEqual(setup.returncode, 0, setup.stdout + setup.stderr)
+            private_key = env_dir / "ssh/id_ed25519"
+            self.assertTrue(private_key.is_file(), "dry-run setup must generate the fixture's SSH key")
+            key_bytes = private_key.read_bytes()
+            (env_dir / "outputs.json").write_text('{"bastion_public_ip":"192.0.2.2"}')
+            (state / "credentials.json").write_text('{"fixture":"must-not-transfer"}')
+            proc = subprocess.run([binary, "-y", "provision", "aws", "--env", "fixture", "--host", "bastion", "--sync-only"],
+                                  env=env, cwd=home, capture_output=True, text=True, timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            payload = home / "bastion/cloudseed"
+            payload.mkdir(parents=True)
+            with tarfile.open(archive) as tar:
+                names = tar.getnames()
+                for required in ("bin/cloudseed", "cloudseed/__init__.py", "cloudseed/cli.py", "cloudseed/web/app.js"):
+                    self.assertIn(required, names)
+                self.assertFalse(any("credentials.json" in name or "envs/aws-fixture" in name or ".tfstate" in name for name in names))
+                self.assertFalse(any(Path(name).name.startswith(("id_ed25519", "id_rsa", "id_ecdsa")) for name in names))
+                for member in tar.getmembers():
+                    if member.isfile():
+                        with tar.extractfile(member) as content:
+                            self.assertNotIn(key_bytes, content.read(), f"private key leaked in {member.name}")
+                tar.extractall(payload, filter="data")
+            env.update(HOME=str(home / "bastion"), CLOUDSEED_HOME=str(home / "bastion/state"))
+            portable = subprocess.run([sys.executable, "-I", str(payload / "bin/cloudseed"), "--version"], env=env,
+                                      cwd=home, capture_output=True, text=True, timeout=30)
+            version = subprocess.run([binary, "--version"], env=env, capture_output=True, text=True, timeout=30)
+            self.assertEqual(portable.returncode, 0, portable.stdout + portable.stderr)
+            self.assertEqual(portable.stdout, version.stdout)
+            helps = subprocess.run([sys.executable, "-I", str(payload / "bin/cloudseed"), "help"], env=env,
+                                   cwd=home, capture_output=True, text=True, timeout=30)
+            self.assertEqual(helps.returncode, 0, helps.stdout + helps.stderr)
+
     def test_console_job_keeps_bundled_resources_after_console_stops(self):
         binary = str(Path(os.environ["CLOUDSEED_TEST_BINARY"]).resolve())
         with tempfile.TemporaryDirectory(prefix="cs-bundle-life-") as temporary:

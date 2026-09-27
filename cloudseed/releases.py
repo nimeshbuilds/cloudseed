@@ -64,7 +64,7 @@ def execute(action, cloud, env, cfg, params=None):
         if gh:
             try:
                 proc = health._run([gh, "attestation", "verify", str(path), "--repo", REPOSITORY,
-                                    "--signer-workflow", WORKFLOW, "--cert-identity-regex", CERT_IDENTITY,
+                                    "--cert-identity-regex", CERT_IDENTITY,
                                     "--deny-self-hosted-runners", "--format", "json"], env=deps.path_env(), timeout=60)
                 verified = proc.returncode == 0 and digest(path)[0] == actual
                 status = "PASS" if verified else "FAIL"

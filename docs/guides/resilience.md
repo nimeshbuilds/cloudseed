@@ -133,6 +133,47 @@ The **Resilience** view has the same actions as buttons: *Run DR drill*, *Backup
 suites, *My workload*, *Stop all*, and every scan. Reports appear under **Reports**. See the
 [Web console guide](web-console.md).
 
+## Read scan reports alongside recovery evidence
+
+Security scans and [Well-Architected assessments](well-architected.md) save JSON and Markdown under
+`<workdir>/scans/`. Both retain the saved findings, details and remediation; the terminal shows a summary.
+The console's **Reports** view exposes findings and coverage limits. A scan result describes the checks performed:
+it does not establish that every resource is secure or that an application can recover.
+
+| Scan result | Exit code | Interpretation |
+|---|---|---|
+| `PASS` | `0` | The performed checks satisfy that scanner's policy; inspect remaining coverage limits. |
+| `N/A` | `0` | The scanner or profile does not apply, such as FIPS checks on a non-FIPS environment. |
+| `FAIL` | `1` | Findings breach the scanner's policy. Review unresolved evidence too. |
+| `INCOMPLETE` | `3` | Required evidence is missing, manual, unknown or partial. |
+| Invalid arguments | `2` | Correct the command input before retrying. |
+
+`scan all` also exits 1 when an action cannot run. A failed result takes precedence over incomplete evidence.
+`INCOMPLETE` is reserved for a gap in a requested, applicable assessment: an access error, missing/malformed
+results, an unreachable runtime, or a required control awaiting manual verification. It is not a generic warning.
+Disabled components and explicitly inapplicable or excluded controls are `N/A`; informational output does not block
+otherwise completed checks. If no checks apply, the result is `N/A`, not a pass. Evidence of a real failure still
+produces `FAIL` even when other checks could not be completed.
+
+An `UNKNOWN` finding explains the specific evidence gap and how to resolve it. For example, a missing saved
+report names the report to collect, an expired report identifies the freshness problem, an unrecognized scanner
+result identifies the unsupported field, and a manual control describes the review still needed. Read the finding's
+detail and remediation plus scanner diagnostics before retrying; retrying alone cannot supply organisational evidence.
+
+Scanners have individual policies: cloud CIS scans fail on every failed benchmark observation, including medium
+and low severity; with no failures, manual/unknown checks, empty output and execution or coverage errors remain
+incomplete. Cloud benchmarks cover an account, project or subscription, so findings may concern resources outside
+the selected environment. DR drills and chaos experiments retain their separate verdict rules described above.
+For AWS, an open network ACL finding concerns one subnet traffic control. Internet reachability also depends on
+routing, public addressing and the applicable security rules; assess those together before concluding that a host
+is exposed. See AWS's [network ACL guidance](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-network-acls.html)
+and [internet gateway requirements](https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html).
+
+Run `cs scan cloud` before `cs scan architecture` to include its saved evidence. The architecture scanner's
+`--max-age-days` controls how old that evidence may be; it never runs scans or drills automatically. Its recovery
+check requires a complete, recent sample restore with verified volume contents. Application RTO/RPO and regional
+recovery still need workload-specific tests.
+
 ## Related
 
 - [Security, scans and FIPS](security-and-fips.md): CIS, STIG, vulnerability, cloud and FIPS scans

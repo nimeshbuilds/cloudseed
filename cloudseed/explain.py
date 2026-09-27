@@ -249,7 +249,10 @@ FEATURES: dict[str, dict] = {
                 "(operator reports or one-off), OpenSCAP + SCAP Security Guide over SSH (CIS / DISA STIG per host OS), prowler (cloud CIS), and a "
                 "cloudseed FIPS verifier (N/A on non-FIPS environments); `cs scan all` runs what applies (FIPS only on FIPS environments). "
                 "STIG content exists for Ubuntu 24.04, Ubuntu 22.04 (Ubuntu Pro) and RHEL 8/9: the AL2023 and Debian 12 bastions report n/a. "
-                "Exit 1 when a verdict is FAIL or `scan all` could not run a scan. `cs scan architecture` separately assesses saved "
+                "Exit 0 for PASS or explicit N/A, 1 for FAIL or a `scan all` action that could not run, and 3 for INCOMPLETE evidence. "
+                "Cloud benchmarks fail on every failed observation, including medium/low severity; without failures, manual/unknown "
+                "checks, empty output and execution/coverage errors remain INCOMPLETE. Other scanners retain their own failure policies. "
+                "`cs scan architecture` separately assesses saved "
                 "configuration and local evidence against Well-Architected guidance; it never queries or changes cloud resources.",
         "files": ["cloudseed/scan.py", "cloudseed/architecture.py", "ansible/scan.yml + roles/openscap"],
         "state": ["<workdir>/scans/<kind>-<run>.json/.md", "<workdir>/scans/raw/ (raw tool output)", "<workdir>/scans/openscap-<run>/<host>/report.html",
@@ -257,6 +260,10 @@ FEATURES: dict[str, dict] = {
                   "kubescape / trivy: found on PATH, else installed with Homebrew, else into ~/.cloudseed/bin",
                   "scanners (kubescape, trivy, prowler) are installed only on the user's own run: agent and MCP sessions stop "
                   "with the install command instead"],
+        "controls": ["JSON and Markdown retain saved findings, detail and remediation; terminal output is a bounded summary",
+                     "Console Reports exposes findings and coverage limits; a PASS applies only to the scanner's performed checks",
+                     "Cloud benchmark scope is the provider account/project/subscription, including resources outside this environment",
+                     "Run cloud security scans before architecture when their saved evidence is needed; reports are historical snapshots"],
         "commands": ["cs scan all", "cs scan cis", "cs scan kube", "cs scan images", "cs scan host --profile stig", "cs scan stig", "cs scan cloud", "cs scan fips", "cs scan architecture --profile production --json", "cs scan reports"],
     },
     "architecture": {

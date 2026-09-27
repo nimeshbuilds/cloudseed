@@ -328,7 +328,7 @@ class FipsKeyTests(unittest.TestCase):
             self.assertEqual(chk["status"], "FAIL", (cloud_key, pub[:20]))
             self.assertIn(why, chk["detail"])
         self.assertEqual(self._key_check("gcp", ecdsa_pub())["status"], "PASS")
-        self.assertEqual(self._key_check("gcp", "")["status"], "INFO")
+        self.assertEqual(self._key_check("gcp", "")["status"], "UNKNOWN")
 
     def test_config_hint_names_the_key_type_setup_generates(self):
         env = fresh_env("aws")

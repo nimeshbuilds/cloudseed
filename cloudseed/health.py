@@ -138,6 +138,34 @@ def _json(proc):
         return None
 
 
+def _query_problem(proc, subject, expected="a JSON object"):
+    """Explain observed command failures without copying credential-bearing stderr into reports."""
+    output = ((proc.stderr or "") + "\n" + (proc.stdout or "")).lower()
+    if proc.returncode == 0:
+        why, action = f"the command succeeded but did not return {expected}", "Inspect that command's output and the reported resource fields."
+    elif proc.returncode == 124 or any(x in output for x in ("i/o timeout", "context deadline exceeded", "timed out")):
+        why, action = "the command timed out", "Check the configured API endpoint and VPN/tunnel, then retry with a longer diagnostic timeout if needed."
+    elif proc.returncode == 125:
+        why, action = "the response exceeded the diagnostic output limit", "Inspect the resource list directly with this environment's kubeconfig; reduce its scope before retrying."
+    elif re.search(r"\bforbidden\b", output):
+        why, action = "the API returned Forbidden", "Grant the current Kubernetes identity read access to this resource, then retry."
+    elif any(x in output for x in ("unauthorized", "you must be logged in", "unable to locate credentials", "expiredtoken", "credentials are expired")):
+        why, action = "authentication was rejected or credentials were unavailable", "Refresh this environment's cloud/Kubernetes login and retry."
+    elif any(x in output for x in ("certificate verify failed", "certificate_verify_failed", "x509:", "unknown authority")):
+        why, action = "the command reported a TLS certificate verification error", "Check the API endpoint and its configured CA trust; do not disable certificate verification."
+    elif any(x in output for x in ("no such host", "name or service not known", "temporary failure in name resolution")):
+        why, action = "the configured endpoint name could not be resolved", "Check DNS and this environment's VPN/private endpoint access."
+    elif "connection refused" in output:
+        why, action = "the endpoint refused the connection", "Check the API endpoint and whether the required VPN/tunnel is running."
+    elif any(x in output for x in ("doesn't have a resource type", "could not find the requested resource", "the server doesn't have a resource")):
+        why, action = "the requested resource type is not served by this cluster", "Check whether the relevant controller and its CRDs are installed; use the service's own checks if it is intentionally absent."
+    elif proc.returncode == 127:
+        why, action = "the command or a configured authentication helper could not run (exit 127)", "Check kubectl and any exec authentication helper named in the environment's kubeconfig."
+    else:
+        why, action = f"the command exited {proc.returncode} without a recognized cause", "Run the same read-only query with this environment's kubeconfig and inspect its stderr; the report does not establish an access or connectivity cause."
+    return f"{subject}: {why}.", action
+
+
 def _endpoint(value):
     if not isinstance(value, str) or len(value) > 512 or any(c.isspace() for c in value):
         raise ui.Abort("Probe endpoints must be HTTPS URLs without credentials, queries or fragments.", code=2)
@@ -209,13 +237,14 @@ def execute(action, cloud, env, cfg, params=None):
                 "gcp": "private node subnet → Cloud NAT", "azure": "private node subnet → attached NAT gateway",
                 "vmware": "private node → bastion forwarding/NAT → host network"}[target]
     add("network.route", "UNKNOWN", "Private node egress", f"Expected Cloudseed route: {expected}. The deployed route is not inspected.",
-        "Run an active probe, then inspect subnet routes, NAT health, firewalls and NetworkPolicies if it fails.", expected_route=expected)
+        "Inspect this environment's deployed subnet routes and NAT configuration in the cloud or VMware host. An active probe tests egress but does not inspect route tables.", expected_route=expected)
     saved, evidence = architecture._latest(env, "scans", action, now, age)
     matching = saved and saved.get("cloud") == target and saved.get("env") == env.id and saved.get("kind") == action
     if saved and not matching:
         evidence["reason"] = "latest report target does not match this environment"
     add("evidence.previous", "NOT_APPLICABLE" if live else "UNKNOWN", "Previous diagnostic evidence",
-        "A recent report is available; rerun live checks to establish current health." if matching else "No recent matching report is available.",
+        "A recent report is available, but saved evidence does not establish current health." if matching else
+        "No recent matching report is available: " + str(evidence.get("reason") or "no usable saved diagnostic evidence") + ".",
         "Run with --live after configuring cluster access.", source=evidence.get("source"),
         previous_verdict=saved.get("verdict") if matching else None, reason=evidence.get("reason"))
     checks = [("cluster.api", "Cluster API"), ("cluster.nodes", "Node readiness"), ("cluster.platform", "Deployment availability"),
@@ -230,9 +259,17 @@ def execute(action, cloud, env, cfg, params=None):
     kc = services.kubeconfig_path(env)
     safe = kc.is_file() and not kc.is_symlink() and not kc.parent.is_symlink()
     if not kubectl or not safe:
+        missing = []
+        if not kubectl:
+            missing.append("kubectl was not found in Cloudseed's tool search path")
+        if not safe:
+            missing.append("the environment kubeconfig or its parent is a symlink and was refused" if kc.is_symlink() or kc.parent.is_symlink()
+                           else f"the environment kubeconfig is not available as a regular file at {kc}")
+        next_steps = ([] if kubectl else ["Install kubectl explicitly with cs install kubectl."])
+        if not safe:
+            next_steps.append(f"Create a regular environment kubeconfig with cs k8s kubeconfig {target} --env {getattr(env, 'name', env.id)}.")
         for id_, title in checks + [("network.dns", "Cluster DNS"), ("network.registry", "Registry image pull"), ("network.tls", "TLS and HTTPS egress")]:
-            add(id_, "UNKNOWN", title, "kubectl or the environment's regular kubeconfig file is unavailable.",
-                f"Install kubectl explicitly; configure access with cs k8s kubeconfig {target} --env {getattr(env, 'name', env.id)}.")
+            add(id_, "UNKNOWN", title, "Not queried: " + "; ".join(missing) + ".", " ".join(next_steps))
         return _finish(action, target, env, live, active, findings, now)
     procenv = dict(services.cloud_cli_env(target, cfg), KUBECONFIG=str(kc))
 
@@ -245,9 +282,10 @@ def execute(action, cloud, env, cfg, params=None):
 
     api = query("get", "--raw=/readyz")
     api_ok = api.returncode == 0 and api.stdout.strip() == "ok"
+    api_detail, api_action = _query_problem(api, "API readiness", "the readiness response 'ok'") if not api_ok else ("", "")
     add("cluster.api", "PASS" if api_ok else "UNKNOWN", "Cluster API",
-        "The API readiness endpoint answered successfully." if api_ok else "The API readiness endpoint could not be verified (access, RBAC, tunnel or readiness).",
-        "Check cluster state, credentials, VPN/tunnel and /readyz RBAC.", live=api_ok, exit_code=api.returncode)
+        "The API readiness endpoint answered successfully." if api_ok else api_detail,
+        "Check cluster state, credentials, VPN/tunnel and /readyz RBAC." if api_ok else api_action, live=api_ok, exit_code=api.returncode)
     if action == "health":
         _health_reads(query, add, now, age)
     if active:
@@ -260,38 +298,50 @@ def execute(action, cloud, env, cfg, params=None):
 
 
 def _health_reads(query, add, now, age):
-    nodes = _items(_json(query("get", "nodes", "-o", "json")))
+    node_proc = query("get", "nodes", "-o", "json")
+    nodes = _items(_json(node_proc))
+    node_problem = _query_problem(node_proc, "Node query", "a JSON items array")
     ready = lambda n: any(c.get("type") == "Ready" and c.get("status") == "True" for c in _list(_object(n.get("status")).get("conditions")) if isinstance(c, dict))
     pressure = lambda n: any(c.get("type") in ("MemoryPressure", "DiskPressure", "PIDPressure") and c.get("status") == "True"
                              for c in _list(_object(n.get("status")).get("conditions")) if isinstance(c, dict))
     bad = sum(not ready(n) or pressure(n) for n in nodes or [])
     add("cluster.nodes", "UNKNOWN" if nodes is None else "FAIL" if not nodes or bad else "PASS", "Node readiness",
-        "Node status unavailable." if nodes is None else f"{len(nodes)} nodes inspected; {bad} not ready or under pressure.",
-        "Inspect node conditions, capacity, kubelet and network health.", live=nodes is not None, node_count=len(nodes or []), unhealthy=bad)
-    deployments = _items(_json(query("get", "deployments", "--all-namespaces", "-o", "json")))
+        node_problem[0] if nodes is None else f"{len(nodes)} nodes inspected; {bad} not ready or under pressure.",
+        node_problem[1] if nodes is None else "Inspect node conditions, capacity, kubelet and network health.", live=nodes is not None, node_count=len(nodes or []), unhealthy=bad)
+    deployment_proc = query("get", "deployments", "--all-namespaces", "-o", "json")
+    deployments = _items(_json(deployment_proc))
+    deployment_problem = _query_problem(deployment_proc, "Deployment query", "a JSON items array")
     bad = 0
     for item in deployments or []:
         spec, status, metadata = (_object(item.get(k)) for k in ("spec", "status", "metadata"))
         values = (spec.get("replicas", 1), status.get("availableReplicas", 0), metadata.get("generation", 0), status.get("observedGeneration", 0))
         bad += any(type(v) is not int or v < 0 for v in values) or values[1] < values[0] or values[3] < values[2]
     add("cluster.platform", "UNKNOWN" if deployments is None or not deployments else "FAIL" if bad else "PASS", "Deployment availability",
-        "Deployment state unavailable or no deployments found." if not deployments else f"{len(deployments)} deployments inspected; {bad} unavailable or reconciling.",
+        deployment_problem[0] if deployments is None else "The API returned no Deployments; deployment availability was not assessed." if not deployments else
+        f"{len(deployments)} deployments inspected; {bad} unavailable or reconciling.",
+        deployment_problem[1] if deployments is None else "Confirm whether this environment should have Deployments; inspect its intended workloads." if not deployments else
         "Inspect rollout status, pod events, registry pulls and resource limits.", live=deployments is not None, deployment_count=len(deployments or []), unhealthy=bad)
-    certificates = _items(_json(query("get", "certificates.cert-manager.io", "--all-namespaces", "-o", "json")))
+    certificate_proc = query("get", "certificates.cert-manager.io", "--all-namespaces", "-o", "json")
+    certificates = _items(_json(certificate_proc))
+    certificate_problem = _query_problem(certificate_proc, "Certificate query", "a JSON items array")
     expires = [architecture._utc(_object(c.get("status")).get("notAfter")) for c in certificates or []]
     bad = sum(dt is not None and dt < now + timedelta(days=30) for dt in expires)
     unknown = any(dt is None for dt in expires)
     add("cluster.certificates", "FAIL" if bad else "UNKNOWN" if not certificates or unknown else "PASS", "Certificate expiry",
-        "No complete cert-manager expiry evidence available." if not certificates or unknown else f"{len(certificates)} cert-manager certificates inspected; {bad} expire within 30 days.",
-        "Inspect cert-manager renewal/issuer conditions; separately check ingress and provider-managed certificates.",
+        certificate_problem[0] if certificates is None else "The API returned no cert-manager Certificate objects; no expiry dates were available." if not certificates else
+        f"{sum(dt is None for dt in expires)} of {len(certificates)} Certificate objects have missing or unreadable status.notAfter expiry dates." if unknown else
+        f"{len(certificates)} cert-manager certificates inspected; {bad} expire within 30 days.",
+        certificate_problem[1] if certificates is None else "Inspect cert-manager Certificate status.notAfter and renewal/issuer conditions; separately check ingress and provider-managed certificates.",
         live=bool(certificates) and not unknown, expiring=bad)
-    backups = _items(_json(query("get", "backups.velero.io", "--all-namespaces", "-o", "json")))
+    backup_proc = query("get", "backups.velero.io", "--all-namespaces", "-o", "json")
+    backups = _items(_json(backup_proc))
+    backup_problem = _query_problem(backup_proc, "Velero backup query", "a JSON items array")
     completed = [architecture._utc(_object(b.get("status")).get("completionTimestamp")) for b in backups or []
                  if _object(b.get("status")).get("phase") == "Completed"]
     recent = [dt for dt in completed if dt is not None and now - timedelta(days=age) <= dt <= datetime.now(timezone.utc)]
     add("cluster.backups", "UNKNOWN" if backups is None else "PASS" if recent else "FAIL", "Backup freshness",
-        "Velero backups could not be queried." if backups is None else f"{len(recent)} completed backups within {age} day(s). Completion does not prove recovery.",
-        "Check backup schedules/storage and run a restore drill; confirm required namespaces and volumes are covered.", live=backups is not None, recent_completed=len(recent))
+        backup_problem[0] if backups is None else f"{len(recent)} completed backups within {age} day(s). Completion does not prove recovery.",
+        backup_problem[1] if backups is None else "Check backup schedules/storage and run a restore drill; confirm required namespaces and volumes are covered.", live=backups is not None, recent_completed=len(recent))
 
 
 # No shell, service account token, host mount, privilege, or elevated capability is required by this script.
@@ -348,13 +398,16 @@ def _active_probe(query, add, env, endpoints, timeout):
         create = query("create", "-f", "-", "-o", "json", input=json.dumps(ns))
         obj = _json(create)
         if create.returncode:
-            add("network.probe", "UNKNOWN", "Active network probe", "Temporary namespace creation failed or timed out; no pod was started.",
-                f"Inspect RBAC and cleanup manifest {manifest_path.name}. A namespace may exist if the API response was lost.")
+            detail, action = _query_problem(create, "Temporary namespace creation")
+            add("network.probe", "UNKNOWN", "Active network probe", detail + " No pod was started.",
+                action + f" Inspect cleanup manifest {manifest_path.name}; a namespace may exist if the API response was lost.")
             return
         meta = _object(_object(obj).get("metadata"))
         uid = meta.get("uid")
         if not isinstance(uid, str) or not uid or _object(meta.get("labels")).get(OWNER_LABEL) != token:
-            add("network.probe", "UNKNOWN", "Active network probe", "Namespace ownership could not be established; no pod was started.", "Inspect the saved cleanup manifest.")
+            reason = "the create response was not a readable JSON object" if obj is None else "the create response lacked the expected owner label and a nonempty namespace UID"
+            add("network.probe", "UNKNOWN", "Active network probe", f"Namespace ownership was not established: {reason}; no pod was started.",
+                "Inspect the namespace's UID and owner label against the saved cleanup manifest before retrying or deleting it.")
             return
         cleanup["uid"] = uid
         paths.atomic_write(manifest_path, json.dumps(cleanup, indent=2) + "\n")
@@ -366,33 +419,51 @@ def _active_probe(query, add, env, endpoints, timeout):
                                         "resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"cpu": "100m", "memory": "64Mi"}}}]}}
         made = query("create", "-f", "-", input=json.dumps(pod))
         if made.returncode:
-            add("network.probe", "UNKNOWN", "Active network probe", "Restricted probe pod creation failed.", "Inspect admission policies and namespace RBAC.")
+            detail, action = _query_problem(made, "Restricted probe pod creation")
+            add("network.probe", "UNKNOWN", "Active network probe", detail, action)
             return
         waited = query("wait", "-n", namespace, "pod/probe", "--for=jsonpath={.status.phase}=Succeeded", f"--timeout={timeout}s", seconds=timeout + 5)
-        observed = _json(query("get", "pod", "probe", "-n", namespace, "-o", "json"))
+        observation = query("get", "pod", "probe", "-n", namespace, "-o", "json")
+        observed = _json(observation)
         statuses = _list(_object(_object(observed).get("status")).get("containerStatuses"))
         pulled = any(isinstance(c, dict) and c.get("imageID") for c in statuses if isinstance(statuses, list))
         pull_failed = any(_object(_object(c.get("state")).get("waiting")).get("reason") in ("ErrImagePull", "ImagePullBackOff")
                           for c in statuses if isinstance(c, dict)) if isinstance(statuses, list) else False
+        pull_problem = _query_problem(observation, "Probe pod status") if observed is None else (
+            "The pod status contains no resolved imageID and no explicit image-pull failure; image pull completion was not observed.",
+            "Inspect the probe pod's scheduling events and container waiting state before retrying.")
         add("network.registry", "PASS" if pulled else "FAIL" if pull_failed else "UNKNOWN", "Registry image pull",
-            "The selected node pulled/resolved the probe image with imagePullPolicy Always." if pulled else "Probe image pull was not verified.",
-            "Inspect image credentials, DNS, NAT and registry allowlists; other node pools and workload registries need separate testing.", live=bool(pulled or pull_failed), image=PROBE_IMAGE)
-        logs = _json(query("logs", "-n", namespace, "probe")) if waited.returncode == 0 else None
+            "The selected node pulled/resolved the probe image with imagePullPolicy Always." if pulled else
+            "Kubernetes reported ErrImagePull or ImagePullBackOff for the probe container." if pull_failed else pull_problem[0],
+            "Inspect image credentials, DNS, NAT and registry allowlists; other node pools and workload registries need separate testing." if pulled or pull_failed else pull_problem[1],
+            live=bool(pulled or pull_failed), image=PROBE_IMAGE)
+        log_proc = query("logs", "-n", namespace, "probe") if waited.returncode == 0 else None
+        logs = _json(log_proc) if log_proc is not None else None
+        if log_proc is None:
+            result_problem = _query_problem(waited, "Probe completion")
+        elif logs is None:
+            result_problem = _query_problem(log_proc, "Probe log query", "a JSON object containing probe results")
+        else:
+            result_problem = ("The probe logs did not contain a valid result for this check.",
+                              "Inspect the probe logs and container termination status, then rerun the active probe.")
         results = _object(logs).get("results", [])
         results = results if isinstance(results, list) else []
         dns = next((r for r in results if isinstance(r, dict) and r.get("check") == "dns" and type(r.get("ok")) is bool), None)
         add("network.dns", "UNKNOWN" if dns is None else "PASS" if dns["ok"] else "FAIL", "Cluster DNS",
-            "kubernetes.default.svc resolved from the probe pod." if dns and dns["ok"] else "Cluster DNS resolution was not successful or the probe did not finish.",
-            "Inspect CoreDNS, pod DNS configuration and NetworkPolicies.", live=dns is not None)
+            "kubernetes.default.svc resolved from the probe pod." if dns and dns["ok"] else
+            "The probe reported that kubernetes.default.svc did not resolve." if dns is not None else "No DNS observation: " + result_problem[0],
+            "Inspect CoreDNS, pod DNS configuration and NetworkPolicies." if dns is not None else result_problem[1], live=dns is not None)
         for i, endpoint in enumerate(endpoints):
             result = next((r for r in results if isinstance(r, dict) and r.get("check") == "https" and r.get("endpoint") == endpoint and type(r.get("ok")) is bool), None)
             add(f"network.tls.{i + 1}", "UNKNOWN" if result is None else "PASS" if result["ok"] else "FAIL", "TLS and HTTPS egress",
-                f"{endpoint}: " + ("DNS, TLS certificate verification and HTTPS response succeeded." if result and result["ok"] else "connectivity was not verified."),
-                "Inspect DNS, NAT/routes, egress firewall/NetworkPolicy and TLS trust. HTTP errors prove connectivity, not application health.",
+                f"{endpoint}: " + ("DNS, TLS certificate verification and HTTPS response succeeded." if result and result["ok"] else
+                                    "The probe reported a failed HTTPS connection." if result is not None else "No HTTPS observation: " + result_problem[0]),
+                "Inspect DNS, NAT/routes, egress firewall/NetworkPolicy and TLS trust. HTTP errors prove connectivity, not application health." if result is not None else result_problem[1],
                 live=result is not None, endpoint=endpoint, http_status=result.get("http_status") if result else None)
     finally:
         # Read ownership back even after an ambiguous create: only the exact random label + UID can authorize deletion.
-        current = _json(query("get", "namespace", namespace, "-o", "json"))
+        current_proc = query("get", "namespace", namespace, "-o", "json")
+        current = _json(current_proc)
         meta = _object(_object(current).get("metadata"))
         current_uid = meta.get("uid")
         owns = isinstance(current_uid, str) and bool(current_uid) and _object(meta.get("labels")).get(OWNER_LABEL) == token and (uid is None or uid == current_uid)
@@ -401,11 +472,14 @@ def _active_probe(query, add, env, endpoints, timeout):
             deleted = query("delete", f"--raw=/api/v1/namespaces/{namespace}", "-f", "-", input=json.dumps(opts))
             gone = query("wait", "--for=delete", "namespace/" + namespace, f"--timeout={timeout}s", seconds=timeout + 5) if deleted.returncode == 0 else deleted
             cleanup["cleanup"] = "complete" if gone.returncode == 0 else "failed"
+            cleanup_problem = _query_problem(gone, "Namespace deletion verification")[0] if gone.returncode else ""
         else:
             cleanup["cleanup"] = "unknown"  # never equate unreadable with absent
+            cleanup_problem = (_query_problem(current_proc, "Namespace ownership query")[0] if current is None else
+                               "The namespace response did not provide the matching owner label and UID required for safe deletion; deletion was refused.")
         cleanup["uid"] = uid or (current_uid if owns else None)
         paths.atomic_write(manifest_path, json.dumps(cleanup, indent=2) + "\n")
         add("network.cleanup", "PASS" if cleanup["cleanup"] == "complete" else "UNKNOWN", "Probe cleanup",
-            "The owned temporary namespace was deleted and deletion verified." if cleanup["cleanup"] == "complete" else "Cleanup could not be verified; inspect the manifest before removing anything.",
+            "The owned temporary namespace was deleted and deletion verified." if cleanup["cleanup"] == "complete" else cleanup_problem,
             f"Review operations/{manifest_path.name}; delete only the namespace with the recorded owner label and UID.",
             live=cleanup["cleanup"] == "complete", namespace=namespace, manifest=f"operations/{manifest_path.name}")

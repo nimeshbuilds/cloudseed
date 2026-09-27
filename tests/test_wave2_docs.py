@@ -144,7 +144,8 @@ class Pages(unittest.TestCase):
 
     def test_scan_and_dr_pages(self):
         scan = _flat(h.COMMANDS["scan"])
-        self.assertIn("Exit code: 1 when a verdict is FAIL", scan)
+        self.assertIn("1 for FAIL", scan)
+        self.assertIn("3 for INCOMPLETE", scan)
         self.assertIn("scans/raw/", scan)
         self.assertNotIn("cs scan cis && cs scan kube", h.COMMANDS["scan"])
         self.assertIn("N/A", scan)

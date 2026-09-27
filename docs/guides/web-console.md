@@ -56,6 +56,30 @@ It reads saved configuration and evidence without cloud access or infrastructure
 The top bar holds the **⌘K search**, the **environment selector** (the environment the Platform, Resilience and
 Reports views act on), **Undo**, the theme switch and the **Activity** drawer.
 
+## Read scan reports
+
+Select an environment, open **Reports**, then choose **Open** beside a scan. The report shows its verdict,
+scope, coverage limits and scanner diagnostics. Expand a finding to read its check ID, status, severity,
+resource, region, observed result, remediation and references whenever the scanner supplies those fields.
+Nested evidence stays available, including details from Kubernetes, image, host and FIPS scans.
+
+Read **Verdict policy** alongside the findings: the cloud benchmark fails for any failed observation, while
+the Kubernetes and image scanners have severity thresholds. A threshold passing does not mean every finding
+is resolved. Missing evidence for requested checks, execution errors and required manual verification appear as
+**INCOMPLETE**, including in Activity. Routine informational entries do not cause that state; disabled or explicitly
+inapplicable checks show **N/A**. Open the finding for the specific gap and its next step.
+Unknown findings include the reason evidence could not establish a result and how to resolve it. Scanner diagnostics
+also explain report-wide problems such as zero observations, a nonzero exit, access denial or unreachable endpoints;
+raw error output is not copied into that summary.
+Cloud scans can include resources outside the selected Cloudseed environment; check the report's scope before
+deciding which resource needs a change.
+
+The compact report view shows at most 100 findings and 200 checks/results, with an explicit notice when more
+exist. **View full JSON** and **View full Markdown** open the complete saved report as text; a scanner's own
+retention limits and raw-output location remain visible there. Reports above the console's 32 MiB display limit
+must be opened locally. Older cloud reports display a warning because they may have retained only high/critical
+failures; rerun the cloud scan to export complete findings and explanations.
+
 ## Create an environment
 
 The Create view is a four-step wizard built from each cloud's own setup questions, so it always matches the CLI.

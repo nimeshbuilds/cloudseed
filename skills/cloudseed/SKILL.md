@@ -47,6 +47,7 @@ call it yourself.
 | Scale nodes | `cloudseed node add [--count N] [--role worker\|control-plane]`, `node list`, `node remove <name>`, `node scale <cloud> --env dev --count N [--min N] [--max N]` (EKS/GKE/AKS; see cloudseed-platform skill) |
 | Platform catalog | `cloudseed platform list\|info\|plan\|install\|uninstall\|status <group\|item ...>` groups: basek8s scaling data ai agentic finops devsecops security resilience chaos (see cloudseed-platform skill) |
 | Cluster tools | `cloudseed kubectl ...`, `cloudseed helm ...` (per-env kubeconfig, bastion tunnel when private; in an agent session the output is redacted and `kubectl edit` / `exec -it` are refused); `cloudseed k9s` is a full-screen UI: human-only - give the user the command |
+| Bastion cluster tools | `cloudseed kubectl\|helm --local-context ...` uses the invoking host's already-authorized kubeconfig; ask approval for this target even for reads. MCP: `local_context=true`, `confirm=true`, no cloud/env. HTTPS and certificate verification are required; no Terraform state, automatic credentials, tunnel or Cloudseed Undo. Keep infrastructure and platform workflows on the original controller. |
 | Managed data platforms | `cloudseed databricks connect host=...\|test\|<args>`, `cloudseed snowflake connect account=... user=...\|test\|<args>` (see cloudseed-managed skill) |
 | Diagnose | `cloudseed troubleshoot <cloud> --env dev [--log]`, `cloudseed inventory <cloud> --env dev` |
 | How something works | `cloudseed explain <thing> --json` - a feature, target, command, topic, platform group or item, or `variable <cloud> <name>` (read-only; see below) |
@@ -107,6 +108,12 @@ data is `cloudseed_explain` with `format=json` or the resource `cloudseed://expl
 console, so quote it when you explain something to them.
 
 ## Workflow
+
+For security scans, read the full saved JSON/Markdown report, including lower-severity findings, manual checks,
+remediation, failure policy and coverage limits. Exit 3 means incomplete evidence, never success. Cloud scans cover
+account/project/subscription resources beyond the selected environment; establish ownership before proposing changes.
+Run the cloud scan before architecture if you want the latter to use that evidence. The console previews may be
+bounded; use their full report buttons or the saved artifact to review every retained finding.
 
 For an architecture assessment, use `cloudseed scan architecture` directly on the selected saved environment.
 It queries no clouds and installs no tools; it saves reports. PASS / exit 0 covers the assessed checks only,

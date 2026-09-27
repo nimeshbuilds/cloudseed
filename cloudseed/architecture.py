@@ -6,6 +6,7 @@ check describes the intended deployment only. Missing evidence and organisationa
 
 from __future__ import annotations
 
+import errno
 import ipaddress
 import json
 import math
@@ -55,6 +56,17 @@ def _utc(value) -> datetime | None:
 def _fresh(value, now: datetime, days: int) -> bool:
     dt = _utc(value)
     return dt is not None and now - timedelta(days=days) <= dt <= now
+
+
+def _fresh_problem(value, now: datetime, days: int, field: str) -> str:
+    dt = _utc(value)
+    if dt is None:
+        return f"{field} is missing or is not a valid timezone-aware timestamp"
+    if dt > now:
+        return f"{field} is future-dated"
+    if dt < now - timedelta(days=days):
+        return f"{field} is older than the {days}-day evidence limit"
+    return ""
 
 
 def _object(value) -> dict:
@@ -134,8 +146,10 @@ def _read_json(env, relative: str) -> tuple[dict | None, str]:
         fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
         opened.append(fd)
         info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_EVIDENCE_BYTES:
-            return None, "evidence is not a bounded regular file"
+        if not stat.S_ISREG(info.st_mode):
+            return None, "evidence is not a regular file"
+        if info.st_size > MAX_EVIDENCE_BYTES:
+            return None, "evidence exceeds the size limit"
         data = bytearray()
         while len(data) <= MAX_EVIDENCE_BYTES:
             chunk = os.read(fd, min(65536, MAX_EVIDENCE_BYTES + 1 - len(data)))
@@ -146,8 +160,22 @@ def _read_json(env, relative: str) -> tuple[dict | None, str]:
             return None, "evidence exceeds the size limit"
         obj = json.loads(data.decode("utf-8"))
         return (obj, "") if isinstance(obj, dict) else (None, "evidence is not a JSON object")
-    except (OSError, ValueError, UnicodeError, RuntimeError, RecursionError):
-        return None, "evidence is missing, unsafe or unreadable"
+    except FileNotFoundError:
+        return None, "evidence file or its parent directory does not exist"
+    except PermissionError:
+        return None, "permission was denied while reading the evidence file or its parent directory"
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+            return None, "the evidence path contains a symbolic link or a parent that is not a directory"
+        return None, f"evidence could not be read (filesystem error {exc.errno})"
+    except UnicodeError:
+        return None, "evidence is not valid UTF-8 text"
+    except ValueError:
+        return None, "evidence contains invalid JSON"
+    except RecursionError:
+        return None, "evidence nesting exceeds the JSON parser limit"
+    except RuntimeError:
+        return None, "the evidence workdir could not be safely resolved"
     finally:
         for fd in reversed(opened):
             os.close(fd)
@@ -160,7 +188,8 @@ def _latest(env, folder: str, prefix: str, now: datetime, days: int) -> tuple[di
     names = []
     try:
         if directory.is_symlink():
-            raise OSError("symlink")
+            evidence["reason"] = "the saved-report directory is a symbolic link; it was not followed"
+            return None, evidence
         with os.scandir(directory) as entries:
             for i, entry in enumerate(entries):
                 if i >= MAX_DIRECTORY_ENTRIES:
@@ -171,17 +200,27 @@ def _latest(env, folder: str, prefix: str, now: datetime, days: int) -> tuple[di
                     if _STAMP.fullmatch(stamp):
                         names.append(entry.name)
         if not names:
-            raise OSError("missing")
-    except OSError:
-        evidence["reason"] = "no safe saved report is available"
+            evidence["reason"] = f"no {prefix} report with a recognized run timestamp exists in {folder}"
+            return None, evidence
+    except FileNotFoundError:
+        evidence["reason"] = f"the {folder} saved-report directory does not exist"
+        return None, evidence
+    except PermissionError:
+        evidence["reason"] = f"permission was denied while listing the {folder} saved-report directory"
+        return None, evidence
+    except OSError as exc:
+        evidence["reason"] = f"the saved-report directory could not be listed (filesystem error {exc.errno})"
         return None, evidence
     name = max(names)
     evidence["source"] = f"{folder}/{name}"
     data, problem = _read_json(env, evidence["source"])
     if data is None:
         evidence["reason"] = problem
-    elif data.get("run") != name[len(prefix) + 1:-5] or not _fresh(data.get("run"), now, days):
-        evidence["reason"] = "latest report is stale, future-dated or has an invalid run timestamp"
+    elif data.get("run") != name[len(prefix) + 1:-5]:
+        evidence["reason"] = "latest report run is missing or does not match its filename timestamp"
+        data = None
+    elif problem := _fresh_problem(data.get("run"), now, days, "latest report run"):
+        evidence["reason"] = problem
         data = None
     return data, evidence
 
@@ -199,27 +238,55 @@ _DIAGNOSTIC_CHECKS = {
 }
 
 
-def _diagnostic_evidence(target, env, now, days, add):
+def _diagnostic_evidence(target, env, now, days, add, k8s=None):
     """Supplemental historical observations, never substitutes for architecture or workload assurance."""
     for kind in ("health", "network"):
+        if k8s is False:
+            add(f"evidence.{kind}", "operational_excellence", "NOT_APPLICABLE", f"Saved live {kind} diagnostics",
+                "Kubernetes is disabled in the declared configuration; these diagnostics inspect the cluster and its probe workloads.",
+                "Review host, service and application health separately; no Kubernetes diagnostics are required for this configuration.",
+                [{"type": "declared_configuration", "source": "config.json", "fields": ["enable_kubernetes"], "live_verified": False}])
+            continue
         report, source = _latest(env, "scans", kind, now, days)
-        valid = report is not None and type(report.get("schema_version")) is int and report.get("schema_version") == 1 and report.get("kind") == kind and \
-            report.get("cloud") == target and report.get("env") == env.id and report.get("live") is True and \
-            _fresh(report.get("generated_at"), now, days)
+        problems = []
+        if report is not None:
+            if type(report.get("schema_version")) is not int or report.get("schema_version") != 1:
+                problems.append("schema_version is missing or unsupported (expected 1)")
+            for field, expected in (("kind", kind), ("cloud", target), ("env", env.id)):
+                if report.get(field) != expected:
+                    problems.append(f"{field} is missing or does not match this assessment")
+            if report.get("live") is not True:
+                problems.append("live=true is not recorded; offline declarations do not verify deployed health")
+            if problem := _fresh_problem(report.get("generated_at"), now, days, "generated_at"):
+                problems.append(problem)
+        valid = report is not None and not problems
         rows = report.get("findings") if valid else None
         if not isinstance(rows, list) or len(rows) > 64 or not all(isinstance(f, dict) for f in rows):
+            if valid:
+                problems.append("findings must be a list of at most 64 result objects")
             rows = []
+        elif not rows:
+            problems.append("findings contains no check results")
         ids = [f.get("id") for f in rows if isinstance(f.get("id"), str)]
         added = False
         for row in rows:
             id_ = row.get("id")
-            if not isinstance(id_, str) or id_ not in _DIAGNOSTIC_CHECKS or ids.count(id_) != 1 or row.get("status") not in ("PASS", "FAIL"):
+            if not isinstance(id_, str) or id_ not in _DIAGNOSTIC_CHECKS:
+                problems.append("a check ID is missing or is not supported for architecture evidence")
+                continue
+            if ids.count(id_) != 1:
+                problems.append(f"{id_} appears more than once")
+                continue
+            if row.get("status") not in ("PASS", "FAIL"):
+                problems.append(f"{id_} has no resolved PASS/FAIL observation; inspect its reason in the source diagnostic")
                 continue
             evidence = row.get("evidence")
             if not isinstance(evidence, list) or not evidence or len(evidence) > 8 or not all(
                     isinstance(e, dict) and e.get("type") == "live_query" and e.get("live_verified") is True for e in evidence):
+                problems.append(f"{id_} lacks 1–8 live_query evidence entries with live_verified=true")
                 continue
             if id_.startswith("network.") and report.get("active") is not True:
+                problems.append(f"{id_} is not supported by active=true probe evidence")
                 continue
             pillar, title = _DIAGNOSTIC_CHECKS[id_]
             add(f"evidence.{kind}.{id_}", pillar, row["status"], title + " (saved live observation)",
@@ -229,9 +296,12 @@ def _diagnostic_evidence(target, env, now, days, add):
                   "generated_at": report["generated_at"]}], severity="HIGH" if row["status"] == "FAIL" else "LOW")
             added = True
         if not added:
+            if problems:
+                source["reason"] = "; ".join(dict.fromkeys(problems))
             add(f"evidence.{kind}", "operational_excellence", "UNKNOWN", f"Saved live {kind} diagnostics",
-                "No fresh, matching, complete live-check evidence is available. Offline reports and unverified results do not establish deployed health.",
-                f"Collect cs ops {kind} live diagnostics after configuring cluster access.", [source])
+                "No accepted saved live-check observation is available.",
+                f"Inspect the source diagnostic and its individual unresolved reasons; collect cs ops {kind} with live=true"
+                + (" and active=true" if kind == "network" else "") + " for this environment after resolving access or check errors.", [source])
 
 
 def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int = 30) -> dict:
@@ -259,6 +329,10 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
                        "provider framework pillar"}]
         if target == "azure" and pillar == "sustainability":
             references[0]["url"] = "https://learn.microsoft.com/en-us/azure/well-architected/sustainability/"
+        if status == "UNKNOWN":
+            reasons = list(dict.fromkeys(e["reason"] for e in evidence or [] if e.get("reason")))
+            if reasons:
+                detail += " Reason: " + "; ".join(reasons) + "."
         findings.append({"id": id_, "pillar": pillar, "status": status, "severity": severity,
                          "title": title, "detail": detail, "remediation": remediation,
                          "evidence": evidence or [{"type": "manual_review", "live_verified": False}], "references": references})
@@ -266,12 +340,15 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
     def declared(*keys, source="config.json"):
         return [{"type": "declared_configuration", "source": source, "fields": list(keys), "live_verified": False}]
 
-    def toggle(id_, pillar, key, default, title, remediation, parent=True):
+    def toggle(id_, pillar, key, default, title, remediation, parent=True, parent_key="baseline"):
         value = _flag(cfg, key, default)
         status = "UNKNOWN" if parent is not True or value is None else "PASS" if value else "FAIL"
         detail = "Declared setting is enabled; deployment and effective coverage have not been checked." if status == "PASS" else \
-                 "Declared setting is disabled." if status == "FAIL" else "The setting or its baseline owner cannot be established from this configuration."
-        add(id_, pillar, status, title, detail, remediation, declared(key))
+                 "Declared setting is disabled." if status == "FAIL" else \
+                 f"{parent_key}=false delegates this control outside this environment; local {key} does not establish the owner's effective setting." if parent is False else \
+                 f"{parent_key} is not a valid boolean, so ownership of this control cannot be established." if parent is None else \
+                 f"{key} is not a valid boolean under the configuration's render rules."
+        add(id_, pillar, status, title, detail, remediation, declared(key, parent_key) if parent is not True else declared(key))
 
     # These controls examine declarations, not the currently deployed API endpoint or firewall rules.
     if target == "vmware":
@@ -281,11 +358,13 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
     else:
         cidrs = cfg.get("allowed_ssh_cidrs")  # enforced by module_vars; an extra_vars value is deliberately ignored
         networks = []
+        cidr_problem = "allowed_ssh_cidrs must be a non-empty list of at most 256 trusted IPv4 CIDRs."
         try:
             if not isinstance(cidrs, list) or not cidrs or len(cidrs) > 256:
                 raise ValueError("missing or invalid")
             # ip_network accepts bare addresses and dotted netmasks, whereas the Terraform variables require
             # explicit numeric CIDR prefixes. Never turn an invalid Terraform input into a passing declaration.
+            cidr_problem = "allowed_ssh_cidrs contains an invalid network or an entry without an explicit numeric CIDR prefix."
             networks = [ipaddress.ip_network(c, strict=False) for c in cidrs
                         if isinstance(c, str) and re.fullmatch(r"[^/\s]+/[0-9]{1,3}", c)]
             if len(networks) != len(cidrs):
@@ -297,7 +376,7 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
         add("security.ssh_access", "security", status, "Declared SSH source restrictions",
             "Declared IPv4 SSH sources are restricted (no wider than /8); live firewall rules were not checked." if status == "PASS" else
             "Declared SSH sources include unrestricted, excessively broad or unsupported networks." if status == "FAIL" else
-            "The declared SSH source list is missing or invalid.",
+            cidr_problem,
             "Use --allow-ip for the narrowest required trusted IPv4 ranges, then verify the deployed firewall.",
             declared("allowed_ssh_cidrs"), "HIGH")
     public = _flag(cfg, "kubernetes_public_endpoint", False)
@@ -305,9 +384,12 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
              "PASS" if public is False else "FAIL" if production else "UNKNOWN"
     add("security.kubernetes_api", "security", status, "Private Kubernetes API",
         "Kubernetes is not enabled in the declared configuration." if k8s is False else
+        "enable_kubernetes is not a valid boolean under the configuration's render rules." if k8s is None else
+        "The local Kubernetes API listener, VMware network, host firewall and Kubernetes identity policy have not been inspected." if target == "vmware" else
+        "kubernetes_public_endpoint is not a valid boolean under the configuration's render rules." if public is None else
         "A private API is declared; actual reachability and identity policy were not tested." if status == "PASS" else
-        "A public API is declared; production screening requires private access or a separately reviewed exception." if public else
-        "The API access boundary requires verification.",
+        "A public API is declared; production screening requires private access or a separately reviewed exception." if production else
+        "The lab declares a public API; trusted source ranges, identities and acceptance of public access have not been reviewed.",
         "Review the local API listener, VMware network, host firewall and Kubernetes identities." if target == "vmware" else
         "Prefer kubernetes_public_endpoint=false; review required access paths, authorized source ranges and identities.",
         declared("enable_kubernetes") if target == "vmware" else declared("enable_kubernetes", "kubernetes_public_endpoint"), "HIGH")
@@ -321,7 +403,7 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
             "Lab profile does not require multi-zone egress." if not production else
             "Declared multi-zone subnets have one NAT gateway per zone; live routing and recovery were not tested." if status == "PASS" else
             "Production screening requires at least two zones and per-zone NAT gateways; the default shares one NAT." if status == "FAIL" else
-            "The declared zone count or NAT setting is invalid.",
+            "Invalid configuration fields: " + ", ".join(k for k, valid in (("az_count (integer)", az is not None), ("single_nat_gateway (boolean)", single is not None)) if not valid) + ".",
             "Review availability and cost requirements before setting az_count>=2 and single_nat_gateway=false.",
             declared("az_count", "single_nat_gateway"), "HIGH")
         account = _flag(cfg, "enable_account_baseline", True)
@@ -329,10 +411,10 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
         saved_account = _bool(_object(cfg.get("vars")).get("enable_account_baseline", True))
         regional = _flag(cfg, "enable_regional_baseline", saved_account)
         toggle("security.audit_logging", "security", "enable_cloudtrail", True, "Declared CloudTrail logging",
-               "Confirm one account owner manages CloudTrail and verify coverage, delivery and retention.", account)
+               "Obtain the account owner's attestation of the managing stack, covered accounts/regions, CloudTrail delivery destination and retention; verify the effective logging configuration.", account, "enable_account_baseline")
         toggle("operations.network_logs", "operational_excellence", "enable_flow_logs", True, "Declared VPC flow logs",
                "Enable VPC flow logs and verify log delivery, retention and useful alerting.")
-        baseline_detail = "Account/regional baseline ownership and effective controls require cross-environment review."
+        baseline_detail = "The saved configuration has no owner attestation for account/regional security controls or their coverage across environments."
         baseline_keys = ("enable_account_baseline", "enable_regional_baseline")
         if account is False or regional is False:
             baseline_detail += " At least one baseline is delegated; this does not prove its controls are absent."
@@ -344,14 +426,14 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
         add("reliability.gke_location", "reliability", status, "GKE control-plane failure domains",
             "Declared regional control plane and multiple node zones; availability and quota require provider validation." if status == "PASS" else
             "Configuration does not declare both a regional control plane and multiple node zones." if status == "FAIL" else
-            "Kubernetes enablement or topology cannot be established from the saved configuration." if status == "UNKNOWN" else
+            "Invalid configuration fields: " + ", ".join(k for k, valid in (("enable_kubernetes (boolean)", k8s is not None), ("kubernetes_regional (boolean)", regional is not None), ("kubernetes_node_locations (unique zones in this region)", valid_zones)) if not valid) + "." if status == "UNKNOWN" else
             "Regional GKE topology is not required when Kubernetes is disabled or the lab profile is selected.",
             "Set kubernetes_regional and explicit kubernetes_node_locations; counts are per zone. Review replacement and recovery plans before migrating a deployed cluster.",
             declared("kubernetes_regional", "kubernetes_node_locations", source="terraform/gcp/main.tf"), "HIGH")
         baseline = _flag(cfg, "enable_project_baseline", True)
         toggle("security.audit_logging", "security", "enable_data_access_audit_logs", False, "Declared Data Access audit logging",
-               "Review data sensitivity and logging costs, enable required Data Access logs, and verify delivery and retention.", baseline)
-        baseline_detail = "Project-wide logging ownership and effective controls require cross-environment review."
+               "Obtain the project owner's attestation of the managing stack, required Data Access audit categories, covered services, log destination and retention; verify effective logging and costs.", baseline, "enable_project_baseline")
+        baseline_detail = "The saved configuration has no owner attestation for project-wide logging controls or their coverage across environments."
         baseline_keys = ("enable_project_baseline",)
     elif target == "azure":
         tier = _value(cfg, "kubernetes_sku_tier", "Free")
@@ -361,26 +443,27 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
         add("reliability.aks_availability", "reliability", status, "AKS tier and node failure domains",
             "Declared Standard tier and multiple node zones; regional VM-size availability and quota require provider validation." if status == "PASS" else
             "Configuration does not declare both Standard tier and multiple node-pool availability zones." if status == "FAIL" else
-            "Kubernetes enablement or topology cannot be established from the saved configuration." if status == "UNKNOWN" else
+            "enable_kubernetes is not a valid boolean." if k8s is None and status == "UNKNOWN" else
+            "kubernetes_sku_tier must be Free or Standard, and kubernetes_zones must be a list of unique zone strings from 1, 2 and 3." if status == "UNKNOWN" else
             "Higher AKS availability is not required when Kubernetes is disabled or the lab profile is selected.",
             "Set kubernetes_sku_tier=Standard and supported kubernetes_zones; assess costs and node rotation before changing a deployed cluster.",
             declared("kubernetes_sku_tier", "kubernetes_zones", source="terraform/azure/modules/kubernetes/main.tf"), "HIGH")
         toggle("security.audit_logging", "security", "enable_activity_log", True, "Declared Activity Log export",
                "Confirm subscription-wide ownership and verify Activity Log delivery, retention and alerts.")
-        baseline_detail = "Subscription-wide Activity Log and Defender ownership require cross-environment review."
+        baseline_detail = "The saved configuration has no owner attestation for subscription-wide Activity Log export, Defender configuration or their coverage across environments."
         baseline_keys = ("enable_activity_log", "enable_defender")
     else:
         add("reliability.vmware_host", "reliability", "FAIL" if production else "NOT_APPLICABLE", "Independent physical failure domains",
             "The local VMware target places its VMs on one workstation; multiple guest control planes do not provide host-level redundancy.",
             "Use this target for lab workloads or design and validate independent hosts and recovery outside this workstation.",
             declared(source="terraform/vmware"), "HIGH")
-        baseline_detail = "Host security, patching, backup ownership and physical access require local review."
+        baseline_detail = "The saved configuration has no owner attestation for host hardening, supported patches, backups or physical access controls."
         baseline_keys = ()
     add("security.baseline_ownership", "security", "UNKNOWN", "Security baseline ownership", baseline_detail,
-        "Identify the accountable owner and verify effective controls across all environments sharing the account, project, subscription or host.",
+        "Record the accountable owner's attestation naming the account/regions, project, subscription or host scope; where each named control is managed; and evidence of its effective coverage, delivery/retention or recovery checks across shared environments.",
         declared(*baseline_keys))
 
-    # A saved security scan's PASS only means no critical/high findings. Never promote it to complete coverage.
+    # Even a saved security scan's PASS is bounded by its benchmark, scope and collection coverage.
     if target == "vmware":
         add("security.saved_cloud_scan", "security", "NOT_APPLICABLE", "Saved cloud security evidence",
             "The VMware target has no cloud account benchmark.", "Run host and Kubernetes scans where applicable.")
@@ -389,13 +472,33 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
         summary = _object(report.get("summary")) if report else {}
         passed = _integer(summary.get("pass"))
         failed = _integer(summary.get("fail"))
+        identified = report is not None and ("cloud" in report or "env" in report)
+        matching = not identified or report.get("cloud") == target and report.get("env") == env.id
         valid = report is not None and report.get("kind") == "cloud" and summary.get("provider") == target and \
-                passed is not None and passed >= 0 and failed is not None and failed >= 0
+                matching and passed is not None and passed >= 0 and failed is not None and failed >= 0
         status = "FAIL" if valid and failed > 0 else "UNKNOWN"
         detail = "The latest fresh cloud benchmark records failed checks (including medium/low findings)." if status == "FAIL" else \
-                 "The latest report cannot establish complete security coverage: existing cloud reports do not attest to skipped, unreachable or missing checks."
+                 "A saved cloud benchmark alone cannot establish complete security coverage outside its recorded benchmark and collection scope."
         if valid:
-            evidence.update({"checks_passed": passed, "checks_failed": failed})
+            evidence.update({"checks_passed": passed, "checks_failed": failed,
+                             "environment_identity": "matched" if identified else "not_recorded"})
+            detail += " Cloud benchmarks cover provider account, project or subscription scope; findings are not necessarily owned by this environment."
+            if not identified:
+                evidence["provenance_limit"] = "Legacy report does not record cloud/environment identity; only its provider and saved location can be checked."
+                detail += " This legacy report does not record the originating environment identity."
+            if status == "UNKNOWN":
+                evidence["reason"] = "no failed checks are recorded, but effective permissions, excluded services/regions, manual checks and workload-specific controls require separate review"
+        elif report is not None:
+            problems = []
+            if identified and not matching:
+                problems.append("latest cloud report identity is missing or does not match this environment")
+            if report.get("kind") != "cloud":
+                problems.append("kind is missing or is not cloud")
+            if summary.get("provider") != target:
+                problems.append("summary.provider is missing or does not match this assessment")
+            if passed is None or passed < 0 or failed is None or failed < 0:
+                problems.append("summary.pass and summary.fail must be non-negative integer counts")
+            evidence["reason"] = "; ".join(problems)
         add("security.saved_cloud_scan", "security", status, "Saved cloud security evidence", detail,
             "Run cs scan cloud, resolve findings and separately verify permissions, scope and checks that could not run.", [evidence], "HIGH")
 
@@ -406,6 +509,8 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
     else:
         report, evidence = _latest(env, "dr", "drill", now, max_age_days)
         status, detail = "UNKNOWN", "No fresh, complete recovery drill proves restored sample workload data and volume contents."
+        if report and (report.get("env") != env.id or report.get("cloud") != target):
+            evidence["reason"] = "recovery drill cloud/env identity is missing or does not match this environment"
         if report and report.get("env") == env.id and report.get("cloud") == target:
             steps = report.get("steps")
             rto = _number(report.get("rto_s"))
@@ -419,11 +524,28 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
                     and report.get("volume_tested") is True and report.get("volume_verified") is True:
                 status, detail = "PASS", "A fresh saved drill recovered its sample workload and PVC contents; this does not prove application RTO/RPO objectives."
                 evidence.update({"measured_sample_rto_seconds": rto, "volume_verified": True})
+            else:
+                problems = []
+                if report.get("verdict") != "PASS":
+                    problems.append("the drill has no completed PASS verdict")
+                if not verified:
+                    problems.append("steps must record all five sample-create/backup/delete/restore/verify operations in order, each with ok=true and a non-negative numeric duration")
+                if rto is None or rto <= 0:
+                    problems.append("rto_s is missing or is not a positive finite duration")
+                elif verified and not math.isclose(rto, sum(s["seconds"] for s in steps[-2:]), abs_tol=0.11):
+                    problems.append("rto_s does not match the restore and verification durations")
+                if report.get("volume_tested") is not True:
+                    problems.append("volume_tested=true is not recorded")
+                if report.get("volume_verified") is not True:
+                    problems.append("volume_verified=true is not recorded")
+                evidence["reason"] = "; ".join(problems)
         add("reliability.restore_drill", "reliability", status, "Saved Kubernetes recovery drill", detail,
             "Run cs dr test with volume verification and validate application recovery and backup freshness against agreed RTO/RPO targets.", [evidence], "HIGH")
 
     # Installation notes do not store Helm overrides. A note proves an action, not the live release values.
-    inventory, _problem = _read_json(env, "inventory.json")
+    inventory, inventory_problem = _read_json(env, "inventory.json")
+    if inventory is not None and inventory.get("env") != env.id:
+        inventory_problem = "inventory env identity is missing or does not match this environment"
     notes = _object(_object(inventory.get("current")).get("notes")) if inventory and inventory.get("env") == env.id else {}
     for item, title, risk in (("vault", "Vault production configuration", "The catalog defaults to development mode."),
                               ("kyverno-policies", "Enforced admission policies", "The catalog defaults to Audit mode, which does not block violations.")):
@@ -433,10 +555,16 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
                  (not uninstall or removed_at is not None and removed_at <= installed_at)
         detail = risk + " A recent installation is recorded, but live values and custom overrides are unavailable." if recent else \
                  "A current installation and its effective values cannot be established from local evidence."
+        problem = "Installation notes do not store effective Helm values or custom overrides."
+        if not recent:
+            problem = inventory_problem or ("no installation note exists for this item" if not install else
+                      _fresh_problem(install.get("at"), now, max_age_days, "installation timestamp") or
+                      "an uninstall note has an invalid timestamp or records removal after the installation")
         add("security.platform_" + item.replace("-", "_"), "security", "NOT_APPLICABLE" if k8s is False or not production else "UNKNOWN", title,
             "This production Kubernetes control is outside the selected configuration/profile." if k8s is False or not production else detail,
-            "Inspect installed release values; use durable production Vault storage/unsealing and reviewed admission enforcement where required.",
-            [{"type": "saved_installation_note", "source": "inventory.json", "recent_install_recorded": recent, "live_verified": False}])
+            "Inspect current Vault Helm values and verify development mode is disabled, durable storage and production unsealing are configured." if item == "vault" else
+            "Inspect current Kyverno policy values and attest which required policies enforce admission, their exclusions and tested rejection behavior.",
+            [{"type": "saved_installation_note", "source": "inventory.json", "recent_install_recorded": recent, "live_verified": False, "reason": problem}])
 
     for id_, pillar, title, detail, remediation in (
         ("operations.ownership_alerting", "operational_excellence", "Workload ownership and actionable alerts",
@@ -460,7 +588,7 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
     ):
         add(id_, pillar, "UNKNOWN", title, detail, remediation)
 
-    _diagnostic_evidence(target, env, now, max_age_days, add)
+    _diagnostic_evidence(target, env, now, max_age_days, add, _flag(cfg, "enable_kubernetes", None))
 
     counts = {status: sum(f["status"] == status for f in findings) for status in ("PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE")}
     verdict = "FAIL" if counts["FAIL"] else "INCOMPLETE" if counts["UNKNOWN"] else "PASS"

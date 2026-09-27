@@ -19,11 +19,11 @@
     auto_updates: true
     install_terraform: true
     install_cloud_cli: true
-    enable_kubernetes: false     # the environment has a managed cluster (EKS / GKE / AKS): kubectl joins the tools
+    enable_kubernetes: false     # the environment has a cluster (EKS / GKE / AKS / VMware): kubectl joins the tools
     kubernetes_version: ""       # the cluster's version (kubectl follows its minor; GKE: the running one), "" = the cloud's default
     kubernetes_cluster_name: ""
     cloud_region: ""
-    install_kubectl: "{{ (install_cloud_cli | bool) and (enable_kubernetes | bool) and cloud in ['aws', 'gcp', 'azure'] }}"
+    install_kubectl: "{{ (install_cloud_cli | bool) and (enable_kubernetes | bool) and cloud in ['aws', 'gcp', 'azure', 'vmware'] }}"
     repo_dir: "/home/{{ ssh_user }}/cloudseed"
     banner_text: "cloudseed bastion - authorized access only. All activity is logged."
     motd_title: cloudseed bastion

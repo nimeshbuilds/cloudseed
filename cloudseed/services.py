@@ -467,7 +467,10 @@ def _ensure_reachable(cloud, env, cfg, outputs, kc: Path):
         close_tunnel(env, quiet=True)   # the cluster was re-created with another endpoint
         live = None
     if live and _tcp_open("127.0.0.1", int(live["port"]), 1):
-        _point_kubeconfig(kc, int(live["port"]), host)
+        ensure_tool("kubectl", "to configure kubeconfig for the private API tunnel")
+        if not _point_kubeconfig(kc, int(live["port"]), host):
+            raise ui.Abort("Could not point this environment's kubeconfig at its private API tunnel. "
+                           f"Inspect {kc} with kubectl config view, then rerun cs k8s tunnel {cloud.key} --env {env.name}.")
         return int(live["port"]), host
     if _tcp_open(host, rport, 2):
         return None
@@ -479,6 +482,9 @@ def _ensure_reachable(cloud, env, cfg, outputs, kc: Path):
             if _azure_privatelink(cloud.key, outputs) else
             f"; connect the VPN first (cloudseed vpn connect {cloud.key} --env {env.name})."))
         return False
+    # kubeconfig rewriting requires kubectl even when the eventual command is Helm or k9s. Resolve it before
+    # starting SSH: otherwise a first run can leave the original private server URL behind a successful tunnel.
+    ensure_tool("kubectl", "to configure kubeconfig for the private API tunnel")
     close_tunnel(env, quiet=True)
     port = _free_port(16443 + (sum(map(ord, env.id)) % 1000))
     forward = f"127.0.0.1:{port}:{host}:{rport}"
@@ -503,8 +509,11 @@ def _ensure_reachable(cloud, env, cfg, outputs, kc: Path):
     out = subprocess.run(["pgrep", "-f", forward], capture_output=True, text=True).stdout.split()
     if out:
         _tunnel_file(env).write_text(json.dumps({"pid": int(out[0]), "port": port, "host": host, "rport": rport}))
+    if not _point_kubeconfig(kc, port, host):
+        raise ui.Abort("The SSH tunnel opened, but the environment's kubeconfig could not be updated. "
+                       f"Inspect {kc} with kubectl config view, then rerun cs k8s tunnel {cloud.key} --env {env.name}; "
+                       "close the tunnel with cs k8s untunnel if it is no longer needed.")
     ui.ok(f"SSH tunnel to the private API endpoint via the bastion (127.0.0.1:{port}); close it with cs k8s untunnel")
-    _point_kubeconfig(kc, port, host)
     return port, host
 
 

@@ -37,7 +37,6 @@ from . import audit, deps, netutil, paths, provision as prov, ui
 
 SCAN_NS = "cloudseed-scan"
 SSG_FALLBACK = "0.1.82"
-IMAGE_FINDINGS_MAX = 1000  # critical/high image findings kept in a report (all critical first)
 
 # ---------------------------------------------------------------- reports
 
@@ -139,12 +138,38 @@ def save_report(env, kind: str, report: dict) -> Path:
     report["run"], report["kind"] = run, kind
     paths.atomic_write(path, json.dumps(report, indent=2, default=str) + "\n")   # never a half-written report
     md = [f"# {kind} scan {run} · {env.id}", ""]
+    if report.get("verdict"):
+        md += [f"**Verdict:** {md_cell(report['verdict'])}", ""]
     for k, v in report.get("summary", {}).items():
-        md.append(f"- **{k}**: {v}")
+        md.append(f"- **{md_cell(k)}**: {md_cell(v)}")
+    if report.get("scope"):
+        md += ["", f"**Scope:** {md_cell(report['scope'])}"]
+    if report.get("failure_policy"):
+        md += ["", f"**Failure policy:** {md_cell(report['failure_policy'])}"]
+    if report.get("coverage_limits"):
+        md += ["", "## Coverage and limits", "", *["- " + md_cell(x) for x in report["coverage_limits"]]]
     if report.get("findings"):
+        # The terminal/UI may show a bounded preview. The saved artifact retains
+        # every normalized finding and its full explanation/remediation.
         md += ["", "| status | severity | finding | detail |", "|---|---|---|---|"]
-        md += [f"| {md_cell(f.get('status', ''))} | {md_cell(f.get('severity', ''))} | {md_cell(f.get('title', ''), 90)} | {md_cell(f.get('detail', ''), 120)} |"
-               for f in report["findings"][:200]]
+        md += [f"| {md_cell(f.get('status', ''))} | {md_cell(f.get('severity', ''))} | {md_cell(f.get('title', ''))} | {md_cell(f.get('detail', ''))} |"
+               for f in report["findings"] if isinstance(f, dict)]
+        for index, finding in enumerate(report["findings"], 1):
+            if not isinstance(finding, dict):
+                continue
+            extras = {k: v for k, v in finding.items() if k not in ("status", "severity", "title", "detail") and v not in (None, "", [], {})}
+            if extras:
+                md += ["", f"### Finding {index}: {md_cell(finding.get('title', ''))}", ""]
+                for key, value in extras.items():
+                    md.append(f"- **{md_cell(key)}:** {md_cell(json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else value)}")
+    # Preserve scanner-specific evidence (FIPS checks, per-host OpenSCAP results,
+    # runtime diagnostics) as well as the common summary/findings schema.
+    for key in ("checks", "hosts", "results", "diagnostics"):
+        if report.get(key):
+            md += ["", "## " + key.replace("_", " ").title(), "", "```json",
+                   json.dumps(report[key], indent=2, ensure_ascii=False, default=str).replace("`", "\\u0060"), "```"]
+    if report.get("raw"):
+        md += ["", f"**Raw scanner output:** {md_cell(report['raw'])}"]
     if report.get("hint"):   # the panel's "next step" row, so the saved report says it too
         md += ["", f"**Next step:** {' '.join(str(report['hint']).split())}"]
     md.append("")
@@ -190,12 +215,16 @@ def _drop_empty(path: Path) -> bool:
 def _panel(title: str, summary: dict, findings: list[dict], path: Path | None, verdict: str | None = None, limit: int = 12, note: str = "",
            hint: str = "") -> None:
     rows: list = [(k, v) for k, v in summary.items()]
-    bad = [f for f in findings if str(f.get("status", "")).upper() in ("FAIL", "FAILED", "CRITICAL", "HIGH") or f.get("severity") in ("CRITICAL", "HIGH")]
+    bad = [f for f in findings if str(f.get("status", "")).upper() in
+           ("FAIL", "FAILED", "CRITICAL", "HIGH", "UNKNOWN", "MANUAL", "WARN", "ERROR", "SKIP", "SKIPPED") or
+           not f.get("status") and f.get("severity") in ("CRITICAL", "HIGH")]
     if bad:
         rows.append(("", ""))
         rows.append((ui.style(f"top findings ({len(bad)})", "bold", "text"), ""))
         for f in bad[:limit]:
-            rows.append((ui.style(str(f.get("severity") or f.get("status") or "").ljust(8), "rose"),
+            status = str(f.get("status", "")).upper()
+            label = " · ".join(str(x) for x in (status, f.get("severity")) if x)
+            rows.append((ui.style(label.ljust(8), "seed" if status in ("UNKNOWN", "MANUAL", "WARN", "SKIP", "SKIPPED") else "rose"),
                          f"{ui.clip(str(f.get('title', '')), 70)}   {ui.dim(ui.clip(str(f.get('detail', '')), 60))}"))
         if len(bad) > limit:
             rows.append(("", ui.dim(f"... {len(bad) - limit} more in the report")))
@@ -232,7 +261,7 @@ def _kubectl(ctx, *args: str, input: str | None = None, timeout: int = 300) -> s
 
 def _fetch(url: str, timeout: int = 60) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "cloudseed"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with urllib.request.urlopen(req, timeout=timeout, context=netutil.https_context()) as resp:
         return resp.read()
 
 
@@ -242,7 +271,7 @@ def _latest_tag(repo: str) -> str:
         return str(json.loads(_fetch(f"https://api.github.com/repos/{repo}/releases/latest", 30))["tag_name"])
     except (urllib.error.URLError, OSError, ValueError, KeyError):
         req = urllib.request.Request(f"https://github.com/{repo}/releases/latest", headers={"User-Agent": "cloudseed"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=30, context=netutil.https_context()) as resp:
             final = resp.geturl()
         m = re.search(r"/releases/tag/([^/?#]+)", final)
         if not m:
@@ -682,20 +711,47 @@ def cis(ctx, stig: bool = False) -> Path:
     if ctx.distro in ("rke2", "kubeadm"):
         runs = [("master", "master,etcd,controlplane,policies"), ("node", "node")]
     findings: list[dict] = []
-    totals = {"pass": 0, "fail": 0, "warn": 0, "info": 0}
+    checks, raw_results, diagnostics = [], [], []
+    totals = {"pass": 0, "fail": 0, "warn": 0, "info": 0, "unknown": 0}
     used: list[str] = []
     not_evaluated = 0
     default_ns: dict = {}   # the default namespace's own listing, read once per scan
     try:
         for role, targets in runs:
-            data = _kube_bench_run(ctx, role, benchmark or "", targets, version=version)
-            for control in data.get("Controls", []):
+            try:
+                data = _kube_bench_run(ctx, role, benchmark or "", targets, version=version)
+            except ui.Abort as exc:
+                diagnostics.append(f"{role}: {exc}")
+                continue
+            raw_results.append({"role": role, "result": data})
+            before = len(checks)
+            controls = data.get("Controls") if isinstance(data, dict) else None
+            if not isinstance(controls, list):
+                diagnostics.append(f"{role}: kube-bench returned an invalid Controls list.")
+                continue
+            for control in controls:
+                if not isinstance(control, dict) or not isinstance(control.get("tests"), list):
+                    diagnostics.append(f"{role}: a benchmark control could not be read.")
+                    continue
                 if control.get("version") and control["version"] not in used:
                     used.append(str(control["version"]))
                 for test in control.get("tests", []):
+                    if not isinstance(test, dict) or not isinstance(test.get("results"), list):
+                        diagnostics.append(f"{role}: benchmark test results could not be read.")
+                        continue
                     for res in test.get("results", []):
+                        if not isinstance(res, dict):
+                            diagnostics.append(f"{role}: an individual check result could not be read.")
+                            continue
                         st = str(res.get("status", "")).upper()
-                        detail = (res.get("remediation") or "").strip().replace("\n", " ")[:300]
+                        st = st if st in ("PASS", "FAIL", "WARN", "INFO") else "UNKNOWN"
+                        detail = str(res.get("remediation") or "").strip()
+                        unknown_reason = ""
+                        if st == "UNKNOWN":
+                            supplied = res.get("status")
+                            unknown_reason = ("kube-bench did not supply a result status." if supplied is None or supplied == "" else
+                                              f"kube-bench supplied unsupported result status {supplied!r}; this check's outcome cannot be determined.")
+                            detail = unknown_reason + (" " + detail if detail else "")
                         scope = _default_ns_scope(res) if st in ("PASS", "FAIL", "WARN") else None
                         if scope:
                             st, verdict_detail = _default_ns_result(ctx, res, scope, default_ns)
@@ -705,20 +761,49 @@ def cis(ctx, stig: bool = False) -> Path:
                             st, detail = "WARN", "not evaluated: kube-bench could not query the Kubernetes API from its pod"
                             not_evaluated += 1
                         totals[st.lower()] = totals.get(st.lower(), 0) + 1
-                        if st in ("FAIL", "WARN"):
-                            findings.append({"status": st, "severity": "HIGH" if st == "FAIL" else "MEDIUM", "title": f"{res.get('test_number')} {res.get('test_desc')}",
-                                             "detail": detail, "node_type": control.get("node_type"), "section": test.get("section")})
+                        check = {"id": str(res.get("test_number") or ""), "status": st,
+                                 "severity": "HIGH" if st == "FAIL" else "MEDIUM" if st == "WARN" else "INFO",
+                                 "title": f"{res.get('test_number')} {res.get('test_desc')}", "detail": detail,
+                                 "remediation": str(res.get("remediation") or ""), "reason": res.get("reason"),
+                                 "actual_value": res.get("actual_value"), "node_type": control.get("node_type"),
+                                 "section": test.get("section"), "role": role, "scanner_status": res.get("status")}
+                        if unknown_reason:
+                            check["reason"] = unknown_reason + (" Scanner reason: " + str(res["reason"]) if res.get("reason") else "")
+                            check["remediation"] = "Inspect the raw kube-bench result and scanner version, resolve the missing or unsupported status, then rerun this benchmark." + (
+                                " Scanner guidance: " + check["remediation"] if check["remediation"] else "")
+                        elif st == "WARN":
+                            if not check["reason"]:
+                                check["reason"] = detail or "kube-bench reported WARN, which requires manual attention; the scanner supplied no check-specific explanation."
+                            if not detail:
+                                check["detail"] = check["reason"]
+                            if not check["remediation"]:
+                                check["remediation"] = "Review this check in the raw kube-bench report, complete any required manual assessment or restore unavailable API access, then rerun the benchmark."
+                        checks.append(check)
+                        if st != "PASS":
+                            findings.append(check)
+            if len(checks) == before:
+                diagnostics.append(f"{role}: kube-bench returned no evaluated checks.")
     finally:
         if any(_runs_policies(t) for _, t in runs):
             _kube_bench_cleanup_rbac(ctx)
     ran = ", ".join(used) or benchmark or (f"CIS for Kubernetes {version}" if version else "auto-detected")
     if benchmark and used and used != [benchmark]:
         ui.warn(f"kube-bench ran {ran}, not the {ctx.distro} benchmark {benchmark}: the paths it checks may not match this distro.")
+        diagnostics.append(f"Requested benchmark {benchmark} differs from reported benchmark {ran}; applicability requires review.")
     kind = "stig-k8s" if stig else "cis"
-    summary = {"benchmark": ran, "distro": ctx.distro, "pass": totals["pass"], "fail": totals["fail"], "warn": totals["warn"], "info": totals["info"]}
+    summary = {"benchmark": ran, "distro": ctx.distro, **totals}
     if not_evaluated:
         summary["not evaluated"] = not_evaluated
-    report = {"summary": summary, "findings": findings, "tool": "kube-bench", "verdict": "PASS" if totals["fail"] == 0 else "FAIL"}
+    # kube-bench defines INFO as informational / intentionally skipped: it does
+    # not request further action. WARN, in contrast, requires manual attention.
+    # Keep INFO visible without treating it as an evidence collection failure.
+    incomplete = bool(diagnostics or not checks or totals["warn"] or totals["unknown"] or not_evaluated)
+    informational_only = bool(checks) and not totals["pass"] and totals["info"] == len(checks)
+    report = {"summary": summary, "findings": findings, "checks": checks, "raw_results": raw_results,
+              "diagnostics": diagnostics, "tool": "kube-bench",
+              "failure_policy": "Any failed check fails this benchmark; manual, unknown, unevaluated, or missing checks make it incomplete. Informational checks do not block a completed assessment; an informational-only scope is N/A.",
+              "coverage_limits": ["kube-bench samples the scheduled node for each role; this is not evidence that every node or every framework requirement was assessed."],
+              "verdict": "FAIL" if totals["fail"] else "INCOMPLETE" if incomplete else "N/A" if informational_only else "PASS"}
     hint = "" if stig else _cis_profile_hint(ctx, totals["fail"])
     if hint:
         report["hint"] = hint
@@ -730,6 +815,14 @@ def cis(ctx, stig: bool = False) -> Path:
 
 
 # ---------------------------------------------------------------- kubescape
+
+def _scanner_error_count(output: str) -> int:
+    """Count execution-error messages without persisting possible credentials from stderr."""
+    clean = re.sub(r"\x1b\[[0-9;]*m", "", output or "")
+    return sum(bool(re.search(r"\b(?:ERROR|FATAL|AccessDenied\w*|Unauthorized\w*|Forbidden|EndpointConnectionError)\b|"
+                              r"Could not connect to the endpoint URL|\baccess denied\b", line, re.I))
+               for line in clean.splitlines())
+
 
 def kube(ctx, frameworks: str | None = None) -> Path:
     from . import platform as platformmod
@@ -749,34 +842,136 @@ def kube(ctx, frameworks: str | None = None) -> Path:
         raise ui.Abort(f"kubescape did not finish within 30 minutes. Check the cluster connection - {platformmod._unreachable_hint(ctx)} "
                        f"(then: cs kubectl {ctx.target} --env {ctx.env.name} get nodes) - and re-run: cs scan kube {ctx.target} --env {ctx.env.name}")
     try:
-        data = json.loads(out.read_text())
+        data = json.loads(out.read_text(), parse_constant=str)  # preserve invalid NaN/Infinity as text, never emit invalid report JSON
     except (OSError, ValueError):
         _drop_empty(out)
         raise ui.Abort(f"kubescape failed (exit {r.returncode}): {tail_text(r.stderr or r.stdout, 600, lines=2)}")
+    if not isinstance(data, dict) or not isinstance(data.get("summaryDetails", {}), dict):
+        raise ui.Abort(f"kubescape wrote an invalid report ({out}): expected a summaryDetails object.")
     sd = data.get("summaryDetails", {})
-    findings = []
-    counts = {"passed": 0, "failed": 0, "skipped": 0}
-    for cid, c in (sd.get("controls") or {}).items():
+    findings, checks, diagnostics = [], [], []
+    counts = {"passed": 0, "failed": 0, "skipped": 0, "not applicable": 0}
+    controls = sd.get("controls") or {}
+    if not isinstance(controls, dict):
+        raise ui.Abort(f"kubescape wrote an invalid report ({out}): expected controls keyed by ID.")
+    for cid, c in controls.items():
+        if not isinstance(c, dict):
+            diagnostics.append(f"Control {cid} has no readable result.")
+            counts["unknown"] = counts.get("unknown", 0) + 1
+            why = "Kubescape returned a null control result." if c is None else f"Kubescape returned a {type(c).__name__} instead of a control result object."
+            findings.append({"id": cid, "status": "UNKNOWN", "severity": "UNKNOWN", "title": str(cid),
+                             "detail": why, "reason": why, "evidence": c,
+                             "remediation": "Inspect the raw Kubescape report and scanner version, then rerun the scan to obtain a readable control result."})
+            continue
         raw = c.get("status")
-        st = str(raw if isinstance(raw, str) else (raw or {}).get("status") or (c.get("statusInfo") or {}).get("status", "")).lower()
+        status_info = c.get("statusInfo") or {}
+        supplied_status = raw.get("status") if isinstance(raw, dict) else raw
+        if supplied_status is None or supplied_status == "":
+            supplied_status = status_info.get("status") if isinstance(status_info, dict) else None
+        st = str(supplied_status).lower()
+        st = st if st in ("passed", "failed", "skipped") else "unknown"
+        unknown_reasons = []
+        action = ""
+        if st == "unknown":
+            unknown_reasons.append("Kubescape did not supply a recognized result status." if supplied_status is None or supplied_status == "" else
+                                   f"Kubescape supplied unsupported result status {supplied_status!r}.")
+            action = "Inspect the raw control result and scanner version, resolve the missing or unsupported status, then rerun the scan."
+        partial_coverage = isinstance(status_info, dict) and status_info.get("subStatus") == "incompleteCoverage"
+        if partial_coverage:
+            diagnostics.append(f"Control {cid}: Kubescape reports incompleteCoverage; only part of the resource evidence was evaluated.")
+            if st == "passed":
+                st = "unknown"
+                unknown_reasons.append("Kubescape explicitly reported incompleteCoverage; only part of the resource evidence was evaluated.")
+            action = "Inspect the raw control result and scanner collection messages, restore the missing resource coverage, then rerun the scan."
+        counters = c.get("ResourceCounters") or c.get("resourceCounters") or {}
+        counters = counters if isinstance(counters, dict) else {}
+        # Kubescape v4.0.14 / opa-utils v0.0.312 uses passed+irrelevant for no
+        # matching resources. It also propagates irrelevant from individual
+        # resources, so only explicit all-zero counters establish whole-control N/A.
+        counter_names = ("passedResources", "failedResources", "skippedResources", "excludedResources")
+        if (st == "passed" and isinstance(status_info, dict) and status_info.get("subStatus") == "irrelevant"
+                and all(type(counters.get(k)) is int and counters[k] == 0 for k in counter_names)):
+            st = "not applicable"
         counts[st] = counts.get(st, 0) + 1
-        if st == "failed":
-            rc = c.get("ResourceCounters") or c.get("resourceCounters") or {}
-            sev = str(c.get("severity") or "").upper()
-            if sev not in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
-                f_ = c.get("scoreFactor", 0)
-                sev = "CRITICAL" if f_ >= 9 else "HIGH" if f_ >= 7 else "MEDIUM" if f_ >= 4 else "LOW"
-            findings.append({"status": "FAIL", "severity": sev, "title": f"{cid} {c.get('name', '')}",
-                             "detail": f"{rc.get('failedResources', '?')} failing resources ({c.get('category', {}).get('name', '')})"})
-    findings.sort(key=lambda f: ["CRITICAL", "HIGH", "MEDIUM", "LOW"].index(f["severity"]))
+        sev = str(c.get("severity") or "").upper()
+        if sev not in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
+            try:
+                factor = float(c["scoreFactor"])
+                if not 0 <= factor <= 10:  # also rejects NaN and infinities
+                    raise ValueError
+                sev = "CRITICAL" if factor >= 9 else "HIGH" if factor >= 7 else "MEDIUM" if factor >= 4 else "LOW"
+            except (KeyError, TypeError, ValueError):
+                sev = "UNKNOWN"
+                unknown_reasons.append(f"Kubescape supplied no recognized severity and no valid scoreFactor from 0 to 10 (severity={c.get('severity')!r}, scoreFactor={c.get('scoreFactor')!r}).")
+                if not action:
+                    action = "Review this control's published severity and raw result, update the scanner if needed, then rerun before relying on the severity threshold."
+        status = {"passed": "PASS", "failed": "FAIL", "skipped": "SKIP", "not applicable": "NOT_APPLICABLE", "unknown": "UNKNOWN"}[st]
+        category = c.get("category") or {}
+        category = category.get("name", "") if isinstance(category, dict) else str(category)
+        detail = f"{counters.get('failedResources', '?')} failing resources ({category})" if st == "failed" else str(c.get("statusInfo") or raw or "No evaluation status")
+        if partial_coverage:
+            detail = "Kubescape reported incomplete resource coverage; this control is not fully verified. " + detail
+        reason = ""
+        if st == "skipped":
+            substatus = status_info.get("subStatus") if isinstance(status_info, dict) else None
+            substatus = substatus if isinstance(substatus, str) else None
+            why_and_action = {
+                "notEvaluated": ("Required resource types could not be collected.", "Inspect collection errors, restore access to the required resource types, then rerun the scan."),
+                "configuration": ("The control's required configuration is missing.", "Configure the inputs required by this Kubescape control, then rerun the scan."),
+                "integration": ("The control requires an integration that was not available to this scan.", "Review the scanner's integration details, configure the required integration, then rerun the scan."),
+                "requires review": ("Kubescape marks this control as requiring review.", "Complete the review described by this control and record the assessment evidence."),
+                "manual review": ("Kubescape marks this control as requiring manual review.", "Complete the manual assessment described by this control and record the evidence."),
+                "incompleteCoverage": ("Kubescape explicitly reported incomplete resource coverage.", "Inspect collection messages, restore the missing resource coverage, then rerun the scan."),
+            }
+            reason, action = why_and_action.get(substatus, (
+                "Kubescape skipped this control without a recognized structured reason.",
+                "Inspect this control's raw statusInfo and scanner messages, determine why it was skipped, then complete the assessment or rerun it."))
+            detail = reason + " " + detail
+        if unknown_reasons:
+            detail = " ".join(unknown_reasons) + " " + detail
+        check = {"id": cid, "status": status, "severity": sev, "title": f"{cid} {c.get('name', '')}",
+                 "detail": detail, "evidence": c}
+        if reason or unknown_reasons:
+            check["reason"] = " ".join([reason, *unknown_reasons]).strip()
+        if action:
+            check["remediation"] = action
+        checks.append(check)
+        if st != "passed":
+            findings.append(check)
+    order = {s: i for i, s in enumerate(("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"))}
+    findings.sort(key=lambda f: (f["status"] != "FAIL", order[f["severity"]]))
+    if not controls:
+        diagnostics.append("Kubescape returned no controls; cluster coverage could not be established.")
+    if r.returncode not in (0, 1) or (r.returncode == 1 and not counts["failed"]):
+        diagnostics.append(f"Kubescape exited {r.returncode}; available results may be partial.")
+    error_lines = _scanner_error_count((r.stderr or "") + "\n" + (r.stdout or ""))
+    if error_lines:
+        diagnostics.append(f"Kubescape reported {error_lines} execution/permission/endpoint error message(s); coverage may be incomplete.")
+    if any(f["status"] == "FAIL" and f["severity"] == "UNKNOWN" for f in findings):
+        diagnostics.append("Some failed controls have unknown severity; their threshold outcome requires review.")
+    def percentage(value):
+        try:
+            if value is None:
+                return "-"
+            score_value = float(value)
+            return f"{round(score_value, 1)}%" if 0 <= score_value <= 100 else "unknown"
+        except (TypeError, ValueError):
+            return "unknown"
     score = sd.get("complianceScore") if sd.get("complianceScore") is not None else sd.get("score")
-    per_fw = ", ".join(f"{f.get('name')} {round(float(f.get('complianceScore', 0)), 1)}%" for f in (sd.get("frameworks") or []) if isinstance(f, dict))
+    per_fw = ", ".join(f"{f.get('name')} {percentage(f.get('complianceScore'))}" for f in (sd.get("frameworks") or []) if isinstance(f, dict))
+    failed_threshold = any(f["status"] == "FAIL" and f["severity"] in ("CRITICAL", "HIGH") for f in findings)
+    incomplete = bool(diagnostics or counts["skipped"] or counts.get("unknown"))
+    all_na = bool(controls) and counts["not applicable"] == len(controls)
     report = {"run": run, "summary": {"frameworks": fw, "controls passed": counts.get("passed", 0), "controls failed": counts.get("failed", 0), "skipped": counts.get("skipped", 0),
-                          "compliance score": (f"{round(float(score), 1)}%" if score is not None else "-") + (f"  ({per_fw})" if per_fw else "")}, "findings": findings, "tool": "kubescape", "raw": str(out),
-              "verdict": "PASS" if not any(f["severity"] in ("CRITICAL", "HIGH") for f in findings) else "FAIL"}
+                          "not applicable": counts["not applicable"], "unknown": counts.get("unknown", 0),
+                          "compliance score": percentage(score) + (f"  ({per_fw})" if per_fw else "")}, "findings": findings, "checks": checks,
+              "tool": "kubescape", "raw": str(out), "scanner_rc": r.returncode, "diagnostics": diagnostics,
+              "failure_policy": "Critical or High failed controls fail this scan. Medium and Low failures remain findings even when the threshold passes. Explicit irrelevant controls with no matching resources are not applicable. Skipped, unknown, empty or partial evidence makes it incomplete.",
+              "coverage_limits": ["Results cover only resources and controls Kubescape could evaluate with the current Kubernetes identity; manual organizational controls require separate review."],
+              "verdict": "FAIL" if failed_threshold else "INCOMPLETE" if incomplete else "N/A" if all_na else "PASS"}
     path = save_report(ctx.env, "kube", report)
     _panel(f"Kubernetes posture (kubescape {fw}) · {ctx.env.id}", report["summary"], findings, path,
-           verdict=f"{report['verdict']} - {len(findings)} failing controls")
+           verdict=f"{report['verdict']} - {counts['failed']} failing controls (failure threshold: High/Critical)")
     return path
 
 
@@ -785,23 +980,73 @@ def kube(ctx, frameworks: str | None = None) -> Path:
 def images(ctx) -> Path:
     _ensure_kubectl()
     findings: list[dict] = []
-    sev = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+    def explain_severity(finding, supplied):
+        if finding["severity"] != "UNKNOWN":
+            return finding
+        reason = ("Trivy did not supply a vulnerability severity." if supplied is None or supplied == "" else
+                  "Trivy explicitly reported UNKNOWN severity; no supported severity classification was supplied." if str(supplied).upper() == "UNKNOWN" else
+                  f"Trivy supplied unsupported vulnerability severity {supplied!r}.")
+        finding["reason"] = reason
+        finding["detail"] = reason + " " + finding["detail"]
+        finding["remediation"] = "Review the vulnerability's vendor advisory and refresh the scanner/database before relying on its severity. " + finding["remediation"]
+        return finding
+    sev = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
+    diagnostics = []
+    observed = 0
+    scanner_rc = 0
     source = "trivy-operator"
     r = _kubectl(ctx, "get", "vulnerabilityreports", "-A", "-o", "json")
     try:
-        operator_items = json.loads(r.stdout or "{}").get("items") if r.returncode == 0 else None
-    except ValueError:
+        operator_items = json.loads(r.stdout or "{}", parse_constant=str).get("items") if r.returncode == 0 else None
+    except (ValueError, AttributeError):
+        operator_items = None
+    if not isinstance(operator_items, list):
         operator_items = None
     raw, run = None, run_stamp()
     if operator_items:
+        raw, run = claim_run_path(_raw_dir(ctx.env), "trivy-operator-", ".json", run)
+        raw.write_text(r.stdout)
         for it in operator_items:
-            s = it.get("report", {}).get("summary", {})
+            report_data = it.get("report") if isinstance(it, dict) else None
+            if not isinstance(report_data, dict) or not isinstance(report_data.get("summary"), dict):
+                diagnostics.append("An operator report has no readable vulnerability summary.")
+                continue
+            observed += 1
+            s = report_data["summary"]
+            if not any(k.lower() + "Count" in s for k in sev):
+                diagnostics.append("An operator summary contains no severity totals.")
+            listed = {k: 0 for k in sev}
+            metadata = it.get("metadata") or {}
+            metadata = metadata if isinstance(metadata, dict) else {}
+            labels = metadata.get("labels") or {}
+            labels = labels if isinstance(labels, dict) else {}
+            resource = f"{metadata.get('namespace', '?')}/{labels.get('trivy-operator.resource.name', metadata.get('name', '?'))}"
+            vulnerabilities = report_data.get("vulnerabilities")
+            if vulnerabilities is None:
+                vulnerabilities = []
+            if not isinstance(vulnerabilities, list):
+                diagnostics.append(f"{resource}: vulnerability details are malformed.")
+                vulnerabilities = []
+            for v in vulnerabilities:
+                if not isinstance(v, dict):
+                    diagnostics.append(f"{resource}: an individual vulnerability could not be read.")
+                    continue
+                severity = str(v.get("severity") or "UNKNOWN").upper()
+                severity = severity if severity in sev else "UNKNOWN"
+                listed[severity] += 1
+                findings.append(explain_severity({"id": str(v.get("vulnerabilityID") or ""), "status": "FAIL", "severity": severity,
+                                 "title": f"{v.get('vulnerabilityID')} {v.get('resource')} {v.get('installedVersion')}",
+                                 "detail": f"{resource}  fixed: {v.get('fixedVersion') or '-'}",
+                                 "resource": resource, "remediation": f"Upgrade to {v['fixedVersion']}" if v.get("fixedVersion") else "No fixed version was reported; review vendor guidance and exposure.",
+                                 "evidence": v}, v.get("severity")))
             for k in sev:
-                sev[k] += int(s.get(f"{k.lower()}Count", 0))
-            crit = [v for v in it.get("report", {}).get("vulnerabilities", []) if v.get("severity") in ("CRITICAL", "HIGH")]
-            for v in crit:
-                findings.append({"status": "FAIL", "severity": v["severity"], "title": f"{v.get('vulnerabilityID')} {v.get('resource')} {v.get('installedVersion')}",
-                                 "detail": f"{it['metadata']['namespace']}/{it['metadata'].get('labels', {}).get('trivy-operator.resource.name', it['metadata']['name'])}  fixed: {v.get('fixedVersion') or '-'}"})
+                declared = s.get(f"{k.lower()}Count", 0)
+                if type(declared) is not int or declared < 0:
+                    declared = 0
+                    diagnostics.append(f"{resource}: the {k.lower()} total is invalid.")
+                sev[k] += max(declared, listed[k])
+                if declared > listed[k]:
+                    diagnostics.append(f"{resource}: summary reports {declared} {k.lower()} vulnerabilities but only {listed[k]} details are available.")
     else:
         source = "trivy k8s"
         trivy = _tool("trivy", "trivy", _install_trivy)
@@ -809,7 +1054,7 @@ def images(ctx) -> Path:
         raw = out
         try:
             with ui.Spinner("trivy k8s (all namespaces, vulnerabilities; first run downloads the DB)") as sp:
-                p = subprocess.run([trivy, "k8s", "--report", "all", "--scanners", "vuln", "--format", "json", "--output", str(out), "--severity", "CRITICAL,HIGH,MEDIUM,LOW", "--timeout", "30m"],
+                p = subprocess.run([trivy, "k8s", "--report", "all", "--scanners", "vuln", "--format", "json", "--output", str(out), "--severity", "CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN", "--timeout", "30m"],
                                    env=ctx.procenv(), capture_output=True, text=True, timeout=3600)
                 if p.returncode == 0:
                     sp.done_text = "trivy finished"
@@ -820,34 +1065,62 @@ def images(ctx) -> Path:
             raise ui.Abort(f"trivy failed (exit {p.returncode}): {tail_text(p.stderr or p.stdout, 600, lines=2) or 'no output'}")
         if p.returncode != 0:   # a report exists: some targets could not be scanned
             ui.warn(f"trivy reported errors: {tail_text(p.stderr or p.stdout, 300, lines=2)}")
+            diagnostics.append(f"Trivy exited {p.returncode}; available results may be partial.")
+        error_lines = _scanner_error_count((p.stderr or "") + "\n" + (p.stdout or ""))
+        if error_lines:
+            diagnostics.append(f"Trivy reported {error_lines} execution/permission/endpoint error message(s); coverage may be incomplete.")
+        scanner_rc = p.returncode
 
         def walk(o, where=""):
+            nonlocal observed
             if isinstance(o, dict):
-                for v in o.get("Vulnerabilities") or []:
-                    s = v.get("Severity", "")
-                    if s in sev:
-                        sev[s] += 1
-                    if s in ("CRITICAL", "HIGH"):
-                        findings.append({"status": "FAIL", "severity": s, "title": f"{v.get('VulnerabilityID')} {v.get('PkgName')} {v.get('InstalledVersion')}",
-                                         "detail": f"{where} fixed: {v.get('FixedVersion') or '-'}"})
+                where = o.get("Target") or o.get("Name") or where
+                if "Vulnerabilities" in o or ("Target" in o and any(k in o for k in ("Class", "Type", "Packages"))):
+                    observed += 1
+                for key in ("Error", "Errors"):
+                    if o.get(key):
+                        diagnostics.append(f"{where or 'scan target'}: {o[key]}")
+                vulnerabilities = o.get("Vulnerabilities")
+                if vulnerabilities is None:
+                    vulnerabilities = []
+                if not isinstance(vulnerabilities, list):
+                    diagnostics.append(f"{where or 'scan target'}: vulnerability details are malformed.")
+                    vulnerabilities = []
+                for v in vulnerabilities:
+                    if not isinstance(v, dict):
+                        diagnostics.append(f"{where or 'scan target'}: an individual vulnerability could not be read.")
+                        continue
+                    s = str(v.get("Severity") or "UNKNOWN").upper()
+                    s = s if s in sev else "UNKNOWN"
+                    sev[s] += 1
+                    findings.append(explain_severity({"id": str(v.get("VulnerabilityID") or ""), "status": "FAIL", "severity": s,
+                                     "title": f"{v.get('VulnerabilityID')} {v.get('PkgName')} {v.get('InstalledVersion')}",
+                                     "detail": f"{where} fixed: {v.get('FixedVersion') or '-'}", "resource": where,
+                                     "remediation": f"Upgrade to {v['FixedVersion']}" if v.get("FixedVersion") else "No fixed version was reported; review vendor guidance and exposure.",
+                                     "evidence": v}, v.get("Severity")))
                 for k, v in o.items():
                     walk(v, o.get("Target") or o.get("Name") or where)
             elif isinstance(o, list):
                 for v in o:
                     walk(v, where)
         try:
-            walk(json.loads(out.read_text()))
+            walk(json.loads(out.read_text(), parse_constant=str))
         except ValueError:
             raise ui.Abort(f"trivy wrote an unreadable report ({out}): {tail_text(p.stderr or p.stdout, 400, lines=2)}")
-    findings.sort(key=lambda f: ["CRITICAL", "HIGH"].index(f["severity"]))  # stable: keeps the tool's order inside a severity
+    findings.sort(key=lambda f: list(sev).index(f["severity"]))  # stable: keeps the tool's order inside a severity
     total_bad = len(findings)
-    findings = findings[:IMAGE_FINDINGS_MAX]
-    report = {"run": run, "summary": {"source": source, **{k.lower(): v for k, v in sev.items()}}, "findings": findings, "tool": source,
-              "findings_total": total_bad, "verdict": "PASS" if sev["CRITICAL"] == 0 else "FAIL"}
+    if not observed:
+        diagnostics.append("No readable image scan results were returned; workload image coverage could not be established.")
+    if sev["UNKNOWN"]:
+        diagnostics.append("Some vulnerabilities have unknown severity and require review.")
+    report = {"run": run, "summary": {"source": source, "reports observed": observed, **{k.lower(): v for k, v in sev.items()}}, "findings": findings, "tool": source,
+              "findings_total": total_bad, "scanner_rc": scanner_rc, "diagnostics": diagnostics,
+              "failure_policy": "Critical vulnerabilities fail this scan. High, Medium and Low vulnerabilities remain findings even when the threshold passes. Missing, partial or unknown-severity evidence makes it incomplete.",
+              "coverage_limits": ["Results cover reported/scanned images only; they do not prove every workload image was scanned or that cached operator reports are current."],
+              "verdict": "FAIL" if sev["CRITICAL"] else "INCOMPLETE" if diagnostics else "PASS"}
     if raw:
         report["raw"] = str(raw)
-    note = (f"the report lists the first {len(findings)} of {total_bad} critical/high findings (critical first)"
-            + (f"; all of them: {raw}" if raw else "")) if total_bad > len(findings) else ""
+    note = "The saved report retains every reported severity; failure threshold: Critical. Review High/Medium/Low findings too."
     path = save_report(ctx.env, "images", report)
     _panel(f"Workload vulnerabilities ({source}) · {ctx.env.id}", report["summary"], findings, path,
            verdict=f"{report['verdict']} - {sev['CRITICAL']} critical, {sev['HIGH']} high", note=note)
@@ -858,7 +1131,8 @@ def images(ctx) -> Path:
 
 def _ssg_version() -> str:
     try:
-        with urllib.request.urlopen("https://api.github.com/repos/ComplianceAsCode/content/releases/latest", timeout=10) as r:
+        with urllib.request.urlopen("https://api.github.com/repos/ComplianceAsCode/content/releases/latest", timeout=10,
+                                    context=netutil.https_context()) as r:
             return json.load(r)["tag_name"].lstrip("v")
     except Exception:  # noqa: BLE001
         return SSG_FALLBACK
@@ -984,33 +1258,68 @@ def host(cloud, env, cfg: dict, outputs: dict, which: list[str], profile: str = 
             continue
         per_host[name] = _parse_xccdf(res)
         for rule in per_host[name]["failed_rules"]:
-            findings.append({"status": "FAIL", "severity": rule["severity"].upper(), "title": f"{name}: {rule['title']}", "detail": rule["id"]})
+            findings.append({"status": "FAIL", "severity": rule["severity"].upper(), "title": f"{name}: {rule['title']}",
+                             "detail": rule.get("detail") or rule["id"], "id": rule["id"],
+                             "remediation": rule.get("remediation") or "Review this rule in the host's OpenSCAP HTML report and the selected profile."})
+        for rule in per_host[name].get("unresolved_rules", []):
+            findings.append({"status": "UNKNOWN", "severity": rule["severity"].upper(), "title": f"{name}: {rule['title']}",
+                             "detail": rule["detail"], "id": rule["id"], "remediation": rule["remediation"]})
         meta = dest / name / "meta.json"
         if meta.exists():
-            per_host[name]["meta"] = json.loads(meta.read_text())
+            try:
+                metadata = json.loads(meta.read_text())
+                if not isinstance(metadata, dict):
+                    raise ValueError("metadata is not an object")
+                per_host[name]["meta"] = metadata
+            except (OSError, ValueError):
+                per_host[name]["metadata_error"] = "Host profile metadata is unreadable."
     findings.sort(key=lambda f: ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"].index(f["severity"]) if f["severity"] in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN") else 9)
-    scanned = [r for r in per_host.values() if "score" in r]
+    scanned = [r for r in per_host.values() if "score" in r and not r.get("parse_error")]
     not_applicable = [r for r in per_host.values() if r.get("skipped")]   # no content for this profile: n/a, not an error
     # numeric totals (summed over hosts) so dashboards can tell pass from fail; hosts without results are counted, never "clean"
+    result_kinds = ("pass", "fail", "notapplicable", "notchecked", "error", "unknown", "informational", "notselected")
+    excluded_kinds = ("notapplicable", "informational", "notselected")
     summary = {"profile": profile, "ssg": ssg, "pass": sum(r["pass"] for r in scanned), "fail": sum(r["fail"] for r in scanned)}
+    summary["unknown"] = sum(r.get("notchecked", 0) + r.get("error", 0) + r.get("unknown", 0)
+                             + int(not sum(r.get(k, 0) for k in result_kinds))
+                             + int(bool(r.get("metadata_error"))) for r in scanned)
+    # XCCDF informational rules were checked for information; notselected rules are outside this profile.
+    # Keep these visible without treating an explicit exclusion as missing evidence.
+    for kind in excluded_kinds:
+        summary[kind] = sum(r.get(kind, 0) for r in scanned)
     if len(scanned) + len(not_applicable) < len(per_host):
         summary["errors"] = len(per_host) - len(scanned) - len(not_applicable)
     for name, r in per_host.items():
-        summary[name] = (f"score {r['score']}%  pass {r['pass']}  fail {r['fail']}  n/a {r['notapplicable']}  ({r.get('meta', {}).get('profile', '?').split('_profile_')[-1]})"
-                         if "score" in r else r["error"])
-    report = {"run": run, "summary": summary, "findings": findings, "hosts": per_host, "tool": "openscap", "raw": str(dest), "ansible_rc": rc}
-    all_na = bool(per_host) and len(not_applicable) == len(per_host)
-    clean = rc == 0 and not findings and not summary.get("errors")   # a host that was not scanned is never "clean"
-    report["verdict"] = "N/A" if all_na else "PASS" if clean else "FAIL"
+        problem = r.get("parse_error") or r.get("metadata_error") or (r.get("error") if isinstance(r.get("error"), str) and not r.get("skipped") else None)
+        empty = "score" in r and not sum(r.get(k, 0) for k in result_kinds)
+        if problem or empty:
+            findings.append({"status": "UNKNOWN", "severity": "MEDIUM", "title": f"{name}: incomplete host scan",
+                             "detail": problem or "The result contains no evaluated applicable checks.",
+                             "remediation": "Inspect the scan log and raw host report, resolve collection or profile errors, then rerun the scan."})
+        summary[name] = (f"score {r['score']}%  pass {r['pass']}  fail {r['fail']}  n/a {r['notapplicable']}  ({str(r.get('meta', {}).get('profile', '?')).split('_profile_')[-1]})"
+                         if "score" in r and not r.get("parse_error") else r.get("parse_error") or r["error"])
+    if rc:
+        findings.append({"status": "UNKNOWN", "severity": "MEDIUM", "title": "OpenSCAP collection did not complete successfully",
+                         "detail": f"The Ansible playbook exited {rc}; available host findings are retained, but coverage may be partial.",
+                         "remediation": "Inspect the Ansible log, resolve execution errors and rerun the scan."})
+    report = {"run": run, "summary": summary, "findings": findings, "hosts": per_host, "tool": "openscap", "raw": str(dest), "ansible_rc": rc,
+              "coverage_limits": ["Only the selected reachable hosts and available profile rules were evaluated.",
+                                  "Manual, not-checked, unknown or error results require review; no-content hosts are explicitly N/A.",
+                                  "Informational and notselected rules do not block completed checks; a scope containing only these or notapplicable rules is N/A.",
+                                  "Scores alone do not establish compliance; inspect every failed rule and unresolved observation."]}
+    all_na = rc == 0 and bool(per_host) and not summary.get("errors") and not summary["unknown"] and \
+        len(not_applicable) + sum(sum(r.get(k, 0) for k in excluded_kinds) > 0 and r["pass"] == 0 and r["fail"] == 0 for r in scanned) == len(per_host)
+    incomplete = rc != 0 or bool(summary.get("errors") or summary["unknown"]) or not scanned
+    report["verdict"] = "N/A" if all_na else "FAIL" if summary["fail"] else "INCOMPLETE" if incomplete else "PASS"
     kind = "stig-host" if profile == "stig" else f"host-{profile}"
     path = save_report(env, kind, report)
     if all_na:
-        verdict = f"N/A - no scanned host has {'DISA STIG' if profile == 'stig' else profile.upper()} content (reasons above)"
+        verdict = f"N/A - no applicable compliance checks for {'DISA STIG' if profile == 'stig' else profile.upper()} on the selected hosts (excluded/informational rules or unavailable profile)"
     elif not scanned:   # nothing was evaluated: no rule count, no score, no HTML report to point at
-        verdict = f"ERROR - no host could be scanned ({summary.get('errors', 0)} without results; see the log above)"
+        verdict = f"INCOMPLETE - no host could be scanned ({summary.get('errors', 0)} without results; see the log above)"
     else:
         worst = min(r["score"] for r in scanned)
-        verdict = (f"{'PASS' if clean else 'FAIL'} - {len(findings)} failed rules, lowest score {worst}%"
+        verdict = (f"{report['verdict']} - {summary['fail']} failed rules, {summary['unknown']} unresolved checks, lowest score {worst}%"
                    + (f"; {summary['errors']} host(s) not scanned" if summary.get("errors") else "")
                    + f"  (HTML reports: {dest}/<host>/report.html)")
     _panel(f"Host {profile.upper()} benchmark (OpenSCAP) · {env.id}", summary, findings, path, verdict=verdict)
@@ -1019,20 +1328,55 @@ def host(cloud, env, cfg: dict, outputs: dict, which: list[str], profile: str = 
 
 def _parse_xccdf(path: Path) -> dict:
     ns = {"x": "http://checklists.nist.gov/xccdf/1.2"}
-    root = ET.parse(path).getroot()
+    counts = {"pass": 0, "fail": 0, "notapplicable": 0, "notchecked": 0, "error": 0, "informational": 0, "notselected": 0, "unknown": 0}
+    try:
+        root = ET.parse(path).getroot()
+    except (ET.ParseError, OSError) as exc:
+        problem = ("The XCCDF result contains malformed XML." if isinstance(exc, ET.ParseError) else
+                   "The XCCDF result file does not exist." if isinstance(exc, FileNotFoundError) else
+                   "Permission was denied while reading the XCCDF result." if isinstance(exc, PermissionError) else
+                   f"The XCCDF result could not be read (filesystem error {exc.errno}).")
+        return {**counts, "score": 0.0, "failed_rules": [], "unresolved_rules": [], "parse_error": problem}
     tr = root.find(".//x:TestResult", ns)
     tr = root if tr is None else tr
-    counts = {"pass": 0, "fail": 0, "notapplicable": 0, "notchecked": 0, "error": 0, "informational": 0, "notselected": 0, "unknown": 0}
-    failed = []
+    failed, unresolved = [], []
+    rules = {r.get("id"): r for r in root.findall(".//x:Rule", ns)}
+    def text_of(element):
+        return " ".join("".join(element.itertext()).split()) if element is not None else ""
     for rr in tr.findall("x:rule-result", ns):
-        res = (rr.findtext("x:result", default="unknown", namespaces=ns) or "unknown").strip()
-        counts[res] = counts.get(res, 0) + 1
-        if res == "fail":
+        res = (rr.findtext("x:result", default="unknown", namespaces=ns) or "unknown").strip().lower()
+        counts[res if res in counts else "unknown"] += 1
+        if res == "fail" or res not in ("pass", "notapplicable", "notselected", "informational"):
             rid = rr.get("idref", "")
-            failed.append({"id": rid, "severity": rr.get("severity", "unknown"), "title": rid.split("_rule_")[-1].replace("_", " ")})
+            rule = rules.get(rid)
+            title = text_of(rule.find("x:title", ns)) if rule is not None else ""
+            remediation = text_of(rule.find("x:fixtext", ns)) if rule is not None else ""
+            detail = " · ".join(text_of(m) for m in rr.findall("x:message", ns))
+            reason = {"notchecked": "OpenSCAP did not execute this check; its automated result cannot establish compliance.",
+                      "error": "OpenSCAP reported a check execution error.",
+                      "unknown": "OpenSCAP supplied no determined compliance result for this check."}.get(res, "")
+            if not reason and res != "fail":
+                reason = "OpenSCAP supplied an unsupported result status; the check outcome cannot be determined."
+            if reason:
+                reason += " Scanner messages are included below." if detail else " No further cause was supplied in the XCCDF messages."
+            row = {"id": rid, "severity": rr.get("severity", "unknown"),
+                   "title": title or rid.split("_rule_")[-1].replace("_", " "),
+                   "detail": f"{rid}: result={res}" + (f" · {reason}" if reason else "") + (f" · {detail}" if detail else ""),
+                   "remediation": ("Inspect this rule's XCCDF messages and scan log; complete the profile's manual assessment or restore its check prerequisites, then rerun. " if reason else "")
+                                  + (remediation or "Review this rule in the host's OpenSCAP HTML report and the selected profile.")}
+            (failed if res == "fail" else unresolved).append(row)
     score_el = tr.find("x:score", ns)
-    score = round(float(score_el.text), 1) if score_el is not None and score_el.text else 0.0
-    return {**counts, "score": score, "failed_rules": failed}
+    try:
+        score = round(float(score_el.text), 1) if score_el is not None and score_el.text else 0.0
+        if not 0 <= score <= 100:
+            raise ValueError("invalid score")
+    except (ValueError, OverflowError):
+        counts["unknown"] += 1
+        score = 0.0
+        unresolved.append({"id": "xccdf.score", "severity": "unknown", "title": "Invalid XCCDF score",
+                           "detail": "The scanner score is invalid; rule observations are retained.",
+                           "remediation": "Inspect the raw XCCDF result and rerun the scanner."})
+    return {**counts, "score": score, "failed_rules": failed, "unresolved_rules": unresolved}
 
 
 # ---------------------------------------------------------------- cloud (prowler)
@@ -1167,6 +1511,133 @@ def _azure_auth(env_: dict) -> list[str]:
                    "ARM_CLIENT_SECRET / ARM_TENANT_ID (certificate or OIDC logins need az here).", code=2)
 
 
+def cloud_verdict(report: dict) -> str:
+    """Consistent saved cloud verdict for CLI/UI, including older severity-only reports."""
+    summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
+    diagnostics = report.get("diagnostics") if isinstance(report.get("diagnostics"), dict) else {}
+    findings = report.get("findings") if isinstance(report.get("findings"), list) else []
+    counts = {k: v for k, v in summary.items() if type(v) is int and v >= 0}
+    statuses = {str(f.get("status", "")).upper() for f in findings if isinstance(f, dict)}
+    if (report.get("verdict") == "FAIL" or counts.get("fail", 0) or "FAIL" in statuses or
+            any(v for k, v in counts.items() if k.startswith("failed "))):
+        return "FAIL"
+    invalid_counts = any(k not in counts for k in ("pass", "fail")) or any(
+        k not in counts for k in summary if k in ("manual", "unknown") or k.startswith("failed "))
+    if (invalid_counts or report.get("verdict") == "INCOMPLETE" or counts.get("manual", 0) or counts.get("unknown", 0) or
+            statuses - {"PASS", "FAIL"} or
+            diagnostics.get("process_exit_code", 0) != 0 or diagnostics.get("error_lines", 0) != 0):
+        return "INCOMPLETE"
+    return "PASS" if counts.get("pass", 0) > 0 else "INCOMPLETE"
+
+
+def _cloud_results(data, *, returncode: int = 0, output: str = "") -> dict:
+    """Normalize Prowler OCSF observations without turning missing checks into a pass.
+
+    OCSF's `status` is the finding lifecycle (often New), not its check result. Preserve
+    every non-passing observation, including manual checks, with the actual explanation.
+    Counts are resource/check observations, not distinct benchmark requirements.
+    """
+    if not isinstance(data, list):
+        raise ui.Abort("prowler wrote an invalid report: expected an OCSF list of findings.")
+    counts = {s: 0 for s in ("PASS", "FAIL", "MANUAL", "UNKNOWN")}
+    severity = {s: 0 for s in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL", "UNKNOWN")}
+    findings, checks = [], set()
+    obj = lambda value: value if isinstance(value, dict) else {}
+    string = lambda value: value if isinstance(value, str) else ""
+    for index, record in enumerate(data, 1):
+        row = obj(record)
+        # Legacy fixtures/exporters may use PASS/FAIL directly as status; lifecycle
+        # values and new/unsupported result codes must remain unassessed.
+        raw_status = row.get("status_code") or row.get("status")
+        status = string(raw_status).upper()
+        status = status if status in counts else "UNKNOWN"
+        info = obj(row.get("finding_info"))
+        check_id = string(obj(info.get("analytic")).get("uid")).strip()
+        unidentified_pass = status == "PASS" and not check_id
+        if unidentified_pass:
+            status = "UNKNOWN"
+        counts[status] += 1
+        if check_id:
+            checks.add(check_id)
+        sev = string(row.get("severity")).upper()
+        sev = sev if sev in severity else "UNKNOWN"
+        if status == "FAIL":
+            severity[sev] += 1
+        if status == "PASS":
+            continue
+        resources = row.get("resources")
+        resources = resources if isinstance(resources, list) else []
+        resource_ids = [string(r.get("uid")) for r in resources if isinstance(r, dict) and string(r.get("uid"))]
+        remediation = obj(row.get("remediation"))
+        refs = remediation.get("references")
+        reason = ""
+        if status == "UNKNOWN":
+            if unidentified_pass:
+                reason = "Prowler reported PASS but supplied no finding_info.analytic.uid, so the benchmark check cannot be identified."
+            elif not isinstance(record, dict):
+                reason = f"Observation {index} is not an OCSF object, so its check result cannot be read."
+            elif not raw_status:
+                reason = "Prowler supplied no check result (status_code or recognized legacy status)."
+            elif not row.get("status_code") and string(raw_status).upper() not in counts:
+                reason = "Prowler supplied a finding lifecycle status but no recognized check result; lifecycle status does not establish compliance."
+            elif string(raw_status).upper() == "UNKNOWN":
+                reason = "Prowler explicitly marked this check result UNKNOWN."
+            else:
+                reason = "Prowler supplied an unsupported check result; Cloudseed cannot classify it as pass, fail or manual."
+        elif status == "MANUAL":
+            reason = "Prowler requires manual verification for this control; this scan did not establish a pass or fail."
+        explanation = string(row.get("status_detail")) or string(row.get("message"))
+        next_step = string(remediation.get("desc"))
+        if status == "UNKNOWN":
+            next_step = "Inspect this observation in the raw Prowler report and confirm the scanner's result format; resolve the reported cause and rerun the cloud scan." + (" Scanner guidance: " + next_step if next_step else "")
+        elif status == "MANUAL" and not next_step:
+            next_step = "Review the named control and resources against its provider guidance and record the required manual evidence."
+        findings.append({"id": check_id, "status": status, "severity": sev,
+                         "title": string(info.get("title")) or check_id or "Unrecognized Prowler observation",
+                         "detail": ((reason + (" Scanner explanation: " + explanation if explanation else "")) if reason else explanation) or
+                                   "The scanner supplied no result explanation; inspect the raw report.",
+                         **({"reason": reason, "scanner_status": raw_status} if reason else {}),
+                         "resource": resource_ids[0] if resource_ids else "", "resources": resource_ids,
+                         "region": string(obj(row.get("cloud")).get("region")),
+                         "remediation": next_step,
+                         "references": [r for r in refs if isinstance(r, str) and r.startswith("https://")] if isinstance(refs, list) else []})
+    order = {s: i for i, s in enumerate(severity)}
+    findings.sort(key=lambda f: (f["status"] != "FAIL", order[f["severity"]], f["id"], f["resource"]))
+    # A successful process can still log skipped services/permission errors. Store
+    # categories/counts only: raw stderr may contain credentials or proxy URLs.
+    clean = re.sub(r"\x1b\[[0-9;]*m", "", output)
+    error_lines = sum(bool(re.search(r"\b(?:ERROR|CRITICAL|AccessDenied\w*|Unauthorized\w*|Forbidden|EndpointConnectionError)\b|"
+                                     r"Could not connect to the endpoint URL", line, re.I)) for line in clean.splitlines())
+    diagnostics = {"process_exit_code": returncode, "error_lines": error_lines}
+    reasons = []
+    if not data:
+        reasons.append("Prowler returned zero observations; no applicable check result was available to assess.")
+    if returncode:
+        reasons.append(f"Prowler exited with code {returncode}; collection did not complete successfully.")
+    if error_lines:
+        denied = bool(re.search(r"\b(?:AccessDenied\w*|Unauthorized\w*|Forbidden)\b", clean, re.I))
+        endpoint = bool(re.search(r"EndpointConnectionError|Could not connect to the endpoint URL", clean, re.I))
+        reasons.append(f"Scanner output contains {error_lines} error line(s)" +
+                       (" including permission/access denial" if denied else "") +
+                       (" and unreachable service endpoints" if denied and endpoint else " including unreachable service endpoints" if endpoint else "") +
+                       "; affected checks may be absent from this report.")
+    if counts["UNKNOWN"]:
+        reasons.append(f"{counts['UNKNOWN']} observation(s) have no recognized result; each finding explains the missing or unsupported field.")
+    if counts["MANUAL"]:
+        reasons.append(f"{counts['MANUAL']} control observation(s) require manual verification; review their individual explanations and guidance.")
+    if reasons:
+        diagnostics["reason"] = " ".join(reasons)
+        diagnostics["next_step"] = "Review the finding reasons and raw report; correct scanner access, connectivity or result-format problems if reported, and collect any required manual evidence before reassessing."
+    incomplete = bool(returncode or error_lines or counts["MANUAL"] or counts["UNKNOWN"] or not data)
+    verdict = "FAIL" if counts["FAIL"] else "INCOMPLETE" if incomplete else "PASS"
+    return {"summary": {**{k.lower(): v for k, v in counts.items()},
+                        **{"failed " + k.lower(): v for k, v in severity.items()},
+                        "observations": len(data), "identified checks": len(checks)},
+            "findings": findings, "diagnostics": diagnostics,
+            "failure_policy": "Any failed observation fails the cloud benchmark, regardless of severity. With no failures, required manual reviews, unknown results, empty output or detected collection errors make it incomplete.",
+            "verdict": verdict}
+
+
 def cloud_scan(cloud, env, cfg: dict, framework: str | None = None) -> Path:
     from . import services
     if cloud.local:
@@ -1233,29 +1704,31 @@ def cloud_scan(cloud, env, cfg: dict, framework: str | None = None) -> Path:
         data = json.loads(ocsf.read_text())
     except ValueError:
         raise ui.Abort(f"prowler wrote an unreadable report: {ocsf}")
-    counts = {"PASS": 0, "FAIL": 0, "MANUAL": 0}
-    sev = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0}
-    findings = []
-    for f in data:
-        st = str(f.get("status_code") or f.get("status") or "").upper()
-        counts[st] = counts.get(st, 0) + 1
-        s = str(f.get("severity", ""))
-        if st == "FAIL":
-            sev[s] = sev.get(s, 0) + 1
-            if s in ("Critical", "High"):
-                findings.append({"status": "FAIL", "severity": s.upper(), "title": (f.get("finding_info") or {}).get("title", "")[:120],
-                                 "detail": ((f.get("resources") or [{}])[0].get("uid") or "")[:100]})
-    findings.sort(key=lambda x: 0 if x["severity"] == "CRITICAL" else 1)
-    report = {"run": run, "summary": {"provider": provider, "framework": framework or "all checks", **{k.lower(): v for k, v in counts.items()},
-                                      "failed critical": sev["Critical"], "failed high": sev["High"], "failed medium": sev["Medium"], "failed low": sev["Low"]},
-              "findings": findings, "tool": "prowler", "raw": str(outdir), "verdict": "PASS" if sev["Critical"] == 0 and sev["High"] == 0 else "FAIL"}
+    result = _cloud_results(data, returncode=r.returncode if r is not None else 1, output=out_text)
+    scope = {"aws": "AWS account accessible to the selected credentials; includes resources outside this Cloudseed environment",
+             "gcp": "Selected GCP project(s); includes resources outside this Cloudseed environment",
+             "azure": "Selected Azure subscription(s); includes resources outside this Cloudseed environment"}[provider]
+    if provider == "aws":
+        scope += "; environment region only" if fips_regions else "; all regions scanned by Prowler and global services"
+    report = {**result, "schema_version": 1, "cloud": provider, "env": env.id, "run": run,
+              "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "scope": scope,
+              "summary": {"provider": provider, "framework": framework or "all checks", **result["summary"]},
+              "tool": "prowler", "raw": str(outdir),
+              "coverage_limits": [scope + ".",
+                  "Counts are resource/check observations, not distinct CIS requirements; manual checks need review.",
+                  "PASS means no failed or manual/unknown observations and no detected execution errors. It does not prove all permissions, services or framework requirements were covered.",
+                  "Prowler titles describe the desired control; the finding detail explains the observed failure.",
+                  "A permissive network ACL alone does not prove public reachability; also review routing, public addresses and security groups."],
+              "hint": "Review every failed and manual finding and its resource scope. Resolve scanner errors before trusting coverage; rerun scan architecture afterward to use this saved evidence."}
     if provider == "azure" and cfg["vars"].get("subscription_id"):
         report["summary"]["subscription"] = cfg["vars"]["subscription_id"]
     if fips_regions:
         report["summary"]["endpoints"] = f"FIPS (regions: {', '.join(fips_regions)})"
+    if result["diagnostics"]["error_lines"] or result["diagnostics"]["process_exit_code"]:
+        report["coverage_limits"].append("Scanner execution errors were detected; some checks may be missing even when other findings are valid.")
     path = save_report(env, "cloud", report)
-    _panel(f"Cloud benchmark (prowler {framework or 'all'}) · {env.id}", report["summary"], findings, path,
-           verdict=f"{report['verdict']} - {counts['FAIL']} failed checks")
+    _panel(f"Cloud benchmark (prowler {framework or 'all'}) · {env.id}", report["summary"], report["findings"], path,
+           verdict=f"{report['verdict']} - {report['summary']['fail']} failed observations", note=scope, hint=report["hint"])
     return path
 
 
@@ -1310,7 +1783,7 @@ def _ssh_key_check(pub: str, cloud_key: str) -> tuple[bool | None, str]:
         if algo.startswith("ecdsa-") and cloud_key in ("aws", "azure"):
             return False, f"{algo}: {'EC2 key pairs' if cloud_key == 'aws' else 'Azure VMs'} refuse ECDSA keys"
         if algo == "ssh-rsa" or algo.startswith("ecdsa-sha2-nistp"):
-            return True, f"{algo} (the recorded key could not be parsed, so its size was not checked)"
+            return None, f"{algo} (the recorded key could not be parsed, so its size was not checked)"
         return None, f"{algo}: the recorded key could not be parsed"
     problem = netutil.ssh_key_problem(pub, fips=True, cloud=cloud_key)
     return problem is None, problem or f"{algo} ({bits} bits)"
@@ -1341,7 +1814,7 @@ def sshd_fips_problems(text: str) -> tuple[list[str], dict]:
 
 
 def _fips_nodes(ctx) -> list[dict] | None:
-    """The cluster's nodes with what FIPS depends on (None: the cluster did not answer)."""
+    """The cluster's nodes with what FIPS depends on (None: the kubectl node query failed)."""
     proc = _kubectl(ctx, "get", "nodes", "-o", "jsonpath={range .items[*]}{.metadata.name}={.status.nodeInfo.osImage}|"
                     "{.status.nodeInfo.kernelVersion}|{.metadata.labels.kubernetes\\.azure\\.com/fips_enabled}|"
                     "{.metadata.labels.karpenter\\.sh/nodepool}{\"\\n\"}{end}", timeout=120)
@@ -1432,7 +1905,7 @@ def _aws_fips_platform_checks(ctx, releases: dict, add) -> None:
         deps_ = _items_of(_kubectl(ctx, "-n", ns, "get", "deploy", "-l", f"app.kubernetes.io/instance={release}", "-o", "json", timeout=60))
         mine = [d for d in deps_ or [] if not str((d.get("metadata") or {}).get("name", "")).endswith(_NO_AWS_CALLS)]
         if not mine:
-            add("platform", check, None, f"its Deployments in {ns} could not be read" if deps_ is None else f"no Deployment of release {release} in {ns}")
+            add("platform", check, None, f"its Deployments in {ns} could not be read: the query failed or returned no JSON items list; the underlying query cause was not retained" if deps_ is None else f"no Deployment of release {release} in {ns}")
             continue
         bad = [str((d.get("metadata") or {}).get("name", "?")) for d in mine if not _uses_fips_endpoints(d)]
         add("platform", check, not bad, (f"{', '.join(bad)} without it: its SDK calls go to the standard endpoints; "
@@ -1444,7 +1917,7 @@ def _aws_fips_platform_checks(ctx, releases: dict, add) -> None:
         locs = _items_of(_kubectl(ctx, "-n", ns, "get", "backupstoragelocations.velero.io", "-o", "json", timeout=60))
         aws_locs = [b for b in locs or [] if str((b.get("spec") or {}).get("provider", "")).endswith("aws")]
         if locs is None:
-            add("platform", "velero: backups reach S3 through its FIPS endpoint", None, "the backup storage locations could not be read")
+            add("platform", "velero: backups reach S3 through its FIPS endpoint", None, "the backup storage locations could not be read: the query failed or returned no JSON items list; the underlying query cause was not retained")
         for b in aws_locs:
             name = str((b.get("metadata") or {}).get("name", "?"))
             url = str(((b.get("spec") or {}).get("config") or {}).get("s3Url") or "")
@@ -1455,7 +1928,7 @@ def _aws_fips_platform_checks(ctx, releases: dict, add) -> None:
     if installed("karpenter"):
         classes = _items_of(_kubectl(ctx, "get", "ec2nodeclasses.karpenter.k8s.aws", "-o", "json", timeout=60))
         if classes is None:
-            add("platform", "karpenter: EC2NodeClasses select Bottlerocket FIPS AMIs", None, "the EC2NodeClasses could not be read")
+            add("platform", "karpenter: EC2NodeClasses select Bottlerocket FIPS AMIs", None, "the EC2NodeClasses could not be read: the query failed or returned no JSON items list; the underlying query cause was not retained")
         for nc in classes or []:
             name = str((nc.get("metadata") or {}).get("name", "?"))
             terms = [t for t in (nc.get("spec") or {}).get("amiSelectorTerms") or [] if isinstance(t, dict)]
@@ -1469,15 +1942,25 @@ def _aws_fips_platform_checks(ctx, releases: dict, add) -> None:
             elif ssm and all("-fips/" in p for p in ssm):
                 add("platform", check, True, ssm[0])
             else:
-                add("platform", check, None, "AMIs chosen by id, tag or name: the node rows show what its nodes run")
+                add("platform", check, None, "No exclusively FIPS SSM selector was verified in amiSelectorTerms. Resolve each ID/tag/name or other selector to its actual AMI and attest that it is a Bottlerocket FIPS variant; node rows only describe nodes already running.")
 
 
 def fips(cloud, env, cfg: dict, outputs: dict, ctx=None, note: bool = True) -> Path:
     from . import platform as platformmod
     checks: list[dict] = []
 
-    def add(area: str, name: str, ok: bool | None, detail: str = ""):
-        checks.append({"area": area, "check": name, "status": "PASS" if ok else "INFO" if ok is None else "FAIL", "detail": detail})
+    def add(area: str, name: str, ok: bool | None, detail: str = "", *, informational: bool = False, remediation: str = ""):
+        status = "PASS" if ok else ("INFO" if informational or not wanted else "UNKNOWN") if ok is None else "FAIL"
+        if status == "UNKNOWN" and not remediation:
+            remediation = {
+                "ssh": "Record a valid public key and verify its parsed type and size against this cloud's FIPS SSH requirements, then rerun.",
+                "cloud": "Inspect the saved stack and effective provider/image settings named in this check; obtain the missing configuration evidence and rerun.",
+                "hosts": "Verify the host addresses, SSH access and required privileged probe commands; inspect the failed command output and rerun.",
+                "kubernetes": "Verify this environment's kubeconfig and permission to read node runtime information; inspect the node query result and rerun.",
+                "platform": "Inspect the named release or Kubernetes resource and its effective FIPS settings; obtain the missing runtime evidence and rerun.",
+            }.get(area, "Inspect the missing evidence named in this check, obtain it, then rerun FIPS verification.")
+        checks.append({"area": area, "check": name,
+                       "status": status, "detail": detail, "remediation": remediation})
 
     wanted = fips_env(cfg, outputs)
     add("config", "fips_mode enabled for the environment", wanted,
@@ -1488,7 +1971,7 @@ def fips(cloud, env, cfg: dict, outputs: dict, ctx=None, note: bool = True) -> P
     if ctx is not None:
         try:
             nodes = _fips_nodes(ctx)
-            cluster_note = "" if nodes is not None else "the cluster did not answer"
+            cluster_note = "" if nodes is not None else "the kubectl node query failed; no successful node response is available (the underlying cause was not retained)"
         except ui.Abort as e:   # kubectl is missing (and was not installed): the other layers are still verified
             cluster_note = tail_text(str(getattr(e, "msg", "") or e), 200)
             add("kubernetes", "cluster not checked", None, cluster_note)
@@ -1497,9 +1980,28 @@ def fips(cloud, env, cfg: dict, outputs: dict, ctx=None, note: bool = True) -> P
     if cloud.key == "aws":
         try:
             rendered = json.loads((env.stack_dir / "main.tf.json").read_text())
-            add("cloud", "AWS provider uses FIPS endpoints", bool(rendered.get("provider", {}).get("aws", {}).get("use_fips_endpoint")), "provider.aws.use_fips_endpoint")
-        except (OSError, ValueError):
-            add("cloud", "AWS provider uses FIPS endpoints", None, "stack not rendered yet")
+            aws_provider = rendered.get("provider", {}).get("aws", {})
+            value = aws_provider.get("use_fips_endpoint")
+            # This is rendered Terraform input: only literal booleans and its
+            # supported string conversions establish a value, never bool(str).
+            enabled = value if type(value) is bool else value == "true" if isinstance(value, str) and value in ("true", "false") else None
+            if enabled is not None:
+                detail = f"provider.aws.use_fips_endpoint is {'true' if enabled else 'false'} in main.tf.json."
+            elif "use_fips_endpoint" not in aws_provider:
+                detail = "main.tf.json does not declare provider.aws.use_fips_endpoint; the effective AWS provider setting was not verified."
+            elif isinstance(value, str) and ("${" in value or "%{" in value):
+                detail = "provider.aws.use_fips_endpoint uses a Terraform expression or template; its evaluated boolean value was not inspected."
+            else:
+                detail = "provider.aws.use_fips_endpoint is not a literal boolean (true/false) in main.tf.json; its effective setting cannot be determined."
+            add("cloud", "AWS provider uses FIPS endpoints", enabled, detail,
+                remediation="Inspect the resolved AWS provider configuration and determine its effective use_fips_endpoint value; set it to true when FIPS endpoints are required, then rerun verification." if enabled is None else "")
+        except (OSError, ValueError, AttributeError, TypeError) as exc:
+            why = ("The rendered stack main.tf.json does not exist." if isinstance(exc, FileNotFoundError) else
+                   "Permission was denied while reading main.tf.json." if isinstance(exc, PermissionError) else
+                   f"main.tf.json could not be read (filesystem error {exc.errno})." if isinstance(exc, OSError) else
+                   "main.tf.json is not valid JSON." if isinstance(exc, ValueError) else
+                   "main.tf.json does not contain the expected provider.aws object.")
+            add("cloud", "AWS provider uses FIPS endpoints", None, why)
     if cloud.key in ("aws", "azure") and outputs.get("kubernetes_cluster_name") and not nodes:
         # the node rows below verify every node live; without them this is only what fips_mode asked for
         add("kubernetes", "EKS nodes run a Bottlerocket FIPS variant" if cloud.key == "aws" else "AKS node pool is fips_enabled", None,
@@ -1513,48 +2015,83 @@ def fips(cloud, env, cfg: dict, outputs: dict, ctx=None, note: bool = True) -> P
             vimg = _gcp_vpn_image(bool(cfg["vars"].get("fips_mode")))
             add("cloud", "VPN image is Ubuntu Pro FIPS", ("ubuntu-pro-fips" in vimg) if vimg else None, vimg or "not derivable from the stack; the VPN host's kernel is checked below")
         if outputs.get("kubernetes_cluster_name"):
-            add("kubernetes", "GKE nodes run Container-Optimized OS (FIPS-validated kernel crypto module, BoringCrypto)", True, "image_type COS_CONTAINERD")
+            add("kubernetes", "GKE node pool declares Container-Optimized OS", None,
+                "image_type COS_CONTAINERD is declared; live node rows below verify the actual node images." if nodes else
+                "image_type COS_CONTAINERD is declared; no live node images were verified.", informational=bool(nodes))
     # hosts
     user, key = cloud.ssh_user(cfg), env.private_key_path(cfg)
-    for name, ip in _hosts(cloud, env, cfg, outputs, ["bastion", "vpn", "k8s"], note=note):
+    hosts = _hosts(cloud, env, cfg, outputs, ["bastion", "vpn", "k8s"], note=note)
+    if wanted and not hosts:
+        add("hosts", "host runtime FIPS checks", None, "No host addresses are available; kernel, sshd and OpenSSL were not verified.")
+    for name, ip in hosts:
         h = prov.Host(ip, user, key, name, env=env)
-        probe = subprocess.run(h.ssh("cat /proc/sys/crypto/fips_enabled 2>/dev/null; echo ---; sudo sshd -T 2>/dev/null | "
+        try:
+            probe = subprocess.run(h.ssh("cat /proc/sys/crypto/fips_enabled 2>/dev/null; echo ---; sudo sshd -T 2>/dev/null | "
                                      "grep -Ei '^(ciphers|kexalgorithms|macs|hostkeyalgorithms|pubkeyacceptedalgorithms|pubkeyacceptedkeytypes) ' ; echo ---; "
-                                     "(openssl list -providers 2>/dev/null | grep -qi fips && echo openssl-fips) || (openssl md5 /dev/null >/dev/null 2>&1 || echo openssl-fips); "
+                                     "if command -v openssl >/dev/null 2>&1 && openssl version >/dev/null 2>&1; then "
+                                     "(openssl list -providers 2>/dev/null | grep -qi fips && echo openssl-fips) || "
+                                     "(openssl md5 /dev/null >/dev/null 2>&1 && echo openssl-not-fips || echo openssl-fips); "
+                                     "else echo openssl-unavailable; fi; "
                                      "echo ---; (pro status 2>/dev/null | grep -Ei 'fips' | head -2) || true"),
                                capture_output=True, text=True, timeout=60)
-        if probe.returncode != 0 and not probe.stdout.strip():
-            add("hosts", f"{name}: reachable over SSH", False, tail_text(probe.stderr, 160, lines=2) or f"ssh exited {probe.returncode}")
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            why = ("The SSH runtime probe timed out after 60 seconds; no completed probe result is available." if isinstance(exc, subprocess.TimeoutExpired) else
+                   f"The local SSH runtime probe could not execute (filesystem/process error {exc.errno}).")
+            add("hosts", f"{name}: runtime checks unavailable", None, why)
             continue
+        if probe.returncode != 0 and not probe.stdout.strip():
+            add("hosts", f"{name}: reachable over SSH", None, tail_text(probe.stderr, 160, lines=2) or f"ssh exited {probe.returncode}")
+            continue
+        if probe.returncode:
+            add("hosts", f"{name}: runtime probe completed", None, f"SSH exited {probe.returncode}; partial observations are retained.")
         parts = probe.stdout.split("---")
         state = parts[0].strip()
         add("hosts", f"{name}: kernel FIPS mode (fips_enabled=1)", state == "1", f"fips_enabled={state or 'absent'}")
         bad, settings = sshd_fips_problems(parts[1] if len(parts) > 1 else "")
-        add("hosts", f"{name}: sshd offers only FIPS-approved algorithms", not bad if settings else None,
+        complete_sshd = {"ciphers", "kexalgorithms", "macs", "hostkeyalgorithms"} <= set(settings) and \
+            bool({"pubkeyacceptedalgorithms", "pubkeyacceptedkeytypes"} & set(settings))
+        missing_sshd = sorted({"ciphers", "kexalgorithms", "macs", "hostkeyalgorithms"} - set(settings))
+        if not {"pubkeyacceptedalgorithms", "pubkeyacceptedkeytypes"} & set(settings):
+            missing_sshd.append("pubkeyacceptedalgorithms/pubkeyacceptedkeytypes")
+        add("hosts", f"{name}: sshd offers only FIPS-approved algorithms", False if bad else True if complete_sshd else None,
             (", ".join(bad[:6]) + (f" (+{len(bad) - 6} more)" if len(bad) > 6 else "")) if bad
-            else (f"{', '.join(sorted(settings))} checked" if settings else "sshd -T unavailable"))
-        add("hosts", f"{name}: OpenSSL FIPS provider active", "openssl-fips" in (parts[2] if len(parts) > 2 else ""), (parts[2].strip() if len(parts) > 2 else "")[:80])
+            else (f"{', '.join(sorted(settings))} checked" if complete_sshd else "The sshd -T probe did not return required algorithm settings: " + ", ".join(missing_sshd) + ". Its stderr was not collected; no command-level cause is available."),
+            remediation="Run sudo sshd -T on this host, inspect its exit status and stderr, and obtain all listed algorithm settings before rerunning FIPS verification." if not complete_sshd and not bad else "")
+        openssl = parts[2].strip() if len(parts) > 2 else ""
+        openssl_detail = ("The SSH probe returned no OpenSSL result section; provider activation was not observed." if not openssl else
+                          "The probe could not find openssl or run openssl version; it did not distinguish these causes." if "openssl-unavailable" in openssl else openssl[:80])
+        add("hosts", f"{name}: OpenSSL FIPS provider active", None if not openssl or "openssl-unavailable" in openssl else "openssl-fips" in openssl, openssl_detail,
+            remediation="Check command -v openssl and openssl version on this host, then inspect the active FIPS provider/module and rerun the runtime probe." if not openssl or "openssl-unavailable" in openssl else "")
         if len(parts) > 3 and parts[3].strip():
             add("hosts", f"{name}: Ubuntu Pro FIPS services", bool(re.search(r"\benabled\b", parts[3].lower())), parts[3].strip().replace("\n", " | ")[:120])
     # kubernetes + platform
+    if ctx is None and wanted and (outputs.get("kubernetes_cluster_name") or (cfg.get("vars") or {}).get("enable_kubernetes") is True):
+        add("kubernetes", "cluster and platform runtime checks", None, "No cluster connection is available; node, controller and TLS checks were not completed.")
     if ctx is not None:
         if nodes is None:
-            add("kubernetes", "nodes not checked", None, cluster_note or "the cluster did not answer")
+            add("kubernetes", "nodes not checked", None, cluster_note or "The kubectl node query returned no usable result; the underlying cause was not retained.")
+        elif not nodes:
+            add("kubernetes", "node runtime FIPS checks", None, "The cluster returned no nodes; no node image or runtime was verified.")
         if cloud.key == "aws" and nodes:
             add("kubernetes", "EKS nodes run a Bottlerocket FIPS variant", *_eks_nodes_row(nodes))   # from the live nodes
         for n in nodes or []:
             ok, detail = _node_fips(cloud, n)
-            add("kubernetes", f"node {n['name']}: {n['os']}", ok, detail)
+            add("kubernetes", f"node {n['name']}: {n['os']}", ok, detail, informational=cloud.local)
         if ctx.distro == "rke2":
-            v = _kubectl(ctx, "get", "nodes", "-o", "jsonpath={.items[0].status.nodeInfo.kubeletVersion}").stdout.strip()
-            add("kubernetes", "RKE2 (FIPS 140-2 compliant build: Go BoringCrypto)", True if wanted else None, v)
+            version = _kubectl(ctx, "get", "nodes", "-o", "jsonpath={.items[0].status.nodeInfo.kubeletVersion}")
+            v = version.stdout.strip()
+            add("kubernetes", "RKE2 (FIPS 140-2 compliant build: Go BoringCrypto)",
+                True if wanted and version.returncode == 0 and "rke2" in v.lower() else None,
+                v if wanted and version.returncode == 0 and "rke2" in v.lower() else
+                f"The kubelet version query exited {version.returncode}; the running RKE2 build was not verified." if version.returncode else
+                "The node response contains no RKE2 version marker; the running build cannot be identified as RKE2.")
         elif ctx.distro == "kubeadm":
             add("kubernetes", "kubeadm binaries are not FIPS builds", False, "use kubernetes_distro=rke2 in FIPS environments")
         try:
             rel = platformmod.installed_releases(ctx)
         except platformmod.ClusterUnreachable as e:
             rel = {}
-            add("platform", "platform items not checked", None, ui.clip(str(e), 200))
+            add("platform", "platform items not checked", None, "Installed releases could not be listed. " + (ui.clip(str(e), 200) or "The release query supplied no further cause."))
         for item, spec in platformmod.CATALOG.items():
             if platformmod._release_state(spec, item, rel) is not None and not spec.get("hidden"):
                 cap = spec.get("fips")
@@ -1576,16 +2113,20 @@ def fips(cloud, env, cfg: dict, outputs: dict, ctx=None, note: bool = True) -> P
         if gw:
             add("platform", "shared Gateway enforces TLS 1.2+/FIPS cipher suites (ClientTrafficPolicy cloudseed-fips-tls)", ctp, "cs platform install envoy-gateway --upgrade" if not ctp else "")
     failed = [c for c in checks if c["status"] == "FAIL"]
-    verdict = "N/A" if not wanted else "PASS" if not failed else "FAIL"
-    report = {"summary": {"fips_mode": wanted, "checks": len(checks), "pass": sum(1 for c in checks if c["status"] == "PASS"), "fail": len(failed), "info": sum(1 for c in checks if c["status"] == "INFO")},
-              "findings": [{"status": c["status"], "severity": "HIGH" if c["status"] == "FAIL" else "INFO", "title": f"[{c['area']}] {c['check']}", "detail": c["detail"]} for c in checks],
-              "checks": checks, "tool": "cloudseed", "verdict": verdict}
+    unknown = [c for c in checks if c["status"] == "UNKNOWN"]
+    verdict = "N/A" if not wanted else "FAIL" if failed else "INCOMPLETE" if unknown else "PASS"
+    report = {"summary": {"fips_mode": wanted, "checks": len(checks), "pass": sum(1 for c in checks if c["status"] == "PASS"), "fail": len(failed), "unknown": len(unknown), "info": sum(1 for c in checks if c["status"] == "INFO")},
+              "findings": [{"status": c["status"], "severity": "HIGH" if c["status"] == "FAIL" else "MEDIUM" if c["status"] == "UNKNOWN" else "INFO", "title": f"[{c['area']}] {c['check']}", "detail": c["detail"],
+                            "remediation": c["remediation"] or ("Resolve the reported configuration or runtime issue, then rerun FIPS verification." if c["status"] == "FAIL" else "")} for c in checks],
+              "checks": checks, "tool": "cloudseed", "verdict": verdict,
+              "coverage_limits": ["Verification covers the reported configuration and reachable host/cluster checks; missing runtime evidence remains UNKNOWN.",
+                                  "A PASS is not FIPS certification of every application or cryptographic module."]}
     path = save_report(env, "fips", report)
     rows = [f"{ui.style('✔', 'leaf', 'bold') if c['status'] == 'PASS' else ui.style('✖', 'rose', 'bold') if c['status'] == 'FAIL' else ui.style('○', 'muted')} "
             f"{ui.style(c['area'].ljust(11), 'muted')} {c['check']}   {ui.dim(str(c['detail']))}" for c in checks]
-    tone = {"PASS": "leaf", "FAIL": "rose", "N/A": "seed"}[verdict]
+    tone = {"PASS": "leaf", "FAIL": "rose", "N/A": "seed", "INCOMPLETE": "seed"}[verdict]
     head = (f"N/A - {env.id} is not a FIPS environment (FIPS is chosen at creation); {len(failed)} of {len(checks)} checks would fail" if verdict == "N/A"
-            else f"{verdict} - {report['summary']['pass']} passed, {len(failed)} failed, {report['summary']['info']} informational")
+            else f"{verdict} - {report['summary']['pass']} passed, {len(failed)} failed, {len(unknown)} unknown, {report['summary']['info']} informational")
     rows += ["", ui.style(head, tone, "bold"), ui.dim(f"report: {path}")]
     ui.panel(f"FIPS 140 verification · {env.id}", rows, accent=tone)
     return path
@@ -1595,8 +2136,9 @@ def fips(cloud, env, cfg: dict, outputs: dict, ctx=None, note: bool = True) -> P
 
 def _verdict_of(path: Path) -> str:
     try:
-        return str(json.loads(path.read_text()).get("verdict") or "?")
-    except (OSError, ValueError):
+        report = json.loads(path.read_text())
+        return cloud_verdict(report) if report.get("kind") == "cloud" or path.name.startswith("cloud-") else str(report.get("verdict") or "?")
+    except (OSError, ValueError, AttributeError):
         return "?"
 
 
@@ -1640,10 +2182,11 @@ def run_all(cloud, env, cfg: dict, outputs: dict, ctx, host_which: list[str], er
     else:
         ui.info(f"FIPS verification skipped: {env.id} is not a FIPS environment (fips_mode=false); `cs scan fips` runs it anyway.")
     verdicts = [(p, _verdict_of(p)) for p in done]
-    rows: list = [(ui.style(v, "leaf" if v == "PASS" else "seed" if v == "N/A" else "rose", "bold"), str(p)) for p, v in verdicts]
+    rows: list = [(ui.style(v, "leaf" if v == "PASS" else "seed" if v in ("N/A", "INCOMPLETE") else "rose", "bold"), str(p)) for p, v in verdicts]
     rows += [(ui.style("ERROR", "rose", "bold"), f"{label}: did not complete (see above)") for label in errors]
     clean = not errors and all(v in ("PASS", "N/A") for _, v in verdicts)
-    ui.panel(f"Scan summary · {env.id}", rows or [ui.dim("nothing ran")], accent="leaf" if clean and done else "rose")
+    incomplete = not errors and bool(done) and all(v in ("PASS", "N/A", "INCOMPLETE") for _, v in verdicts)
+    ui.panel(f"Scan summary · {env.id}", rows or [ui.dim("nothing ran")], accent="leaf" if clean and done else "seed" if incomplete else "rose")
     return done
 
 
@@ -1652,8 +2195,8 @@ def show_reports(env, last: int = 10) -> None:
     for p in (reports(env)[-last:] if last > 0 else []):
         try:
             r = json.loads(p.read_text())
-            v = str(r.get("verdict") or "")
-            rows.append((p.stem, (ui.style(v, "leaf" if v == "PASS" else "seed" if v == "N/A" else "rose", "bold") + "  " if v else "")
+            v = cloud_verdict(r) if r.get("kind") == "cloud" or p.name.startswith("cloud-") else str(r.get("verdict") or "")
+            rows.append((p.stem, (ui.style(v, "leaf" if v == "PASS" else "seed" if v in ("N/A", "INCOMPLETE") else "rose", "bold") + "  " if v else "")
                          + "  ".join(f"{k}={val}" for k, val in list(r.get("summary", {}).items())[:6])))
         except ValueError:
             rows.append((p.stem, ""))

@@ -426,6 +426,8 @@ def _kube_reason(tool: str, a: dict) -> str | None:
     read (get secret, --raw other than health endpoints, helm get values/all/manifest/hooks, helm status -o json|yaml,
     helm template/lint), an option that points the tool at another server, identity or local file (--server,
     --kubeconfig, --context, --token, --as, get -f URL, -o *-file ...) or an option before the verb it cannot read."""
+    if _on(a, "local_context"):
+        return "local_context uses the kubeconfig and credentials on the host running Cloudseed, outside a managed environment; verify the target (Cloudseed Undo is unavailable)"
     try:
         _cloud_, _env_, rest = _kube_words(a)
     except ValueError as e:
@@ -532,6 +534,10 @@ def _kube_argv(tool: str):
     of the `--` (see _kube_words)."""
     def argv(a: dict) -> list[str]:
         cloud, env, rest = _kube_words(a)
+        if _on(a, "local_context"):
+            if cloud or env:
+                raise ValueError("local_context cannot be combined with cloud or env selectors, including selectors in args")
+            return [tool, "--local-context", "--"] + rest
         if cloud is not None and cloud not in CLOUDS:
             raise ValueError(f"cloud must be one of {', '.join(CLOUDS)}")
         return [tool] + ([cloud] if cloud else []) + (["--env", env] if env else []) + ["--"] + rest
@@ -749,10 +755,11 @@ TOOLS: dict[str, dict] = {
                                          "terminal and returns its whole output at the end, so commands that never end are refused: "
                                          "follow/watch (logs -f, get -w), port-forward, proxy and attach; use logs --tail=200 or --since=10m, "
                                          "get without -w, or kubectl wait --for=condition=... --timeout=120s. Interactive ones (edit, "
-                                         "exec/run/debug -i/-t) are refused too: those belong in the user's own terminal.",
+                                         "exec/run/debug -i/-t) are refused too: those belong in the user's own terminal. "
+                                         "local_context=true explicitly uses this host's already-authorized kubeconfig, without a Cloudseed environment or Undo; omit cloud/env and use confirm=true.",
                           "schema": _p(args={"type": "string", "minLength": 1, "description": "kubectl arguments, e.g. 'get pods -A' (the cluster goes in cloud/env)"},
-                                       cloud=S_CLOUD, env=S_ENV, confirm=S_CONFIRM),
-                          "required": ["args"], "confirm_when": "reads run directly (get, describe, logs, top, explain, version, api-resources, api-versions, "
+                                       cloud=S_CLOUD, env=S_ENV, local_context={"type": "boolean", "description": "Use this host's kubeconfig; mutually exclusive with cloud/env; always requires confirm=true."}, confirm=S_CONFIRM),
+                          "required": ["args"], "confirm_when": "local_context=true always requires confirmation; otherwise reads run directly (get, describe, logs, top, explain, version, api-resources, api-versions, "
                                                                 "cluster-info, events); everything else needs confirm=true, a get of Secrets included, and so do "
                                                                 "get --raw (except the health, version and metrics endpoints), get/describe -f/-k, -o *-file, "
                                                                 "cluster-info dump --output-directory, any option that points kubectl at another server, identity "
@@ -760,10 +767,10 @@ TOOLS: dict[str, dict] = {
                                                                 "and an option before the verb that cloudseed cannot read",
                           "destructive_when": _kubectl_mutating, "why": lambda a: _kube_reason("kubectl", a), "argv": _kube_argv("kubectl")},
     "cloudseed_helm": {"description": "Run helm against the cluster of the environment picked by cloud and/or env (either one alone works; "
-                                      "neither = the current environment, cs env use, or the only cluster).",
+                                      "neither = the current environment, cs env use, or the only cluster). local_context=true explicitly uses this host's already-authorized kubeconfig without a managed environment or Undo; omit cloud/env and use confirm=true.",
                        "schema": _p(args={"type": "string", "minLength": 1, "description": "helm arguments, e.g. 'list -A' (the cluster goes in cloud/env)"},
-                                    cloud=S_CLOUD, env=S_ENV, confirm=S_CONFIRM),
-                       "required": ["args"], "confirm_when": "reads run directly (list, status with table output, history, show, search, version, env, "
+                                    cloud=S_CLOUD, env=S_ENV, local_context={"type": "boolean", "description": "Use this host's kubeconfig; mutually exclusive with cloud/env; always requires confirm=true."}, confirm=S_CONFIRM),
+                       "required": ["args"], "confirm_when": "local_context=true always requires confirmation; otherwise reads run directly (list, status with table output, history, show, search, version, env, "
                                                              "repo/dependency/plugin list, get notes/metadata); everything else needs confirm=true, including the "
                                                              "reads that carry release secrets: status -o json/yaml and get values/all/manifest/hooks, template/lint "
                                                              "(they render charts with values and files from this machine), and any option that points helm at "
@@ -820,7 +827,7 @@ TOOLS: dict[str, dict] = {
                      "required": ["action"], "confirm_when": "backup, restore, schedule and test need confirm=true (status, backups, describe and logs do not)",
                      "destructive_when": lambda a: a.get("action") not in _DR_READ_ONLY,
                      "argv": _dr_argv},
-    "cloudseed_scan": {"description": "Scans with saved reports: architecture (AWS/Azure/GCP Well-Architected screening, common guidance for VMware; local configuration and saved evidence only, no live cloud checks), cis (kube-bench), kube (kubescape NSA/MITRE), images (trivy), host (OpenSCAP CIS), stig (DISA STIG), cloud (prowler CIS), fips (FIPS 140 verification), all (security scans only), reports. Architecture returns PASS, FAIL, or INCOMPLETE when required evidence is missing or stale.",
+    "cloudseed_scan": {"description": "Scans with detailed saved JSON/Markdown reports: architecture (AWS/Azure/GCP Well-Architected screening, common guidance for VMware; local configuration and saved evidence only, no live cloud checks), cis (kube-bench), kube (kubescape NSA/MITRE), images (trivy), host (OpenSCAP CIS), stig (DISA STIG), cloud (prowler CIS), fips (FIPS 140 verification), all (security scans only), reports. PASS/FAIL follows each scanner's stated policy; missing, manual or partial required evidence returns INCOMPLETE (exit 3). Cloud scans include account/project/subscription resources outside the selected environment; inspect all findings and coverage limits.",
                        "schema": _p(kind={"type": "string", "enum": ["architecture", "cis", "kube", "images", "host", "stig", "cloud", "fips", "all", "reports"]}, cloud=S_CLOUD, env=S_ENV,
                                     profile={"type": "string", "enum": ["production", "lab", "cis", "stig"], "description": "architecture: production (default) or lab; host/all: cis (default) or stig"},
                                     max_age_days=_count("architecture: maximum age of saved evidence in days (default 30)", minimum=1, maximum=3650),
