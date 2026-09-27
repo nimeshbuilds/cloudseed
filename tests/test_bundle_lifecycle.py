@@ -22,10 +22,6 @@ class BundleLifecycleTests(unittest.TestCase):
             state = home / "controller"
             (state / "bin").mkdir(parents=True)
             env_dir = state / "envs/aws-fixture"
-            env_dir.mkdir(parents=True)
-            (env_dir / "config.json").write_text(json.dumps({"cloud": "aws", "env": "fixture", "name": "cs", "region": "us-west-2", "vars": {}, "state": {"type": "local"}}))
-            (env_dir / "outputs.json").write_text('{"bastion_public_ip":"192.0.2.2"}')
-            (state / "credentials.json").write_text('{"fixture":"must-not-transfer"}')
             archive = home / "payload.tar.gz"
             ssh = state / "bin/ssh"
             ssh.write_text(f"#!{sys.executable}\nimport pathlib,sys\n"
@@ -36,6 +32,16 @@ class BundleLifecycleTests(unittest.TestCase):
             for key in list(env):
                 if key.startswith(("AWS_", "GOOGLE_", "CLOUDSDK_", "GCLOUD_", "ARM_", "AZURE_")) or key in ("CLOUDSEED_SESSION", "CLOUDSEED_REDACT", "CLOUDSEED_IN_CONTAINER"):
                     env.pop(key, None)
+            setup = subprocess.run([binary, "setup", "aws", "--dry-run", "--no-provision", "--state", "local",
+                                    "--allow-ip", "192.0.2.1", "--cidr", "10.240.0.0/16", "--env", "fixture",
+                                    "--name", "cs", "--region", "us-west-2", "-y"],
+                                   env=env, cwd=home, capture_output=True, text=True, timeout=600)
+            self.assertEqual(setup.returncode, 0, setup.stdout + setup.stderr)
+            private_key = env_dir / "ssh/id_ed25519"
+            self.assertTrue(private_key.is_file(), "dry-run setup must generate the fixture's SSH key")
+            key_bytes = private_key.read_bytes()
+            (env_dir / "outputs.json").write_text('{"bastion_public_ip":"192.0.2.2"}')
+            (state / "credentials.json").write_text('{"fixture":"must-not-transfer"}')
             proc = subprocess.run([binary, "-y", "provision", "aws", "--env", "fixture", "--host", "bastion", "--sync-only"],
                                   env=env, cwd=home, capture_output=True, text=True, timeout=60)
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
@@ -46,6 +52,11 @@ class BundleLifecycleTests(unittest.TestCase):
                 for required in ("bin/cloudseed", "cloudseed/__init__.py", "cloudseed/cli.py", "cloudseed/web/app.js"):
                     self.assertIn(required, names)
                 self.assertFalse(any("credentials.json" in name or "envs/aws-fixture" in name or ".tfstate" in name for name in names))
+                self.assertFalse(any(Path(name).name.startswith(("id_ed25519", "id_rsa", "id_ecdsa")) for name in names))
+                for member in tar.getmembers():
+                    if member.isfile():
+                        with tar.extractfile(member) as content:
+                            self.assertNotIn(key_bytes, content.read(), f"private key leaked in {member.name}")
                 tar.extractall(payload, filter="data")
             env.update(HOME=str(home / "bastion"), CLOUDSEED_HOME=str(home / "bastion/state"))
             portable = subprocess.run([sys.executable, "-I", str(payload / "bin/cloudseed"), "--version"], env=env,
