@@ -415,6 +415,59 @@ class ArchitectureTests(unittest.TestCase):
         (self.env.dir / "inventory.json").write_text(json.dumps(inventory))
         self.assertFalse(self.finding("security.platform_vault")["evidence"][0]["recent_install_recorded"])
 
+    def test_unknown_evidence_names_the_rejection_cause(self):
+        self.cfg["vars"]["enable_kubernetes"] = True
+        for changes, reason in (({"live": False}, "live=true"), ({"env": "elsewhere"}, "env is missing or does not match"),
+                                ({"schema_version": 2}, "schema_version"), ({"generated_at": "invalid"}, "generated_at"),
+                                ({"findings": []}, "no check results"),
+                                ({"findings": [{"id": "cluster.nodes", "status": "PASS", "evidence": []}]}, "live_query")):
+            with self.subTest(changes=changes):
+                self.diagnostic(**changes)
+                finding = self.finding("evidence.health")
+                self.assertEqual(finding["status"], "UNKNOWN")
+                self.assertIn(reason, finding["detail"])
+                self.assertIn(reason, finding["evidence"][0]["reason"])
+                self.assertNotIn("sensitive raw detail", json.dumps(finding))
+
+    def test_safe_read_and_timestamp_reasons_are_specific(self):
+        report = self.save("scans", "cloud", self.cloud_report())
+        for contents, reason in ((b"{", "invalid JSON"), (b"\xff", "UTF-8"), (b"[]", "JSON object")):
+            with self.subTest(reason=reason):
+                report.write_bytes(contents)
+                self.assertIn(reason, self.finding("security.saved_cloud_scan")["detail"])
+        report.unlink()
+        self.assertIn("no cloud report", self.finding("security.saved_cloud_scan")["detail"])
+        self.save("scans", "cloud", self.cloud_report(), age=31)
+        self.assertIn("older than the 30-day", self.finding("security.saved_cloud_scan")["detail"])
+
+    def test_restore_unknown_names_failed_validation(self):
+        self.cfg["vars"]["enable_kubernetes"] = True
+        for changes, reason in (({"cloud": "azure"}, "cloud/env identity"), ({"volume_verified": False}, "volume_verified=true"),
+                                ({"steps": []}, "all five"), ({"rto_s": 99}, "does not match")):
+            with self.subTest(changes=changes):
+                self.save("dr", "drill", self.dr_report(**changes))
+                finding = self.finding("reliability.restore_drill")
+                self.assertEqual(finding["status"], "UNKNOWN")
+                self.assertIn(reason, finding["detail"])
+
+    def test_config_and_manual_unknowns_name_missing_fields_or_attestation(self):
+        self.cfg["extra_vars"] = {"enable_cloudtrail": None, "single_nat_gateway": None}
+        self.assertIn("enable_cloudtrail", self.finding("security.audit_logging")["detail"])
+        self.assertIn("single_nat_gateway", self.finding("reliability.aws_egress")["detail"])
+        self.cfg["extra_vars"]["enable_account_baseline"] = False
+        self.assertIn("delegates", self.finding("security.audit_logging")["detail"])
+        ownership = self.finding("security.baseline_ownership")
+        self.assertIn("owner", ownership["detail"])
+        self.assertIn("attestation", ownership["remediation"])
+        self.assertIn("where each named control is managed", ownership["remediation"])
+
+    def test_inventory_unknown_explains_absence_and_exact_review(self):
+        self.cfg["vars"]["enable_kubernetes"] = True
+        for id_, action in (("security.platform_vault", "development mode"), ("security.platform_kyverno_policies", "tested rejection")):
+            finding = self.finding(id_)
+            self.assertIn("does not exist", finding["detail"])
+            self.assertIn(action, finding["remediation"])
+
     def test_run_json_and_saved_reports_use_collection(self):
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout), scan.collect() as made:
@@ -428,6 +481,10 @@ class ArchitectureTests(unittest.TestCase):
         self.assertIn("**Remediation:**", markdown)
         self.assertIn(printed["findings"][0]["detail"], markdown)
         self.assertIn(printed["findings"][0]["references"][0]["url"], markdown)
+        for finding in printed["findings"]:
+            if finding["status"] == "UNKNOWN":
+                self.assertIn(finding["detail"], markdown)
+                self.assertIn(finding["remediation"], markdown)
         self.assertIn(path, scan.reports(self.env))
         self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
         self.assertIn("scan-architecture", (self.env.dir / "inventory.json").read_text())

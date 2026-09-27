@@ -88,6 +88,25 @@ class HostFipsCompletenessTests(unittest.TestCase):
         self.assertEqual(self.host_report(None, skipped="No profile for this OS")["verdict"], "N/A")
         self.assertEqual(self.host_report(None, skipped="No profile for this OS", rc=2)["verdict"], "INCOMPLETE")
 
+    def test_explicitly_excluded_or_informational_only_scope_is_not_applicable(self):
+        for results in (["informational"], ["notselected"], ["informational", "notselected", "notapplicable"]):
+            with self.subTest(results=results):
+                report = self.host_report(self.xccdf(results))
+                self.assertEqual(report["verdict"], "N/A")
+                self.assertEqual(report["summary"]["unknown"], 0)
+                self.assertFalse(any(f["status"] == "UNKNOWN" for f in report["findings"]))
+                for kind in ("informational", "notselected", "notapplicable"):
+                    self.assertEqual(report["summary"][kind], results.count(kind))
+
+    def test_explicit_exclusions_do_not_hide_unresolved_or_failed_checks(self):
+        for status in ("notchecked", "error", "unknown"):
+            with self.subTest(status=status):
+                report = self.host_report(self.xccdf(["informational", "notselected", status]))
+                self.assertEqual(report["verdict"], "INCOMPLETE")
+                self.assertEqual(report["summary"]["unknown"], 1)
+        self.assertEqual(self.host_report(self.xccdf(["informational", "fail"]))["verdict"], "FAIL")
+        self.assertEqual(self.host_report(self.xccdf(["informational"]), rc=2)["verdict"], "INCOMPLETE")
+
     def test_xccdf_retains_rule_title_and_remediation(self):
         path = self.root / "rules.xml"
         path.write_text('<Benchmark xmlns="http://checklists.nist.gov/xccdf/1.2"><Rule id="r">'
@@ -118,6 +137,33 @@ class HostFipsCompletenessTests(unittest.TestCase):
         self.assertEqual(report["verdict"], "INCOMPLETE")
         self.assertEqual(report["summary"]["fail"], 0)
         self.assertGreater(report["summary"]["unknown"], 0)
+
+    def test_fips_provider_literal_booleans_and_strings_are_respected(self):
+        for value, status in ((True, "PASS"), ("true", "PASS"), (False, "FAIL"), ("false", "FAIL")):
+            with self.subTest(value=value):
+                (self.env.stack_dir / "main.tf.json").write_text(json.dumps({"provider": {"aws": {"use_fips_endpoint": value}}}))
+                report = self.fips_report()
+                row = next(c for c in report["checks"] if c["check"] == "AWS provider uses FIPS endpoints")
+                self.assertEqual(row["status"], status)
+                if status == "FAIL":
+                    self.assertEqual(report["verdict"], "FAIL")
+                    self.assertIn("is false", row["detail"])
+
+    def test_fips_provider_unresolved_or_invalid_values_have_specific_unknown_reason(self):
+        for value in (None, 1, 0, [], {}, "yes", "FALSE", "${var.fips_mode}", "%{if var.enabled}true%{endif}"):
+            with self.subTest(value=value):
+                (self.env.stack_dir / "main.tf.json").write_text(json.dumps({"provider": {"aws": {"use_fips_endpoint": value}}}))
+                report = self.fips_report()
+                row = next(c for c in report["checks"] if c["check"] == "AWS provider uses FIPS endpoints")
+                self.assertEqual(row["status"], "UNKNOWN")
+                self.assertEqual(report["verdict"], "INCOMPLETE")
+                self.assertIn("expression or template" if isinstance(value, str) and value.startswith(("${", "%{")) else "not a literal boolean", row["detail"])
+                self.assertIn("resolved AWS provider configuration", row["remediation"])
+        (self.env.stack_dir / "main.tf.json").write_text(json.dumps({"provider": {"aws": {}}}))
+        row = next(c for c in self.fips_report()["checks"] if c["check"] == "AWS provider uses FIPS endpoints")
+        self.assertEqual(row["status"], "UNKNOWN")
+        self.assertIn("does not declare", row["detail"])
+        self.assertIn("resolved AWS provider configuration", row["remediation"])
 
     def test_unparseable_approved_key_name_is_not_a_pass(self):
         for key in ("ssh-rsa AAAA", "ecdsa-sha2-nistp384 AAAA"):
@@ -180,6 +226,55 @@ class HostFipsCompletenessTests(unittest.TestCase):
             result = scan.run_all(clouds.get("vmware"), self.env, {"vars": {"fips_mode": True}}, {}, None, ["bastion"])
         self.assertEqual(result, [path])
         self.assertEqual(panel.call_args.kwargs["accent"], "seed")
+
+    def test_unknown_host_rules_explain_observation_without_inventing_cause(self):
+        path = self.root / "manual.xml"
+        path.write_text('<Benchmark xmlns="http://checklists.nist.gov/xccdf/1.2"><TestResult>'
+                        '<rule-result idref="manual"><result>notchecked</result></rule-result>'
+                        '<rule-result idref="error"><result>error</result><message>probe failed</message></rule-result>'
+                        '</TestResult></Benchmark>')
+        rows = scan._parse_xccdf(path)["unresolved_rules"]
+        self.assertIn("did not execute", rows[0]["detail"])
+        self.assertIn("No further cause was supplied", rows[0]["detail"])
+        self.assertIn("manual assessment", rows[0]["remediation"])
+        self.assertIn("execution error", rows[1]["detail"])
+        self.assertIn("probe failed", rows[1]["detail"])
+        path.write_text("<broken")
+        self.assertIn("malformed XML", scan._parse_xccdf(path)["parse_error"])
+        path.unlink()
+        self.assertIn("does not exist", scan._parse_xccdf(path)["parse_error"])
+
+    def test_fips_unknown_openssl_and_sshd_have_specific_causes_and_next_steps(self):
+        report = self.fips_report(hosts=[("bastion", "192.0.2.2")],
+                                 probe=subprocess.CompletedProcess([], 0, "1\n---\nciphers aes256-ctr\n---\n", ""))
+        openssl = next(f for f in report["findings"] if "OpenSSL" in f["title"])
+        sshd = next(f for f in report["findings"] if "sshd offers" in f["title"])
+        self.assertEqual(openssl["status"], "UNKNOWN")
+        self.assertIn("no OpenSSL result section", openssl["detail"])
+        self.assertIn("openssl version", openssl["remediation"])
+        self.assertIn("kexalgorithms", sshd["detail"])
+        self.assertIn("pubkeyacceptedalgorithms", sshd["detail"])
+        self.assertIn("stderr was not collected", sshd["detail"])
+        self.assertIn("sudo sshd -T", sshd["remediation"])
+        for check in report["checks"]:
+            if check["status"] == "UNKNOWN":
+                self.assertTrue(check["detail"])
+                self.assertTrue(check["remediation"])
+        markdown = next((self.env.dir / "scans").glob("fips-*.md")).read_text()
+        self.assertIn(openssl["detail"], markdown)
+        self.assertIn(openssl["remediation"], markdown)
+
+    def test_fips_timeout_and_missing_stack_have_distinct_causes(self):
+        for probe, reason in ((subprocess.TimeoutExpired("ssh", 60), "timed out after 60 seconds"),
+                              (FileNotFoundError(2, "fixture missing"), "could not execute")):
+            with self.subTest(reason=reason):
+                report = self.fips_report(hosts=[("bastion", "192.0.2.2")], probe=probe)
+                row = next(f for f in report["findings"] if "runtime checks unavailable" in f["title"])
+                self.assertIn(reason, row["detail"])
+        (self.env.stack_dir / "main.tf.json").write_text("{")
+        row = next(f for f in self.fips_report()["findings"] if "AWS provider" in f["title"])
+        self.assertIn("not valid JSON", row["detail"])
+        self.assertNotIn("not rendered", row["detail"])
 
 
 if __name__ == "__main__":

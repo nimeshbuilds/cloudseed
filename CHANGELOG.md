@@ -24,8 +24,16 @@ commands or defaults; such changes are called out under **Changed**.
   severity thresholds remain explicit for Kubernetes posture and image vulnerability scans.
 - Architecture assessments no longer request Kubernetes diagnostics for configurations that explicitly disable
   Kubernetes, validate identity on new cloud evidence, and document evidence freshness and scan ordering.
+- Informational and explicitly inapplicable/excluded benchmark controls do not create artificial evidence gaps;
+  an assessment with only out-of-scope controls is N/A. Required manual checks and genuine runtime gaps remain visible.
+- Unknown results explain the specific missing, stale, unreadable or unsupported evidence and how to resolve it;
+  cloud execution diagnostics include safe cause summaries alongside per-finding explanations in saved reports and the UI.
 - Release attestation verification avoids mutually exclusive GitHub CLI flags while retaining the anchored,
   tag-only release workflow identity and hosted-runner requirement.
+- macOS release builds use Apple Developer ID signing for the executable and embedded libraries, verify the
+  expected publisher, hardened runtime and secure timestamp, then test and attest those signed bytes.
+  Temporary signing keychains are removed; tagged publication refuses missing or invalid credentials.
+  Apple notarization remains a separate process.
 
 ## [0.2.0] - 2026-09-25
 

@@ -70,6 +70,35 @@ bash tests/scenarios/15-web-console-and-finops.sh
 
 The scenario helpers use temporary homes and remove their test resources. The ordinary unit suite also uses isolated fixtures; run it in a development checkout, not against a production environment.
 
+## Maintaining Apple-signed macOS releases
+
+The trusted release workflow requires Apple Developer ID signatures for both macOS architectures before a version tag can publish. The expected Apple team is `QPF2VF2885`. A missing, incomplete, expired, invalid or wrong-team identity stops the macOS job and therefore blocks release publication.
+
+Configure these repository Actions secrets after authorizing the signing key's transfer to GitHub:
+
+| Secret | Value |
+|---|---|
+| `APPLE_SIGNING_CERTIFICATE_P12` | Base64 encoding of a password-protected PKCS#12 export containing the intended **Developer ID Application** certificate and its private key |
+| `APPLE_SIGNING_PASSWORD` | The nonempty password protecting that export |
+
+Export only the intended identity, rather than a collection of keychain identities. Keep the export and password out of the checkout, logs, artifacts and issue comments. GitHub documents the [certificate-to-Actions-secret process](https://docs.github.com/en/actions/how-tos/deploy/deploy-to-third-party-platforms/sign-xcode-applications). Certificate rotation within the same team only requires replacing the secrets; the workflow discovers the valid identity fingerprint. A team change requires reviewing the workflow's expected team as well.
+
+Each macOS job imports the secret into its own temporary keychain with a random password, checks for exactly one valid Developer ID Application identity for the expected team, and deletes the decoded export immediately after import. Only the public identity fingerprint and temporary directory path are passed to later steps. The cleanup step restores the original keychain search list and removes the temporary keychain even if the build fails. The workflow uses disposable GitHub-hosted runners.
+
+The build passes this identity to PyInstaller so the embedded Python libraries are signed while packaging. Signing only the outer executable afterward cannot sign libraries already inside a one-file archive. PyInstaller also enables hardened runtime when a real identity is selected; see its [macOS signing documentation](https://pyinstaller.org/en/stable/feature-notes.html#macos-binary-code-signing). The workflow verifies the finished signature, expected team, hardened-runtime flag and secure timestamp, then runs the binary tests. Inventories, checksums and attestations describe those final signed bytes.
+
+Use a manual **Trusted releases** workflow run first. When both secrets are configured, it exercises signing and produces inspectable signed artifacts without publishing a release or version-tag attestations. When neither secret is configured, manual runs explicitly produce ad-hoc signed macOS builds; supplying only one secret is an error. Tagged releases always require Developer ID signing and never silently fall back to ad-hoc signing.
+
+For a local build using an identity already in your keychain:
+
+```bash
+CLOUDSEED_CODESIGN_IDENTITY="Developer ID Application: Nimesh Pandeya (QPF2VF2885)" bash scripts/build-bundle.sh
+```
+
+This does not export the private key. Developer ID signing and GitHub provenance are separate checks. This workflow does **not** submit binaries for Apple notarization; no notarization credentials are configured here, and a valid signature alone does not guarantee Gatekeeper acceptance of a downloaded executable.
+
+`tests/test_apple_release_signing.py` covers missing/invalid secrets, identity selection, verification failures, cleanup and secret-safe errors using fake commands. Those tests do not import a real private key; actual signing is checked by the macOS release jobs.
+
 ## Live acceptance still required
 
 Before calling a release fully validated against infrastructure, record its commit, host/runtime/tool versions, target account or project, region, environment name, cost limit and cleanup owner. Use disposable targets with explicit authorization. No live cloud target was selected or provisioned during this review, and the review host has no VMware installation.

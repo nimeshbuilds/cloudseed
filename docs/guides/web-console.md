@@ -65,7 +65,12 @@ Nested evidence stays available, including details from Kubernetes, image, host 
 
 Read **Verdict policy** alongside the findings: the cloud benchmark fails for any failed observation, while
 the Kubernetes and image scanners have severity thresholds. A threshold passing does not mean every finding
-is resolved. Missing, manual or incomplete evidence appears as **INCOMPLETE**, including in Activity.
+is resolved. Missing evidence for requested checks, execution errors and required manual verification appear as
+**INCOMPLETE**, including in Activity. Routine informational entries do not cause that state; disabled or explicitly
+inapplicable checks show **N/A**. Open the finding for the specific gap and its next step.
+Unknown findings include the reason evidence could not establish a result and how to resolve it. Scanner diagnostics
+also explain report-wide problems such as zero observations, a nonzero exit, access denial or unreachable endpoints;
+raw error output is not copied into that summary.
 Cloud scans can include resources outside the selected Cloudseed environment; check the report's scope before
 deciding which resource needs a change.
 

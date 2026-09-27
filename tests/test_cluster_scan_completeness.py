@@ -51,13 +51,22 @@ class ClusterScanCompletenessTests(unittest.TestCase):
         with mock.patch.object(scan, "_kubectl", return_value=proc):
             return json.loads(scan.images(self.ctx).read_text())
 
-    def test_cis_and_stig_empty_manual_info_and_unknown_are_incomplete(self):
+    def test_cis_and_stig_empty_manual_and_unknown_are_incomplete(self):
         for stig in (False, True):
-            for results in ([], [{"status": "WARN"}], [{"status": "INFO"}], [{"status": "mystery"}]):
+            for results in ([], [{"status": "WARN"}], [{"status": "mystery"}]):
                 with self.subTest(stig=stig, results=results):
                     report = self.cis(results, stig=stig)
                     self.assertEqual(report["verdict"], "INCOMPLETE")
                     self.assertEqual(len(report["findings"]), len(results))
+
+    def test_cis_and_stig_information_does_not_block_evaluated_checks(self):
+        for stig in (False, True):
+            with self.subTest(stig=stig):
+                report = self.cis([{"status": "PASS"}, {"status": "INFO"}], stig=stig)
+                self.assertEqual(report["verdict"], "PASS")
+                self.assertEqual(report["summary"]["info"], 1)
+                self.assertEqual(self.cis([{"status": "INFO"}], stig=stig)["verdict"], "N/A")
+                self.assertEqual(self.cis([{"status": "PASS"}, {"status": "WARN"}], stig=stig)["verdict"], "INCOMPLETE")
 
     def test_cis_complete_passes_and_full_failure_evidence_is_retained(self):
         self.assertEqual(self.cis([{"status": "PASS"}])["verdict"], "PASS")
@@ -68,6 +77,18 @@ class ClusterScanCompletenessTests(unittest.TestCase):
         self.assertEqual(report["findings"][0]["detail"], detail.strip())
         self.assertEqual(report["checks"][0]["actual_value"], "observed")
         self.assertEqual(report["raw_results"][0]["result"]["Controls"][0]["tests"][0]["results"][0]["reason"], "reason")
+
+    def test_cis_unknown_status_explains_reason_and_next_action(self):
+        for original, expected in (({}, "did not supply"), ({"status": "mystery", "reason": "scanner detail"}, "unsupported result status")):
+            with self.subTest(original=original):
+                report = self.cis([original])
+                finding = report["findings"][0]
+                self.assertEqual(finding["status"], "UNKNOWN")
+                self.assertIn(expected, finding["reason"])
+                self.assertIn(expected, finding["detail"])
+                self.assertIn("rerun", finding["remediation"])
+                self.assertEqual(finding["scanner_status"], original.get("status"))
+                self.assertEqual(report["raw_results"][0]["result"]["Controls"][0]["tests"][0]["results"][0], original)
 
     def test_cis_partial_role_failure_keeps_successful_results(self):
         self.ctx.distro = "rke2"
@@ -119,6 +140,89 @@ class ClusterScanCompletenessTests(unittest.TestCase):
         report = self.kube({"C-1": {"status": "failed", "scoreFactor": "bad"}})
         self.assertEqual(report["verdict"], "INCOMPLETE")
         self.assertEqual(report["findings"][0]["severity"], "UNKNOWN")
+        self.assertIn("no valid scoreFactor", report["findings"][0]["reason"])
+        self.assertIn("raw result", report["findings"][0]["remediation"])
+
+    def test_kubescape_unknown_status_explains_original_input_without_inventing_cause(self):
+        for control, expected in ((None, "null control"), ({}, "did not supply"),
+                                  ({"status": True}, "unsupported result status"), ({"status": "future-value"}, "future-value")):
+            with self.subTest(control=control):
+                finding = self.kube({"C-1": control})["findings"][0]
+                self.assertEqual(finding["status"], "UNKNOWN")
+                self.assertIn(expected, finding["reason"])
+                self.assertTrue(finding["remediation"])
+                self.assertEqual(finding["evidence"], control)
+                self.assertNotIn("permission", finding["reason"].lower())
+
+    def test_kubescape_skips_explain_structured_reason_and_next_action(self):
+        for substatus, expected in (("notEvaluated", "could not be collected"), ("configuration", "configuration is missing"),
+                                   ("manual review", "manual review"), ("integration", "integration"),
+                                   (None, "without a recognized structured reason"), ({}, "without a recognized structured reason")):
+            with self.subTest(substatus=substatus):
+                control = {"status": "skipped", "severity": "LOW", "statusInfo": {"status": "skipped", "subStatus": substatus, "info": "Original scanner detail"}}
+                finding = self.kube({"C-1": control})["findings"][0]
+                self.assertEqual(finding["status"], "SKIP")
+                self.assertIn(expected, finding["reason"])
+                self.assertIn("Original scanner detail", finding["detail"])
+                self.assertTrue(finding["remediation"])
+                self.assertEqual(finding["evidence"], control)
+
+    def irrelevant_control(self, **changes):
+        # Real Kubescape v4.0.14 / opa-utils v0.0.312 summary schema.
+        return {"status": "passed", "statusInfo": {"status": "passed", "subStatus": "irrelevant"},
+                "ResourceCounters": {"passedResources": 0, "failedResources": 0, "skippedResources": 0, "excludedResources": 0},
+                **changes}
+
+    def test_kubescape_explicit_irrelevant_empty_controls_are_not_applicable(self):
+        report = self.kube({"C-1": self.irrelevant_control()})
+        self.assertEqual(report["verdict"], "N/A")
+        self.assertEqual(report["summary"]["not applicable"], 1)
+        self.assertEqual(report["summary"]["controls passed"], 0)
+        self.assertEqual(report["checks"][0]["status"], "NOT_APPLICABLE")
+        self.assertEqual(report["findings"][0]["evidence"]["statusInfo"]["subStatus"], "irrelevant")
+        mixed = self.kube({"C-1": self.irrelevant_control(), "C-2": {"status": "passed"}})
+        self.assertEqual(mixed["verdict"], "PASS")
+        self.assertEqual(mixed["summary"]["controls passed"], 1)
+
+    def test_kubescape_irrelevant_substatus_alone_does_not_prove_no_applicable_resources(self):
+        for counters in ({}, {"passedResources": 0},
+                         {"passedResources": 1, "failedResources": 0, "skippedResources": 0, "excludedResources": 0}):
+            with self.subTest(counters=counters):
+                report = self.kube({"C-1": self.irrelevant_control(ResourceCounters=counters)})
+                self.assertEqual(report["verdict"], "PASS")
+                self.assertEqual(report["summary"]["not applicable"], 0)
+
+    def test_kubescape_not_applicable_does_not_hide_unevaluated_checks_or_errors(self):
+        for substatus in ("irrelevant", "notEvaluated", "configuration", "manual review", "integration"):
+            skipped = {"status": "skipped", "statusInfo": {"status": "skipped", "subStatus": substatus}}
+            report = self.kube({"C-1": self.irrelevant_control(), "C-2": skipped})
+            self.assertEqual(report["verdict"], "INCOMPLETE")
+            self.assertTrue(any(f["status"] == "SKIP" for f in report["findings"]))
+        self.assertEqual(self.kube({"C-1": self.irrelevant_control()}, rc=2)["verdict"], "INCOMPLETE")
+        self.assertEqual(self.kube({"C-1": self.irrelevant_control(), "C-2": {"status": "failed", "severity": "HIGH"}})["verdict"], "FAIL")
+
+    def test_kubescape_explicit_incomplete_coverage_cannot_be_hidden_by_passes(self):
+        partial = {"status": "passed", "statusInfo": {"status": "passed", "subStatus": "incompleteCoverage"}}
+        for additional in ({}, {"C-2": {"status": "passed"}}, {"C-2": self.irrelevant_control()}):
+            with self.subTest(additional=additional):
+                report = self.kube({"C-1": partial, **additional})
+                self.assertEqual(report["verdict"], "INCOMPLETE")
+                row = next(f for f in report["findings"] if f["id"] == "C-1")
+                self.assertEqual(row["status"], "UNKNOWN")
+                self.assertEqual(row["evidence"], partial)
+                self.assertIn("incomplete resource coverage", row["detail"])
+                self.assertIn("incompleteCoverage", row["reason"])
+                self.assertIn("restore the missing resource coverage", row["remediation"])
+                self.assertTrue(any("incompleteCoverage" in d for d in report["diagnostics"]))
+
+    def test_kubescape_failure_precedes_incomplete_coverage(self):
+        for severity, verdict in (("HIGH", "FAIL"), ("LOW", "INCOMPLETE")):
+            with self.subTest(severity=severity):
+                report = self.kube({"C-1": {"status": "failed", "severity": severity,
+                                          "statusInfo": {"status": "failed", "subStatus": "incompleteCoverage"}}})
+                self.assertEqual(report["verdict"], verdict)
+                self.assertEqual(report["findings"][0]["status"], "FAIL")
+                self.assertTrue(report["diagnostics"])
 
     def test_kubescape_nonfinite_or_out_of_range_score_cannot_choose_a_severity(self):
         for factor in (float("nan"), float("inf"), float("-inf"), -1, 11):
@@ -157,6 +261,22 @@ class ClusterScanCompletenessTests(unittest.TestCase):
         self.assertEqual([f["severity"] for f in report["findings"]], ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"])
         self.assertEqual(report["findings"][-1]["evidence"]["description"], "full explanation")
         self.assertEqual(len(json.loads(Path(report["raw"]).read_text())["items"][0]["report"]["vulnerabilities"]), 5)
+
+    def test_image_unknown_severity_explains_missing_explicit_and_unsupported_values(self):
+        for value, expected in ((None, "did not supply"), ("UNKNOWN", "explicitly reported UNKNOWN"), ("future-severity", "unsupported vulnerability severity")):
+            with self.subTest(value=value):
+                operator_vuln = {"vulnerabilityID": "CVE-fixture", "severity": value}
+                cli_vuln = {"VulnerabilityID": "CVE-fixture", "Severity": value}
+                reports = (self.operator([operator_vuln]),
+                           self.tool_scan(scan.images, {"Results": [{"Target": "apps/demo", "Vulnerabilities": [cli_vuln]}]}))
+                for report, original in zip(reports, (operator_vuln, cli_vuln)):
+                    finding = report["findings"][0]
+                    self.assertEqual(report["verdict"], "INCOMPLETE")
+                    self.assertEqual(finding["severity"], "UNKNOWN")
+                    self.assertIn(expected, finding["reason"])
+                    self.assertIn(expected, finding["detail"])
+                    self.assertIn("vendor advisory", finding["remediation"])
+                    self.assertEqual(finding["evidence"], original)
 
     def test_operator_actual_zero_summary_can_pass(self):
         report = self.operator()

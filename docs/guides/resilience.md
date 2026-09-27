@@ -149,6 +149,17 @@ it does not establish that every resource is secure or that an application can r
 | Invalid arguments | `2` | Correct the command input before retrying. |
 
 `scan all` also exits 1 when an action cannot run. A failed result takes precedence over incomplete evidence.
+`INCOMPLETE` is reserved for a gap in a requested, applicable assessment: an access error, missing/malformed
+results, an unreachable runtime, or a required control awaiting manual verification. It is not a generic warning.
+Disabled components and explicitly inapplicable or excluded controls are `N/A`; informational output does not block
+otherwise completed checks. If no checks apply, the result is `N/A`, not a pass. Evidence of a real failure still
+produces `FAIL` even when other checks could not be completed.
+
+An `UNKNOWN` finding explains the specific evidence gap and how to resolve it. For example, a missing saved
+report names the report to collect, an expired report identifies the freshness problem, an unrecognized scanner
+result identifies the unsupported field, and a manual control describes the review still needed. Read the finding's
+detail and remediation plus scanner diagnostics before retrying; retrying alone cannot supply organisational evidence.
+
 Scanners have individual policies: cloud CIS scans fail on every failed benchmark observation, including medium
 and low severity; with no failures, manual/unknown checks, empty output and execution or coverage errors remain
 incomplete. Cloud benchmarks cover an account, project or subscription, so findings may concern resources outside

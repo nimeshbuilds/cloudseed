@@ -2179,7 +2179,7 @@
         const card = el('details', { class: 'card report-finding', open: index < 3 }, el('summary', {}, cellChip(f.status || 'UNKNOWN'), f.severity ? cellChip(f.severity) : null, ' ', f.title || f.id || 'Finding'));
         if (f.detail) card.append(el('p', { class: 'small' }, reportValue(f.detail)));
         const fields = Object.entries(f).filter(([key]) => !['title', 'detail', 'status', 'severity', 'references'].includes(key));
-        if (fields.length) card.append(el('dl', {}, ...fields.flatMap(([key, value]) => [el('dt', { class: 'muted small' }, key === 'id' ? 'Check ID' : colLabel(key)), el('dd', { class: 'small', style: 'overflow-wrap:anywhere;white-space:pre-wrap' }, reportValue(value))])));
+        if (fields.length) card.append(el('dl', {}, ...fields.flatMap(([key, value]) => [el('dt', { class: 'muted small' }, key === 'id' ? 'Check ID' : key === 'reason' && f.status === 'UNKNOWN' ? 'Why this is unknown' : key === 'remediation' ? 'How to resolve' : colLabel(key)), el('dd', { class: 'small', style: 'overflow-wrap:anywhere;white-space:pre-wrap' }, reportValue(value))])));
         if (Array.isArray(f.references) && f.references.length) card.append(el('div', { class: 'small' }, el('b', {}, 'References'), el('ul', {}, ...f.references.map((ref) => {
           const url = typeof ref === 'string' ? ref : ref && ref.url;
           let safe = false;

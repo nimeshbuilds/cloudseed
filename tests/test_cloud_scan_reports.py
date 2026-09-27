@@ -62,6 +62,46 @@ class CloudReportTests(unittest.TestCase):
         result = scan._cloud_results([{"status": "New", "finding_info": [], "resources": {}, "remediation": []}])
         self.assertEqual(result["verdict"], "INCOMPLETE")
 
+    def test_every_unknown_has_its_specific_cause_and_next_action(self):
+        cases = [(None, "not an OCSF object"), ({}, "no check result"),
+                 ({"status": "New"}, "lifecycle status"),
+                 (observation("UNKNOWN"), "explicitly marked"),
+                 (observation("FUTURE_RESULT"), "unsupported check result"),
+                 (observation({"unexpected": "shape"}), "unsupported check result")]
+        for record, cause in cases:
+            with self.subTest(cause=cause, record=record):
+                result = scan._cloud_results([record])
+                finding = result["findings"][0]
+                self.assertEqual(finding["status"], "UNKNOWN")
+                self.assertIn(cause, finding["detail"])
+                self.assertIn(cause, finding["reason"])
+                self.assertIn("raw Prowler report", finding["remediation"])
+                self.assertIn("no recognized result", result["diagnostics"]["reason"])
+                if isinstance(record, dict) and record.get("status_detail"):
+                    self.assertIn(record["status_detail"], finding["detail"])
+
+    def test_unidentifiable_pass_is_an_explained_gap_and_cannot_hide_failure(self):
+        for info in (None, [], {}, {"analytic": {"uid": " "}}):
+            row = observation("PASS", finding_info=info)
+            result = scan._cloud_results([row])
+            self.assertEqual(result["verdict"], "INCOMPLETE")
+            self.assertEqual(result["summary"]["pass"], 0)
+            self.assertEqual(result["summary"]["unknown"], 1)
+            self.assertIn("finding_info.analytic.uid", result["findings"][0]["reason"])
+            self.assertEqual(result["findings"][0]["scanner_status"], "PASS")
+            self.assertEqual(scan._cloud_results([row, observation("FAIL")])["verdict"], "FAIL")
+
+    def test_execution_and_empty_gaps_have_safe_specific_explanations(self):
+        result = scan._cloud_results([], returncode=7, output="AccessDenied secret-credential\nEndpointConnectionError https://user:secret@proxy/")
+        reason = result["diagnostics"]["reason"]
+        for message in ("zero observations", "code 7", "permission/access denial", "unreachable service endpoints"):
+            self.assertIn(message, reason)
+        self.assertNotIn("secret", json.dumps(result))
+        self.assertIn("correct scanner access", result["diagnostics"]["next_step"])
+        result = scan._cloud_results([observation("MANUAL", remediation={})])
+        self.assertIn("manual verification", result["findings"][0]["reason"])
+        self.assertTrue(result["findings"][0]["remediation"])
+
     def test_legacy_medium_fail_and_corrupt_counts_cannot_pass(self):
         self.assertEqual(scan.cloud_verdict({"verdict": "PASS", "summary": {"pass": 135, "fail": 14}}), "FAIL")
         for sm in ({}, {"pass": 1}, {"pass": 1, "fail": -1}, {"pass": 1, "fail": "0"}):

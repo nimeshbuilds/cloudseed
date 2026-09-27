@@ -62,6 +62,9 @@ jobs:
     needs: checks
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    env:
+      CLOUDSEED_APPLE_TEAM_ID: QPF2VF2885
+      CLOUDSEED_REQUIRE_APPLE_SIGNING: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
     permissions:
       contents: read
       id-token: write
@@ -83,11 +86,20 @@ jobs:
         with:
           go-version-file: providers/vmdesktop/go.mod
           cache-dependency-path: providers/vmdesktop/go.sum
+      - name: Prepare ephemeral Apple Developer ID signing
+        if: runner.os == 'macOS'
+        env:
+          APPLE_SIGNING_CERTIFICATE_P12: ${{ secrets.APPLE_SIGNING_CERTIFICATE_P12 }}
+          APPLE_SIGNING_PASSWORD: ${{ secrets.APPLE_SIGNING_PASSWORD }}
+        run: python3 scripts/apple-signing.py prepare
       - name: Build and exercise the actual binary
         env:
           PLATFORM: ${{ matrix.platform }}
         run: |
           bash scripts/build-bundle.sh
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            python3 scripts/apple-signing.py verify --binary "dist/cloudseed-$PLATFORM"
+          fi
           export CLOUDSEED_TEST_BINARY="$PWD/dist/cloudseed-$PLATFORM"
           export SCN_BINARY="$CLOUDSEED_TEST_BINARY"
           export PATH="$PWD/build/tfbin:$PATH"
@@ -96,6 +108,9 @@ jobs:
           bash tests/scenarios/14-ai-agents-and-mcp.sh
           bash tests/scenarios/15-web-console-and-finops.sh
           bash tests/scenarios/run.sh 16 17 18 19
+      - name: Remove temporary Apple signing credentials
+        if: always() && runner.os == 'macOS'
+        run: python3 scripts/apple-signing.py cleanup
       - name: Inventory build dependencies and source modules
         env:
           PLATFORM: ${{ matrix.platform }}

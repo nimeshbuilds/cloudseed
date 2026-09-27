@@ -1796,7 +1796,10 @@ def scan_verdict(kind: str, data: dict) -> str:
     if isinstance(data.get("diagnostics"), list):
         gaps = gaps or bool(data["diagnostics"])
     if kind in ("cis", "stig-k8s"):
-        gaps = gaps or _num(sm.get("warn")) or _num(sm.get("info"))
+        gaps = gaps or _num(sm.get("warn"))
+        if not gaps and _num(sm.get("info")) and not _num(sm.get("pass")) and not _num(sm.get("fail")) and not any(
+                str(c.get("status", "")).upper() in ("PASS", "FAIL", "WARN", "UNKNOWN") for c in checks + findings):
+            return "N/A"
     if host_scan:
         gaps = gaps or _num(data.get("ansible_rc")) or any(h.get("error") and not h.get("skipped") for h in hosts)
     if stored == "PASS":
@@ -1949,6 +1952,9 @@ def reports(env_id: str) -> dict:
             if isinstance(data.get("diagnostics"), dict):
                 row["diagnostics"] = {key: value for key, value in data["diagnostics"].items()
                                       if isinstance(key, str) and _is_num(value)}
+                for key in ("reason", "next_step"):
+                    if isinstance(data["diagnostics"].get(key), str):
+                        row["diagnostics"][key] = secrets.redact(data["diagnostics"][key])
             elif isinstance(data.get("diagnostics"), list):
                 row["diagnostics"] = [secrets.redact(item) for item in data["diagnostics"] if isinstance(item, str)]
             row["coverage_limits"] = [item for item in _items(data, "coverage_limits", 20) if isinstance(item, str)]

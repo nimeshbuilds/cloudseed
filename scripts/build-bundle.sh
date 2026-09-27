@@ -19,6 +19,11 @@ case "$(uname -m)" in
 esac
 NAME="cloudseed-${OS}-${ARCH}"
 BIN="$ROOT/dist/$NAME"
+SIGN_ARGS=()
+if [[ -n "${CLOUDSEED_CODESIGN_IDENTITY:-}" ]]; then
+  [[ "$OS" == darwin ]] || { echo "Apple code signing is only supported on macOS" >&2; exit 2; }
+  SIGN_ARGS=(--codesign-identity "$CLOUDSEED_CODESIGN_IDENTITY")
+fi
 
 TF_VERSION="${TF_VERSION:-1.16.4}"
 [[ "$TF_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "TF_VERSION must be X.Y.Z" >&2; exit 2; }
@@ -57,6 +62,7 @@ python3 -m venv "$BUILD/venv"
 
 echo "▸ Building"
 PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" "$BUILD/venv/bin/pyinstaller" --onefile --clean --noconfirm \
+  ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} \
   --name "$NAME" \
   --distpath "$ROOT/dist" --workpath "$BUILD/pyi" --specpath "$BUILD" \
   --paths "$ROOT" \
@@ -74,6 +80,13 @@ PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" "$BUILD/venv/bin/pyinstaller" --on
   --add-data "$STAGE/cloudseed/web:cloudseed/web" \
   --add-data "$BUILD/tfbin/terraform:tfbin" \
   "$ROOT/bin/cloudseed"
+
+if [[ -n "${CLOUDSEED_CODESIGN_IDENTITY:-}" ]]; then
+  # Sign embedded Python libraries during packaging, then verify the finished
+  # executable. Signing only the outer onefile executable is insufficient.
+  codesign --verify --strict --verbose=2 "$BIN"
+  codesign --display --verbose=4 "$BIN" 2>&1 | grep -E '^(Authority|TeamIdentifier|Timestamp|CodeDirectory)='
+fi
 
 echo "▸ Smoke test"
 SMOKE="$(mktemp -d)"

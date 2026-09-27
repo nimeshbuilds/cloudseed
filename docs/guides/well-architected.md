@@ -49,6 +49,12 @@ Failure takes precedence over incomplete evidence. Do not treat exit 3 as succes
 `PASS` as proof of overall architectural readiness. A manual review requirement remains visible even when all
 automated configuration checks pass. Review each finding's evidence and suggested remediation before applying changes.
 
+Each `UNKNOWN` explains the missing observation or rejected evidence in its detail: for example, an invalid named
+configuration field, a stale timestamp, mismatched environment identity, incomplete recovery verification, or a
+required owner attestation. Its remediation names the next evidence to collect or review. Saved JSON and Markdown
+preserve these reasons and next steps. If a source tool supplied no underlying cause, the report says so rather
+than guessing a connectivity, permission or configuration failure.
+
 The initial rule set retains manual review items as `UNKNOWN` and does not accept manual attestations. Consequently,
 an assessment with no definite failures is `INCOMPLETE`; individual configuration or recovery checks can still pass.
 

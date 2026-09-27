@@ -27,6 +27,19 @@ FINDING = {"id": "ec2_networkacl_allow_ingress_any_port", "status": "FAIL", "sev
 
 
 class ScanReportBackendTests(unittest.TestCase):
+    def test_cis_informational_rows_do_not_force_incomplete(self):
+        for kind in ("cis", "stig-k8s"):
+            for verdict in (None, "PASS"):
+                with self.subTest(kind=kind, verdict=verdict):
+                    base = {"summary": {"pass": 2, "fail": 0, "info": 1}, "findings": [{"status": "INFO"}]}
+                    if verdict:
+                        base["verdict"] = verdict
+                    self.assertEqual(webui.scan_verdict(kind, base), "PASS")
+                    base["summary"]["pass"] = 0
+                    self.assertEqual(webui.scan_verdict(kind, base), "N/A")
+                    base["summary"]["warn"] = 1
+                    self.assertEqual(webui.scan_verdict(kind, base), "INCOMPLETE")
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="cloudseed-scan-report-fixture-")
         self.addCleanup(self.temp.cleanup)
@@ -81,6 +94,19 @@ class ScanReportBackendTests(unittest.TestCase):
         row = webui.reports(self.env.id)["scans"][0]
         self.assertEqual(row["failure_policy"], "Critical vulnerabilities fail this scan.")
         self.assertEqual(row["diagnostics"], ["No readable image scan results were returned."])
+
+    def test_unknown_reasons_and_resolution_reach_the_web_report(self):
+        finding = dict(FINDING, status="UNKNOWN", reason="Prowler supplied no check result.",
+                       remediation="Inspect the raw report and rerun the cloud scan.")
+        self.report({"schema_version": 1, "verdict": "INCOMPLETE", "findings": [finding],
+                     "diagnostics": {"process_exit_code": 7, "reason": "Prowler exited with code 7.",
+                                     "next_step": "Review scanner access.", "raw_stderr": "do not expose"}})
+        row = webui.reports(self.env.id)["scans"][0]
+        self.assertEqual(row["findings"][0]["reason"], finding["reason"])
+        self.assertEqual(row["findings"][0]["remediation"], finding["remediation"])
+        self.assertEqual(row["diagnostics"]["reason"], "Prowler exited with code 7.")
+        self.assertEqual(row["diagnostics"]["next_step"], "Review scanner access.")
+        self.assertNotIn("raw_stderr", row["diagnostics"])
 
     def test_existing_scanner_truncation_and_result_caps_stay_visible(self):
         self.report({"findings": [FINDING], "findings_total": 450, "checks": [{"id": str(i)} for i in range(205)],
@@ -168,7 +194,7 @@ const modal=(title,body)=>{shown={title,text:text(body),links:walk(body).filter(
 const XQ_REPORT={scan:'scan'};
 """
         names = ["num", "scanResult", "verdictClass", "scanChip", "runKind", "runLabel", "REPORT_KIND", "SCAN_TITLES", "scanTitle", "reportChip", "COL_LABEL", "colLabel", "reportSummary", "cellChip", "REPORT_COLS", "reportCell", "showReport"]
-        finding = dict(FINDING, title="<img src=x onerror=alert(1)>", references=FINDING["references"] + ["javascript:alert(1)"])
+        finding = dict(FINDING, title="<img src=x onerror=alert(1)>", status="UNKNOWN", reason="Scanner supplied no recognized result.", references=FINDING["references"] + ["javascript:alert(1)"])
         code = "const finding=" + json.dumps(finding) + ";\n" + """
 const shownReports=[];
 for(const kind of ['cloud','cis','kube','images','host-cis','stig-host','fips','architecture','health','network']) {
@@ -184,8 +210,10 @@ console.log(JSON.stringify(shownReports));
         for row in results:
             for value in (FINDING["id"], FINDING["resource"], "acl-other", FINDING["region"], FINDING["detail"], FINDING["remediation"],
                           "public route", "private subnet", "Current account", "Manual checks require review", "Scanner diagnostics", "error lines", "Showing 1 of 105 findings",
-                          "retained-check-detail", "<img src=x onerror=alert(1)>"):
+                          "retained-check-detail", "<img src=x onerror=alert(1)>", "Scanner supplied no recognized result."):
                 self.assertIn(value, row["text"])
+            if "Why this is unknown" in row["text"]:
+                self.assertIn("How to resolve", row["text"])
             self.assertEqual(row["links"], FINDING["references"])
             self.assertEqual(row["buttons"], ["View full JSON", "View full Markdown"])
 
