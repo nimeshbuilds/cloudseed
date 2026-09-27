@@ -2676,7 +2676,7 @@
     for (const [id, j] of jobs) if (j.running && !listed.has(id) && !(id === activeJob && es)) checkJob(id, false);   // restarted server, or older than the list
     for (const j of finished) { if (j.id === activeJob && !es) $('#job-status').textContent = jobStatusText(j); announce(j); }
     renderTabs();
-    const sig = JSON.stringify([STATE.envs, STATE.settings, STATE.mcp, STATE.creds, STATE.undo, STATE.jobs.map((j) => [j.id, j.running, j.rc])]);
+    const sig = JSON.stringify([STATE.envs, STATE.settings, STATE.headroom, STATE.mcp, STATE.creds, STATE.undo, STATE.jobs.map((j) => [j.id, j.running, j.rc])]);
     const changed = sig !== stateSig; stateSig = sig;
     return { changed: changed || finished.length > 0, selChanged: !first && prev !== sel.value };
   }

@@ -103,7 +103,7 @@ Env shorthand: status, output, inventory, troubleshoot, plan, ssh, k8s and vpn m
 environment named by --env, else the current one (cs env use), else the only one (e.g. cs status, cs ssh --env lab).
 --env also takes an environment id as `cs list` shows it (--env aws-prod, or cs status aws-prod).
 <cloud> without --env: the only environment of that cloud. With several: status, output, inventory, troubleshoot, plan,
-ssh, k8s, vpn, finops and scan use the current one; otherwise a terminal asks, and a script gets dev when it exists.
+ssh, k8s, vpn, finops, scan and evidence use the current one; otherwise a terminal asks, and a script gets dev when it exists.
 Several without a dev (or a current one that is not dev, for a command that changes things) stop with the list.
 Deterministic vs agentic: `cloudseed setup aws` runs exactly that; `cloudseed agentic "set up aws"` asks the agent to do it.
 Home: ~/.cloudseed   (override with CLOUDSEED_HOME)

@@ -262,7 +262,7 @@ cloudseed list | doctor [cloud] | explain [name] [--json] | help [command|topic]
 the environment named by `--env`, else the current one (`cs env use`), else the only one. `--env` also takes an
 environment id as `cloudseed list` shows it (`--env aws-prod`, or `cs status aws-prod`). `<cloud>` without `--env`
 means the only environment of that cloud; with several, `status`, `output`, `inventory`, `troubleshoot`, `plan`, `ssh`,
-`k8s`, `vpn`, `finops` and `scan` use the current one, a terminal asks, and a script gets `dev` when it exists -
+`k8s`, `vpn`, `finops`, `scan` and `evidence` use the current one, a terminal asks, and a script gets `dev` when it exists -
 never a guess: several without a `dev` (or a current one that is not `dev`, for a command that changes things) stop
 with the list. For `setup`, `--env` defaults to `dev`.
 
