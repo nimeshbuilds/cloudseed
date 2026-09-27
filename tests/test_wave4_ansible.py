@@ -334,12 +334,12 @@ class AnsibleEnvTests(unittest.TestCase):
 class BastionKubectlTests(unittest.TestCase):
     TOOLS = _read("ansible/roles/tools/tasks/main.yml")
 
-    def test_kubectl_is_for_managed_clusters_and_follows_the_tools_flag(self):
+    def test_kubectl_is_for_enabled_clusters_and_follows_the_tools_flag(self):
         bastion = _read("ansible/bastion.yml")
         m = re.search(r"^\s+install_kubectl: (.+)$", bastion, re.M)
         self.assertIsNotNone(m)
         expr = m.group(1)
-        for part in ("install_cloud_cli | bool", "enable_kubernetes | bool", "cloud in ['aws', 'gcp', 'azure']"):
+        for part in ("install_cloud_cli | bool", "enable_kubernetes | bool", "cloud in ['aws', 'gcp', 'azure', 'vmware']"):
             self.assertIn(part, expr)
         for var in ("enable_kubernetes: false", 'kubernetes_version: ""', 'kubernetes_cluster_name: ""', 'cloud_region: ""'):
             self.assertIn(var, bastion)
@@ -370,7 +370,7 @@ class BastionKubectlTests(unittest.TestCase):
 
     def test_the_login_message_lists_what_is_installed(self):
         motd = _read("ansible/roles/common/templates/motd.j2")
-        self.assertIn("['kubectl'] if install_kubectl | default(false) | bool", motd)
+        self.assertIn("['kubectl', 'helm', 'k9s'] if install_kubectl | default(false) | bool", motd)
         self.assertIn("{'aws': 'aws', 'gcp': 'gcloud', 'azure': 'az'}", motd)
         self.assertNotIn("'cloud CLI'", motd)                               # a VMware bastion has none
 

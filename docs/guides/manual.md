@@ -217,9 +217,18 @@ when Kubernetes is turned on, and only warns for a cluster that already runs the
   kubeconfigs and credential files a checkout may hold (a file whose content is a private key stops it).
   `--no-harden` / `--no-firewall` also remove what an earlier run installed (the PAM and umask edits stay; VPN hosts
   and local bastions keep the NAT they forward with). A failed run or SSH wait prints the whole re-run command with
-  the same `--host` / `--no-harden` / `--no-firewall` / `--no-tools` flags. With EKS / GKE / AKS the bastion also gets
-  kubectl of the cluster's minor version (sha256-verified); on AWS run `aws eks update-kubeconfig --name <cluster>
+  the same `--host` / `--no-harden` / `--no-firewall` / `--no-tools` flags. Every provisioned bastion gets the current
+  Cloudseed CLI and `cs` alias from the controller's portable source payload, including when the controller is a
+  standalone binary. With Kubernetes and tools enabled, the bastion also gets kubectl, Helm and k9s (checksum-verified).
+  kubectl follows the configured cluster minor or kubeadm default when available; an unpinned VMware RKE2 cluster uses the stable client and
+  needs a version-skew check after authentication. On AWS run `aws eks update-kubeconfig --name <cluster>
   --region <region>` there, then kubectl. In AWS FIPS mode its login shells export `AWS_USE_FIPS_ENDPOINT=true`.
+  The bastion does not inherit the controller's environment state or credentials. See
+  [Cloudseed on the bastion](dependencies-and-runtimes.md#cloudseed-on-the-bastion) for installation checks and repair.
+  `cloudseed` and `cs` are available on bastions, while environment state and credentials stay on the original
+  controller. For cluster administration using an explicitly authorized bastion kubeconfig, use
+  `cs kubectl --local-context get nodes` or `cs helm --local-context list -A`. See
+  [Kubernetes access and bastions](kubernetes-access.md) for AWS, GCP, Azure and VMware authentication requirements.
 
 ## Commands
 

@@ -668,6 +668,7 @@ class TunnelTests(unittest.TestCase):
             return subprocess.CompletedProcess(cmd, 0, "", "")
         outputs = {"kubernetes_endpoint": "https://10.0.1.5:6443", "bastion_public_ip": "203.0.113.9"}
         with mock.patch.object(services, "_tcp_open", return_value=False), mock.patch.object(services.subprocess, "run", fake_run), \
+                mock.patch.object(services, "ensure_tool", return_value="kubectl"), \
                 mock.patch.object(services, "_free_port", return_value=7745), \
                 mock.patch.object(services, "_point_kubeconfig", return_value=True), _quiet():
             via = services._ensure_reachable(clouds.get("aws"), env, {"vars": {}}, outputs, env.dir / "k8s" / "kubeconfig")

@@ -56,6 +56,9 @@ cs k9s
 - Mutating `kubectl` and `helm` calls take a Velero backup first when Velero is installed, so `cs undo` can roll them
   back.
 
+For provider authentication on a bastion, explicit `--local-context` cluster administration, and the distinction
+between a kubeconfig and a Cloudseed environment, see [Kubernetes access and bastions](kubernetes-access.md).
+
 ### Which cluster am I talking to?
 
 ```bash

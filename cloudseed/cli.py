@@ -6234,6 +6234,8 @@ def _kube_args(tool: str, rest: list[str]) -> dict:
             break
         if a.startswith("--"):
             name, eq, val = a.partition("=")
+            if tool == "kubectl":
+                name = name.replace("_", "-")       # kubectl normalizes underscore spellings
             if eq:
                 flags[name] = val
             elif name in long_flags:
@@ -6245,20 +6247,25 @@ def _kube_args(tool: str, rest: list[str]) -> dict:
             if name == "--namespace":
                 ns = val
         elif a.startswith("-") and len(a) > 1 and not a[1:].replace(".", "").isdigit():
-            if a[1] in short:
-                if len(a) > 2:                      # -nshop / -n=shop / -ojson
-                    val = a[3:] if a[2] == "=" else a[2:]
-                else:
-                    val = rest[i + 1] if i + 1 < len(rest) else ""
-                    i += 1
-                flags["-" + a[1]] = val
-                if a[1] == "n":
-                    ns = val
-            elif len(a) > 2 and a[2] == "=":        # -w=false: a switch with an explicit value
-                flags["-" + a[1]] = a[3:]
-            else:
-                for ch in a[1:]:                    # -it, -A, -g ...
-                    flags["-" + ch] = True
+            j = 1
+            while j < len(a):
+                ch, suffix = a[j], a[j + 1:]
+                if ch in short:                    # -nshop, -n=shop, or a bundle such as -AsURL
+                    if suffix:
+                        val = suffix[1:] if suffix.startswith("=") else suffix
+                    else:
+                        val = rest[i + 1] if i + 1 < len(rest) else ""
+                        i += 1
+                    # Normalize endpoint aliases as they occur: the last wins.
+                    flags["--server" if tool == "kubectl" and ch == "s" else "-" + ch] = val
+                    if ch == "n":
+                        ns = val
+                    break
+                if suffix.startswith("="):         # -w=false or -Aw=false
+                    flags["-" + ch] = suffix[1:]
+                    break
+                flags["-" + ch] = True              # -it, -A, -g ...
+                j += 1
         else:
             pos.append(a)
         i += 1
@@ -6375,6 +6382,67 @@ def _never_ends(tool: str, rest: list[str]) -> str | None:
     return None
 
 
+def _local_ktool(tool: str, rest: list[str], redacted: bool) -> int:
+    """Explicit host kubeconfig use: no environment selection, Terraform or managed Undo."""
+    kubectl = services.ensure_tool("kubectl", "to validate this host's Kubernetes context")
+    kenv = deps.path_env()
+    parsed = _kube_args("helm" if tool == "helm" else "kubectl", rest)["flags"]
+    if parsed.get("--cluster") is not None:
+        raise ui.Abort("--local-context requires selecting a complete context instead of --cluster. Use --context NAME "
+                       "so the cluster, identity and TLS settings can be validated together.", code=2)
+    view = [kubectl, "config", "view", "--minify", "-o", "json"]
+    for source, target in (("--kubeconfig", "--kubeconfig"),
+                           ("--kube-context" if tool == "helm" else "--context", "--context")):
+        value = parsed.get(source)
+        if source == "--kube-context" and value is None:
+            value = kenv.get("HELM_KUBECONTEXT") or None
+        if value is not None:
+            if not isinstance(value, str) or not value:
+                raise ui.Abort(f"{source} needs a value.", code=2)
+            view += [target, value]
+    try:
+        result = subprocess.run(view, env=kenv, capture_output=True, text=True, timeout=20)
+        data = json.loads(result.stdout) if result.returncode == 0 else {}
+        context = data.get("current-context") if isinstance(data, dict) else None
+        clusters = data.get("clusters") if isinstance(data, dict) else None
+        server = clusters[0].get("cluster", {}).get("server") if isinstance(clusters, list) and clusters and isinstance(clusters[0], dict) else None
+        if not isinstance(context, str) or not context or not isinstance(server, str) or not server:
+            raise ValueError("no selected cluster")
+    except (OSError, subprocess.SubprocessError, ValueError, TypeError, AttributeError):
+        raise ui.Abort("No usable Kubernetes context on this host. Authenticate with an authorized identity, create a "
+                       "kubeconfig here, and select its context (kubectl config use-context NAME); then retry --local-context. "
+                       "This mode does not import your workstation's credentials or infrastructure state.", code=2) from None
+    from urllib.parse import urlsplit
+    endpoint = parsed.get("--kube-apiserver" if tool == "helm" else "--server") or (kenv.get("HELM_KUBEAPISERVER") if tool == "helm" else None) or server
+    insecure = parsed.get("--kube-insecure-skip-tls-verify" if tool == "helm" else "--insecure-skip-tls-verify")
+    if insecure is None and tool == "helm":
+        insecure = kenv.get("HELM_KUBEINSECURE_SKIP_TLS_VERIFY") or None
+    saved_insecure = clusters[0]["cluster"].get("insecure-skip-tls-verify")
+    try:
+        endpoint_url = urlsplit(endpoint)
+        secure_endpoint = endpoint_url.scheme == "https" and bool(endpoint_url.hostname) and not endpoint_url.username and not endpoint_url.password
+    except (ValueError, TypeError):
+        secure_endpoint = False
+    # client-go does not reliably clear a saved true value with a false scalar
+    # override. Require repairing the kubeconfig instead of assuming it is safe.
+    if not secure_endpoint or _flag_on(insecure) or _flag_on(saved_insecure):
+        raise ui.Abort("--local-context requires an HTTPS Kubernetes endpoint with TLS certificate verification enabled. "
+                       "Configure the cluster CA in your kubeconfig and remove insecure TLS settings or endpoint overrides.", code=2)
+    binary = kubectl if tool == "kubectl" else services.ensure_tool(tool, "to administer this host's selected cluster")
+    shown = " ".join(managed.mask_argv(rest, tool, auth=True))
+    ui.eprint(ui.dim(f"  [this host's kubeconfig: {secrets.redact(context)}] $ {tool} {shown}"))
+    if parsed.get("--server") or parsed.get("--kube-apiserver") or tool == "helm" and kenv.get("HELM_KUBEAPISERVER"):
+        ui.eprint(ui.dim("  An explicit API endpoint override is active; it takes precedence over the context's server."))
+    ui.eprint(ui.dim("  Tool arguments may further select the target. Infrastructure state is unchanged; Cloudseed Undo is unavailable in this mode."))
+    if redacted:
+        try:
+            piped = not sys.stdin.isatty()
+        except (AttributeError, ValueError, OSError):
+            piped = False
+        return secrets.run_redacted([binary, *rest], env=kenv, stdin=None if piped else subprocess.DEVNULL)
+    return subprocess.call([binary, *rest], env=kenv)
+
+
 def cmd_ktool(args, settings) -> int:
     """cs kubectl|helm|k9s ... : run the tool against the current environment's cluster."""
     tool = args.cmd
@@ -6386,6 +6454,8 @@ def cmd_ktool(args, settings) -> int:
         if rest and rest[0] in CLOUD_KEYS:
             args.cloud = rest.pop(0)
         rest = _strip_leading_sep(_pull_env_arg(args, rest))
+    if getattr(args, "local_context", False) and (getattr(args, "cloud", None) or getattr(args, "env", None)):
+        raise ui.Abort("--local-context cannot be combined with a Cloudseed cloud or --env selector.", code=2)
     redacted = secrets.redact_enabled()
     if redacted:   # an agent session: the tool's output is redacted line by line, which needs a plain, non-interactive run
         why = _needs_terminal(tool, rest)
@@ -6398,6 +6468,8 @@ def cmd_ktool(args, settings) -> int:
                            "cancelled. Use a bounded form: logs --tail=200 or --since=10m (without -f), get / events without "
                            "-w, or kubectl wait --for=condition=... --timeout=120s. Streams and port-forwards belong in your "
                            f"own terminal: cs {tool} ...", code=2)
+    if getattr(args, "local_context", False):
+        return _local_ktool(tool, rest, redacted)
     cloud, env, cfg, outputs = _resolve_cluster_env(args, settings)
     kc = services.ensure_kubeconfig(cloud, env, cfg, outputs)
     binary = services.ensure_tool(tool, "to talk to the cluster")
@@ -10409,7 +10481,10 @@ def _kube_passthrough(words: list, ns, parser) -> None:
         tok = rest[0]
         if _take_global(rest, ns, parser):
             continue
-        if tok in CLOUD_KEYS and not ns.cloud:
+        if tok == "--local-context":
+            ns.local_context = True
+            rest.pop(0)
+        elif tok in CLOUD_KEYS and not ns.cloud:
             ns.cloud = rest.pop(0)
         elif tok in ("--env", "-e") and len(rest) > 1 and not ns.env:
             ns.env = rest[1]
@@ -10431,6 +10506,8 @@ def _kube_passthrough(words: list, ns, parser) -> None:
             ns.yes = True
         rest = head + rest[cut:]
     ns.tool_args = rest
+    if getattr(ns, "local_context", False) and (ns.cloud or ns.env):
+        parser.error("--local-context cannot be combined with a Cloudseed cloud or --env selector")
 
 
 def _managed_passthrough(words: list, ns, parser) -> None:
@@ -11058,9 +11135,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     for tool in ("kubectl", "helm", "k9s"):
         kt = sub.add_parser(tool, help=f"run {tool} against the current environment's cluster: cs {tool} [cloud --env NAME] <args>")
+        kt.add_argument("--local-context", action="store_true", help="use this host's authorized kubeconfig instead of a Cloudseed environment (no infrastructure state or Cloudseed Undo)")
         kt.add_argument("tool_args", nargs=argparse.REMAINDER, metavar="ARGS",
                         help=f"arguments passed to {tool} as typed (optionally prefixed by <cloud> --env NAME; `--` ends cloudseed's part)")
-        kt.set_defaults(cloud=None, env=None)
+        kt.set_defaults(cloud=None, env=None, local_context=False)
         kt.passthrough = _kube_passthrough
 
     ex = sub.add_parser("explain", help="explain anything cloudseed does: features, targets, commands, topics, platform groups/items (cs help explain)")

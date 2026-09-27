@@ -1,6 +1,6 @@
 ---
 title: "Changelog - cloudseed v0.2.1 highlights"
-description: "Cloudseed v0.2.1 fixes automatic public-IP detection, incomplete scan verdicts and detailed reporting across CLI, MCP, agents and the web console."
+description: "Cloudseed v0.2.1 fixes public-IP detection, bastion CLI provisioning, private cluster access and scan reporting, with explicit host-kubeconfig administration."
 ---
 
 # Changelog
@@ -16,12 +16,29 @@ machine. AWS, GCP and Azure setup share the fix through the CLI, console, MCP an
 `update-ip` now explain certificate and connectivity failures. Explicit CA overrides and saved SSH allow-lists
 remain authoritative. See [automatic public-IP troubleshooting](../guides/troubleshooting.md#automatic-public-ip-detection).
 
+Standalone releases also carry portable source for installing `cloudseed` and `cs` on Linux bastions. Provisioning
+checks both commands and installs kubectl, Helm and k9s when Kubernetes and tools are enabled. The controller's
+environment records, state, SSH keys, kubeconfig and cloud credentials stay on the controller. See
+[bastion installation and repair](../guides/dependencies-and-runtimes.md#cloudseed-on-the-bastion).
+
+Explicit `--local-context` uses the invoking host's already-authorized kubeconfig for kubectl, Helm or terminal k9s.
+kubectl/Helm expose the same choice through MCP, agents and the console, with target confirmation. It validates a
+selected context and HTTPS/TLS configuration; it does not grant provider permissions, import an environment or
+create Cloudseed Undo entries. Private cluster access from the original controller also prepares kubectl before
+configuring the bastion tunnel and reports a kubeconfig update failure instead of claiming the tunnel is ready.
+See [Kubernetes access and bastions](../guides/kubernetes-access.md).
+
 Scan reports now retain detailed findings and remediation, including lower-severity cloud findings and manual
 checks. Empty and partial scan evidence remains incomplete, with exit code 3. The console exposes report details,
 coverage and preview limits with full saved artifacts. Architecture correctly skips Kubernetes diagnostics when
 Kubernetes is explicitly disabled. See [scan reporting](../guides/resilience.md),
 [Well-Architected evidence](../guides/well-architected.md) and the expanded
 [AWS cloud-scan walkthrough](../scenarios/10-compliance-scans.md#step-6-the-cloud-account-cloud-environments).
+
+macOS release packaging uses Apple Developer ID signing and verifies the expected publisher, hardened runtime and
+secure timestamp before testing and attesting the signed bytes. Apple signing and notarization are separate;
+this release workflow does not perform notarization. Automated installation and regression checks do not establish
+live deployment acceptance across all cloud providers.
 
 ## v0.2.0 - 2026-09-25
 

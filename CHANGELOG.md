@@ -9,6 +9,14 @@ commands or defaults; such changes are called out under **Changed**.
 
 ## [0.2.1] - 2026-09-26
 
+### Added
+
+- Explicit `--local-context` mode for `cs kubectl`, `cs helm` and terminal-only `cs k9s` uses the invoking host's
+  already-authorized kubeconfig without selecting a Cloudseed environment. kubectl/Helm expose the same option in
+  MCP, the console and agent workflows, with target confirmation. The mode validates a selected context and HTTPS
+  endpoint with TLS verification; cloud and cluster permissions remain the operator's responsibility. It does not
+  import controller state or credentials, open a managed tunnel, or create Cloudseed Undo entries.
+
 ### Fixed
 
 - Standalone releases now carry trusted CA roots for public-IP discovery and outbound HTTPS downloads. The frozen
@@ -16,6 +24,14 @@ commands or defaults; such changes are called out under **Changed**.
   setup. Explicit certificate overrides remain authoritative; TLS and hostname verification stay enabled.
 - Setup and `update-ip` explain HTTPS trust, timeout and connectivity failures while preserving saved allow-lists and
   the manual `--allow-ip` option. CLI, MCP, console and agent setup share the corrected detector.
+- Standalone binaries include the portable launcher and Python source needed to provision Linux bastions from
+  any supported controller platform. Provisioning installs and checks both `cloudseed` and `cs`, repairs shell PATH
+  setup, and refuses to overwrite unrelated commands. Kubernetes-enabled bastions receive checksum-verified kubectl,
+  Helm and k9s when tool provisioning is enabled, including VMware. Controller environment records, Terraform state,
+  private SSH keys, kubeconfig and cloud credentials are not copied to the bastion.
+- First use of a private cluster now prepares kubectl before configuring its bastion tunnel, including calls made
+  through Helm or k9s. A new or reused tunnel is not reported ready if its environment kubeconfig cannot be updated;
+  TLS verification against the original API name remains enabled.
 - Cloud reports retain every failed and manual observation, including lower severities, with check identifiers,
   resource scope, explanations and remediation. All cloud providers share conservative handling of empty, partial
   or erroneous scanner output. Account-wide findings are clearly distinguished from environment ownership.

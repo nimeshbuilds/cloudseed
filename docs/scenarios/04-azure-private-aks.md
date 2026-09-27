@@ -231,6 +231,7 @@ cs explain scan
 
 ## Next steps
 
+- [Kubernetes access and bastions](../guides/kubernetes-access.md): use an authorized Azure identity for bastion-side AKS access.
 - [10 · Compliance scans](10-compliance-scans.md): CIS, NSA/MITRE, CVEs, STIG and FIPS on your cluster and hosts.
 - [08 · Backups you can trust](08-backups-you-can-trust.md): on AKS, Velero gets a Blob container and a workload
   identity created for it.

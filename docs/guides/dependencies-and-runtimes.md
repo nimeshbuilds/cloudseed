@@ -91,6 +91,46 @@ the skills, the VMware provider sources and a checksum-verified Terraform releas
 CPU architecture you will run it on; the build uses PyInstaller in a private virtualenv under `build/`. It is also
 available as `cs install bundle` and `make bundle`.
 
+## Cloudseed on the bastion
+
+Normal provisioning installs `cloudseed` and its short alias `cs` for the SSH login user on AWS, GCP, Azure and
+VMware bastions. The commands use the exact source payload copied from your current checkout, container or
+standalone binary; provisioning does not download an unrelated latest Cloudseed release. A standalone binary
+includes portable Python source for this purpose, so a macOS controller can provision a Linux bastion.
+
+After setup, check the installation from your workstation:
+
+```bash
+cs ssh aws --env demo -- 'cs --version && cloudseed --version && cs help'
+```
+
+Replace `aws` and `demo` with your target and environment. Inside the bastion, `cs help` and `cs doctor` work
+directly. The commands live in `~/.local/bin`; login and SSH shell startup include that directory and
+`~/.cloudseed/bin`. An unrelated existing `cloudseed` or `cs` command in the installation location stops provisioning
+with an explanation instead of being overwritten.
+
+When Kubernetes and tools are enabled, the bastion also gets native `kubectl`, `helm` and `k9s`. Downloads use
+published SHA-256 checksums; re-provisioning retains already installed Helm/k9s clients. `kubectl` follows the
+configured cluster minor version when available, including the existing kubeadm default. VMware RKE2 with no configured
+Kubernetes version uses the upstream stable client and reports that choice; check the running cluster version after
+authenticating and keep the client [within one minor version of the API server](https://kubernetes.io/releases/version-skew-policy/#kubectl).
+
+The bastion has its own local Cloudseed home. Installation does not copy the controller's environment records,
+Terraform state, private SSH keys, kubeconfig or cloud credentials. Use an authorized bastion identity and kubeconfig
+for cluster administration; keep infrastructure lifecycle commands on the original controller. Merely installing
+the CLI does not grant cloud or cluster permissions.
+
+`--no-tools` keeps the core Cloudseed CLI but skips extra cloud/Kubernetes clients. `--no-provision` skips this
+installation, and `--sync-only` refreshes source files without repairing command links or installing clients.
+To repair an older bastion from the current controller:
+
+```bash
+cs provision aws --env demo --host bastion
+```
+
+Provisioning checks both command names and the native cluster clients before reporting success. These checks verify
+the installation; authenticating and reaching the private Kubernetes API remain separate checks.
+
 ## Related
 
 - [Installation](../getting-started/installation.md)

@@ -505,6 +505,8 @@ def build_argv(name: str, args: dict) -> list[str]:
     except (KeyError, TypeError, ValueError, AttributeError, IndexError) as e:
         raise ValueError(f"invalid arguments for {name.replace('cloudseed_', '')}: {e}") from None
     if destructive and a.get("confirm") is not True:   # the preview shows secret values masked, as the CLI echoes them
+        if name in ("cloudseed_kubectl", "cloudseed_helm") and a.get("local_context") is True:
+            raise NeedsConfirm("This command uses the kubeconfig and existing credentials on the console server host. Verify the target cluster; changes are not recorded in Cloudseed Undo. Tick 'I understand' to confirm.", audit.safe_argv(argv))
         raise NeedsConfirm(f"{name} changes infrastructure or runs a task; tick 'I understand' to confirm.", audit.safe_argv(argv))
     if t.get("preflight"):
         try:
@@ -858,12 +860,16 @@ def env_key(argv: list[str], _depth: int = 0) -> str | None:
     if not words:
         return None
     cmd = words[0]
+    # An explicit host context may reach any cluster, independently of the
+    # selected Cloudseed environment. Match the CLI prefix, never tool arguments.
+    tail = head[1:]
+    if cmd in ("kubectl", "helm") and tail[_skip_globals(tail):][:1] == ["--local-context"]:
+        return "*"
     if cmd in _SUB_MUTATING:
         if len(words) < 2 or words[1] not in _SUB_MUTATING[cmd]:
             return None
     elif cmd not in _MUTATING or (cmd == "undo" and "--list" in head):
         return None
-
     def opt(*names: str) -> str | None:
         for i, a in enumerate(head):
             for n in names:

@@ -54,6 +54,21 @@ junk = shutil.ignore_patterns(
 # every directory the code reads from REPO_ROOT (paths.REPO_ROOT is the unpack dir in a bundle)
 for d in ("terraform", "skills", "ansible", "providers", "templates", "assets", "cloudseed/web"):
     shutil.copytree(root / d, stage / d, ignore=junk)
+# Provisioning runs this exact Cloudseed version on Linux bastions, even when the
+# controller is a macOS executable. PYZ bytecode and native Python libraries are
+# not portable source: ship only the launcher and package .py files alongside web data.
+(stage / "bin").mkdir()
+shutil.copy2(root / "bin/cloudseed", stage / "bin/cloudseed")
+for source in (root / "cloudseed").rglob("*.py"):
+    relative = source.relative_to(root)
+    if source.is_symlink() or any(part.startswith(".") or part == "__pycache__" for part in relative.parts):
+        continue
+    if any(parent.is_symlink() or ((parent / "config.json").is_file() and (parent / "ssh").is_dir())
+           for parent in source.parents if parent != root and root in parent.parents):
+        continue
+    destination = stage / relative
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
 PY
 
 echo "▸ Preparing PyInstaller"
@@ -77,7 +92,8 @@ PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" "$BUILD/venv/bin/pyinstaller" --on
   --add-data "$STAGE/providers:providers" \
   --add-data "$STAGE/templates:templates" \
   --add-data "$STAGE/assets:assets" \
-  --add-data "$STAGE/cloudseed/web:cloudseed/web" \
+  --add-data "$STAGE/bin:bin" \
+  --add-data "$STAGE/cloudseed:cloudseed" \
   --add-data "$BUILD/tfbin/terraform:tfbin" \
   "$ROOT/bin/cloudseed"
 
@@ -117,7 +133,7 @@ PY
   || { echo "smoke test failed: platform template (templates/ not bundled?)" >&2; exit 1; }
 LISTING="$("$BUILD/venv/bin/pyi-archive_viewer" -l "$BIN" 2>/dev/null || true)"
 if [[ -n "$LISTING" ]]; then
-  for f in cloudseed/web/index.html cloudseed/web/app.js assets/icon.svg templates/gitlab-ci/.gitlab-ci.yml tfbin/terraform certifi/cacert.pem; do
+  for f in cloudseed/web/index.html cloudseed/web/app.js assets/icon.svg templates/gitlab-ci/.gitlab-ci.yml tfbin/terraform certifi/cacert.pem bin/cloudseed cloudseed/cli.py cloudseed/__init__.py; do
     grep -q "$f" <<<"$LISTING" || { echo "smoke test failed: $f is missing from the bundle" >&2; exit 1; }
   done
   if grep -q "/\.terraform/" <<<"$LISTING"; then echo "smoke test failed: .terraform caches were bundled" >&2; exit 1; fi

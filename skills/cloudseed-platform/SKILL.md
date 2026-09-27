@@ -62,6 +62,11 @@ description: Kubernetes day-2 with the cloudseed CLI - choosing the current clus
   `helm status -o json|yaml`) needs the user's approval. A missing kubectl/helm/cloud CLI is installed only after
   asking; with -y the command stops with exit code 2 and the `cloudseed install <tool>` command - give it to the user.
   GKE also needs `gke-gcloud-auth-plugin` (`gcloud components install gke-gcloud-auth-plugin`).
+- On a bastion, use `cs kubectl --local-context ...` or `cs helm --local-context ...` only after the user approves
+  using that host's already-authorized kubeconfig. In MCP use `local_context=true` with `confirm=true` and omit cloud/env.
+  Check the target context first. This mode requires HTTPS with certificate verification and does not fetch credentials,
+  copy infrastructure state, create a tunnel, or provide Cloudseed Undo. Keep infrastructure and platform workflows on
+  the original controller. Interactive `cs k9s --local-context` belongs in the user's terminal.
 - Cloud IAM prerequisites for controllers (IRSA on EKS: LB controller, cluster-autoscaler, external-secrets, external-dns, EBS CSI; workload identity on GKE/AKS for external-secrets and external-dns) are created by the Kubernetes stack and wired into the charts; items with extra cloud resources (velero, karpenter) apply them through the stack at install time (`cs explain prereqs`).
 - Generated passwords are in `<workdir>/platform/secrets.json`; never print them. So are MinIO's access keys (its root user and the users of velero and the Spark history server get random names; an install from an older version keeps admin/velero/spark until `cs platform install <item> --upgrade` rotates them, which the plan says). kagent needs ANTHROPIC_API_KEY or OPENAI_API_KEY
   in the environment (cloudseed reads it; you do not).

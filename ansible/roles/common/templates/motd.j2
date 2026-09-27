@@ -3,11 +3,13 @@
 {% set cloud_cli = {'aws': 'aws', 'gcp': 'gcloud', 'azure': 'az'} %}
 {% set tools = (['terraform'] if install_terraform | default(false) | bool else [])
              + ([cloud_cli[cloud]] if install_cloud_cli | default(false) | bool and cloud | default('') in cloud_cli else [])
-             + (['kubectl'] if install_kubectl | default(false) | bool else [])
-             + ['git', 'jq', 'tmux'] %}
+             + (['kubectl', 'helm', 'k9s'] if install_kubectl | default(false) | bool else [])
+             + ['cloudseed (cs)', 'git', 'jq', 'tmux'] %}
 {% set title = motd_title | default('cloudseed host') %}
 {% set lines = ([motd_hint] if motd_hint | default('') | length > 0 else [])
-             + ['cloudseed repo: ' + repo_dir, 'Tools: ' + tools | join(', ')] %}
+             + ['cloudseed repo: ' + repo_dir, 'Tools: ' + tools | join(', '),
+                'Start: cs --version; cs help; cs doctor',
+                'Controller state and credentials are not copied here.'] %}
 {% set w = ([62, title | length + 2] + (lines | map('length') | list)) | max %}
 ┌─ {{ title }} {{ '─' * (w - (title | length) - 1) }}┐
 {% for l in lines %}

@@ -565,6 +565,7 @@ EXAMPLES
 """,
     "kubectl": """\
 cloudseed kubectl [cloud --env NAME] <kubectl args>      (also: cs helm ..., cs k9s)
+cloudseed kubectl --local-context <kubectl args>        (this host's authorized kubeconfig)
 
 Runs kubectl / helm / k9s against the current environment's cluster using a kubeconfig kept per environment
 (<workdir>/k8s/kubeconfig). A missing tool is installed only after asking; with -y install it first (cloudseed install
@@ -572,6 +573,12 @@ kubectl | helm | k9s) or set CLOUDSEED_AUTO_INSTALL=1, otherwise the command sto
 cloud API endpoint without VPN, cloudseed opens an SSH tunnel through the bastion automatically
 (`cs k8s untunnel <cloud> --env NAME` closes it). Mutating commands (apply, delete, helm uninstall, ...) take a Velero backup first when
 Velero is installed, so `cs undo` can roll them back.
+
+On a bastion or another administration host, --local-context explicitly uses that host's existing KUBECONFIG
+or ~/.kube/config. Authenticate and select an authorized context there first. It requires HTTPS with certificate
+verification, accepts no cloud/--env selector, and does not fetch credentials, open a tunnel, copy infrastructure
+state or create Cloudseed Undo points. Helm's context environment setting is respected; explicit client flags win.
+MCP and built-in agents require confirmation even for reads in this mode because the target is outside a managed environment.
 
 In an agent session the output is redacted line by line and nothing gets a terminal: k9s, kubectl edit and kubectl
 exec/attach/run/debug -i/-t are refused, and so are calls that never end on their own (logs -f, get/events -w,
@@ -582,6 +589,9 @@ EXAMPLES
   cs kubectl aws --env prod get pods -A
   cs helm list -A
   cs k9s
+  cs kubectl --local-context get nodes
+  cs helm --local-context list -A
+  cs k9s --local-context
 """,
     "finops": """\
 cloudseed finops estimate | cloud [--days N] | k8s [--window 7d] [--by namespace] | report [--save]   [cloud] [--env NAME]

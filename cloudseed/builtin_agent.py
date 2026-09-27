@@ -694,6 +694,8 @@ def _approval_reason(ns: argparse.Namespace | None) -> str | None:
     if auto:
         return "--auto-approve applies changes"
     if cmd in ("kubectl", "helm"):
+        if getattr(ns, "local_context", False):
+            return "--local-context uses this host's kubeconfig and credentials outside a managed environment; verify the target (Cloudseed Undo is unavailable)"
         return kube_approval(cmd, list(getattr(ns, "tool_args", None) or []), bool(getattr(ns, "tool_verbatim", False)))
     if cmd in ("databricks", "snowflake"):
         # stricter than MCP on purpose: only status/test run unasked (a vendor CLI's own verbs are not checked here)

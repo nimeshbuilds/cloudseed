@@ -103,7 +103,7 @@
     executable: /bin/bash
   when: install_cloud_cli and cloud == 'azure' and ansible_facts['os_family'] == 'Debian'
 
-# ---- kubectl for the managed cluster (EKS / GKE / AKS) ----
+# ---- kubectl for the cluster (EKS / GKE / AKS / VMware) ----
 # The bastion's cloud identity may reach the cluster API (EKS: an access entry + eks:DescribeCluster for
 # `aws eks update-kubeconfig`; GKE: the auth plugin above; AKS: `az aks get-credentials`), so it gets kubectl too:
 # the release that matches the cluster's minor version (kubectl supports one minor version of skew), else the current
@@ -142,6 +142,11 @@
   until: kubectl_release.status | default(0) == 200
   when: install_kubectl | bool
 
+- name: Explain an automatic VMware kubectl version
+  ansible.builtin.debug:
+    msg: "No Kubernetes version was configured for this VMware cluster, so kubectl uses the upstream stable release. After configuring an authorized kubeconfig, compare kubectl version with the running cluster; use a client within one minor version. Set kubernetes_version and re-provision the bastion to pin the matching minor."
+  when: install_kubectl | bool and cloud == 'vmware' and not kubectl_minor
+
 - name: kubectl release answer is a version
   ansible.builtin.assert:
     that: kubectl_release.content | default('') | trim is match('^v[0-9]+[.][0-9]+[.][0-9]+$')
@@ -159,6 +164,34 @@
   retries: 3
   delay: 5
   until: kubectl_download is succeeded
+  when: install_kubectl | bool
+
+- name: Helm and k9s using Cloudseed's checksum-verified installers
+  become: false
+  ansible.builtin.command:
+    argv: ["{{ repo_dir }}/bin/cloudseed", -y, install, "{{ item }}"]
+  environment:
+    HOME: "/home/{{ ssh_user }}"
+    CLOUDSEED_HOME: "/home/{{ ssh_user }}/.cloudseed"
+    PATH: "/home/{{ ssh_user }}/.cloudseed/bin:{{ ansible_env.PATH }}"
+    NO_COLOR: "1"
+  loop: [helm, k9s]
+  register: cloudseed_cluster_tool
+  changed_when: "'already installed:' not in cloudseed_cluster_tool.stdout"
+  when: install_kubectl | bool
+
+- name: Verify native cluster administration clients
+  become: false
+  ansible.builtin.command:
+    argv: "{{ item }}"
+  environment:
+    HOME: "/home/{{ ssh_user }}"
+    PATH: "/home/{{ ssh_user }}/.cloudseed/bin:{{ ansible_env.PATH }}"
+  loop:
+    - [kubectl, version, --client]
+    - [helm, version, --short]
+    - [k9s, version]
+  changed_when: false
   when: install_kubectl | bool
 
 # ---- AWS FIPS endpoints for the CLI tools on the bastion ----

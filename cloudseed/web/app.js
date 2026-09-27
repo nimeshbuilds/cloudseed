@@ -409,6 +409,7 @@
   // A confirmation step for anything that changes infrastructure, installs/removes software or runs a task. It shows the
   // exact command (the server's 409 answer carries it). When it replaced a dialog (a filled-in form), Cancel - or a run
   // that could not start - puts that dialog back as it was.
+  const LOCAL_CONTEXT_NOTICE = 'Target: the kubeconfig on the machine running this Cloudseed console, using its current context or the context specified in Arguments. Verify the cluster and existing credentials before running. Cloudseed does not create or select an environment for this command. Kubernetes or Helm changes affect that cluster and are not recorded in Cloudseed Undo.';
   function confirmRun(action, args, label, info = {}) {
     return new Promise((resolve) => {
       const back = modalSnapshot();
@@ -424,7 +425,7 @@
         destroy ? `Destroy ${target || 'the environment'}` : '▶ Run');
       tick.onchange = () => { runBtn.disabled = !tick.checked; };
       modal('Confirm: ' + label, el('div', {},
-        destroy ? destroyConfirmNote(args, target) : el('p', {}, info.message || 'This changes infrastructure, installs or removes software, or runs a task.'),
+        destroy ? destroyConfirmNote(args, target) : el('p', {}, args && args.local_context === true ? LOCAL_CONTEXT_NOTICE : info.message || 'This changes infrastructure, installs or removes software, or runs a task.'),
         target && !destroy ? el('p', { class: 'small' }, 'Environment: ', el('b', {}, target)) : null,
         info.argv ? el('div', {}, el('h4', {}, 'Command that will run'), el('pre', { class: 'cmd-preview' }, cmdLine(info.argv))) : null,
         el('label', { class: 'check', style: 'margin-top:12px' }, tick, el('span', {}, 'I understand what this does')),
@@ -449,6 +450,7 @@
   // be told apart: 'vpn status · aws-dev'.
   const jobLabel = (action, args, label) => {
     label = label || String(action).replace('cloudseed_', '') || 'command';
+    if (args && args.local_context === true && ['cloudseed_kubectl', 'cloudseed_helm'].includes(action)) return label.includes('host kubeconfig') ? label : `${label} · host kubeconfig`;
     const tgt = args && args.cloud ? (args.env ? `${args.cloud}-${args.env}` : args.cloud) : '';
     return tgt && !label.includes(tgt) && !(args.env && label.includes(`${args.cloud}/${args.env}`)) ? `${label} · ${tgt}` : label;
   };
@@ -558,6 +560,8 @@
     set: 'Helm values (--set)', args: 'Arguments' };
   const humanKey = (k) => KEY_LABELS[k] || k.split('_').map((w) => WORDS[w] || w).join(' ').replace(/^./, (c) => c.toUpperCase());
   const FORM_UI = {
+    cloudseed_kubectl: { local_context: { label: 'Use this host’s kubeconfig', description: 'Use the existing context on the console server host; confirm the target before running.' }, cloud: { when: { local_context: ['', 'false'] } }, env: { when: { local_context: ['', 'false'] } } },
+    cloudseed_helm: { local_context: { label: 'Use this host’s kubeconfig', description: 'Use the existing context on the console server host; confirm the target before running.' }, cloud: { when: { local_context: ['', 'false'] } }, env: { when: { local_context: ['', 'false'] } } },
     cloudseed_agentic: { task: { multiline: true, wide: true }, model: { description: "model id; blank = the agent's selected model" }, no_headliner: { description: 'no headliner research brief before this task' } },
     cloudseed_use: { model: { description: "model id; blank = the agent's default model" } },
     cloudseed_platform: { set: { lines: true, description: 'helm --set overrides, one key=value per line (a list like hosts={a,b} stays one value; put mode= on a line of its own)' } },
@@ -593,13 +597,25 @@
       grid.append(f);
     }
     form.append(grid);
+    const localCluster = ['cloudseed_kubectl', 'cloudseed_helm'].includes(a.name);
+    const localNotice = localCluster ? el('p', { class: 'hint', role: 'note', hidden: true }, LOCAL_CONTEXT_NOTICE) : null;
+    if (localNotice) form.append(localNotice);
     // the values the rules look at (unparsable input counts as blank here; submitting reports it)
     const ruleVals = () => { const o = {}; for (const inp of $$('input,select,textarea', form)) if (inp.name) { try { o[inp.name] = readField(inp); } catch { o[inp.name] = undefined; } } return o; };
     const needed = (vals) => ruled.filter(([, , r]) => r.need && ruleHolds(r.need, vals) && !(r.when && !ruleHolds(r.when, vals))).map(([n]) => n);
-    let confirm = null;
+    let confirm = null, localMode = false;
     const syncRules = () => {
       if (!ruled.length) return;
       const vals = ruleVals();
+      if (localCluster) {
+        const local = vals.local_context === true;
+        localNotice.hidden = !local;
+        if (confirm) {
+          if (local !== localMode) $('input', confirm).checked = false;
+          $('span', confirm).textContent = local ? 'I verified the host kubeconfig target and understand this command can affect that cluster' : 'Confirm changes (apply, install, add, remove, run …)';
+        }
+        localMode = local;
+      }
       if (a.name === 'cloudseed_scan') {
         if (confirm) {
           confirm.hidden = ['architecture', 'fips', 'reports'].includes(vals.kind);
@@ -634,6 +650,7 @@
       ev.preventDefault();
       let args;
       try { args = readForm(form); } catch (e) { return toast('✖ ' + e.message, 'bad', 6000); }
+      if (localCluster && args.local_context === true) { delete args.cloud; delete args.env; }
       // required fields, plus those the chosen action needs (a VPN client's name, the skill show prints)
       const need = required.concat(needed(ruleVals()).filter((k) => !required.includes(k)));
       const missing = need.filter((k) => args[k] === undefined || args[k] === '' || (Array.isArray(args[k]) && !args[k].length));
@@ -1883,6 +1900,11 @@
         : `${nInstalled} of ${applicable.length} items installed on ${status.distro || 'the cluster'}${nBuiltin ? ` (+${nBuiltin} built into ${status.distro || 'the distribution'})` : ''}${broken ? `; ${broken} (see the marked items)` : ''}. Install whole groups or single items: dependencies are ordered, cloud prerequisites (buckets, identities, tags) are applied through Terraform first, duplicates and conflicts are skipped.`;
     v.append(el('div', { class: 'hero' }, el('h2', {}, hasCluster ? `Platform on ${e.id}` : 'Platform catalog'), el('p', {}, heroText),
       el('div', { class: 'row' }, el('button', { class: 'btn ghost', ...needCluster, onclick: () => quick('cloudseed_platform', { action: 'status' }, 'platform status', ea) }, 'Status'), el('button', { class: 'btn ghost', ...needCluster, onclick: () => quick('cloudseed_platform', { action: 'ui' }, 'expose UIs', ea) }, 'Expose UIs'), el('button', { class: 'btn ghost', ...needCluster, onclick: () => quick('cloudseed_node', { action: 'list' }, 'nodes', ea) }, 'Nodes'), el('button', { class: 'btn ghost', ...needCluster, onclick: () => openAction('cloudseed_node', { action: 'add', count: 1, ...ea }) }, 'Add nodes…'), el('button', { class: 'btn ghost', ...needCluster, onclick: () => openAction('cloudseed_kubectl', { args: 'get pods -A', ...ea }) }, 'kubectl…'), el('button', { class: 'btn ghost', ...needCluster, onclick: () => openAction('cloudseed_helm', { args: 'list -A', ...ea }) }, 'helm…'), hasCluster ? el('button', { class: 'btn ghost', html: icon('refresh'), title: 'Read the install status from the cluster again', onclick: retry }, el('span', {}, 'Refresh status')) : null)));
+    v.append(el('details', { class: 'card' }, el('summary', {}, 'Use a cluster from this host’s kubeconfig'),
+      el('p', { class: 'small' }, LOCAL_CONTEXT_NOTICE),
+      el('div', { class: 'row' },
+        el('button', { class: 'btn ghost', onclick: () => openAction('cloudseed_kubectl', { local_context: true, args: 'get pods -A' }) }, 'kubectl on this host…'),
+        el('button', { class: 'btn ghost', onclick: () => openAction('cloudseed_helm', { local_context: true, args: 'list -A' }) }, 'helm on this host…'))));
     // an unreachable cluster (tunnel closed, VPN down, expired login, no kubeconfig yet) is an error, never "0 installed"
     if (hasCluster && status.error) {
       v.append(el('div', { class: 'callout warn', role: 'alert' }, el('b', {}, `Install status of ${e.id} unknown`),

@@ -656,7 +656,7 @@ class ScriptTests(unittest.TestCase):
         text = (REPO / "scripts" / "build-bundle.sh").read_text()
         import re
         dests = set(re.findall(r'--add-data "[^"]*:([^"]+)"', text))
-        self.assertTrue({"terraform", "skills", "ansible", "providers", "templates", "assets", "cloudseed/web", "tfbin"} <= dests, dests)
+        self.assertTrue({"terraform", "skills", "ansible", "providers", "templates", "assets", "bin", "cloudseed", "tfbin"} <= dests, dests)
         self.assertNotIn('--add-data "$ROOT/terraform:terraform"', text)
         self.assertIn('".terraform"', text)
         self.assertEqual(subprocess.run(["bash", "-n", str(REPO / "scripts" / "build-bundle.sh")]).returncode, 0)

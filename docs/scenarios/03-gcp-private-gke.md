@@ -247,6 +247,7 @@ cs explain target gcp
 
 ## Next steps
 
+- [Kubernetes access and bastions](../guides/kubernetes-access.md): sign in with an authorized GKE user on the bastion; its default service account has no cluster administration grant.
 - [06 · A production platform in one command](06-platform-in-one-command.md): the same commands install ArgoCD,
   observability and Gateway API on GKE.
 - [12 · Private access with a VPN](12-private-access-vpn.md): reach the private endpoint without a tunnel.

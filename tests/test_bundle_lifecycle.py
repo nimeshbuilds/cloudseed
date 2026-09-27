@@ -5,6 +5,8 @@ import shlex
 import socket
 import subprocess
 import tempfile
+import sys
+import tarfile
 import time
 import unittest
 import urllib.request
@@ -13,6 +15,48 @@ from pathlib import Path
 
 @unittest.skipUnless(os.environ.get("CLOUDSEED_TEST_BINARY"), "requires a built cloudseed binary")
 class BundleLifecycleTests(unittest.TestCase):
+    def test_frozen_provisioning_ships_a_runnable_portable_bastion_cli(self):
+        binary = str(Path(os.environ["CLOUDSEED_TEST_BINARY"]).resolve())
+        with tempfile.TemporaryDirectory(prefix="cs-bundle-bastion-") as temporary:
+            home = Path(temporary)
+            state = home / "controller"
+            (state / "bin").mkdir(parents=True)
+            env_dir = state / "envs/aws-fixture"
+            env_dir.mkdir(parents=True)
+            (env_dir / "config.json").write_text(json.dumps({"cloud": "aws", "env": "fixture", "name": "cs", "region": "us-west-2", "vars": {}, "state": {"type": "local"}}))
+            (env_dir / "outputs.json").write_text('{"bastion_public_ip":"192.0.2.2"}')
+            (state / "credentials.json").write_text('{"fixture":"must-not-transfer"}')
+            archive = home / "payload.tar.gz"
+            ssh = state / "bin/ssh"
+            ssh.write_text(f"#!{sys.executable}\nimport pathlib,sys\n"
+                           f"if 'tar xzf' in sys.argv[-1]: pathlib.Path({str(archive)!r}).write_bytes(sys.stdin.buffer.read())\n")
+            ssh.chmod(0o755)
+            env = dict(os.environ, HOME=str(home), CLOUDSEED_HOME=str(state), NO_COLOR="1", PYTHONDONTWRITEBYTECODE="1",
+                       PATH=str(state / "bin") + os.pathsep + os.environ["PATH"])
+            for key in list(env):
+                if key.startswith(("AWS_", "GOOGLE_", "CLOUDSDK_", "GCLOUD_", "ARM_", "AZURE_")) or key in ("CLOUDSEED_SESSION", "CLOUDSEED_REDACT", "CLOUDSEED_IN_CONTAINER"):
+                    env.pop(key, None)
+            proc = subprocess.run([binary, "-y", "provision", "aws", "--env", "fixture", "--host", "bastion", "--sync-only"],
+                                  env=env, cwd=home, capture_output=True, text=True, timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            payload = home / "bastion/cloudseed"
+            payload.mkdir(parents=True)
+            with tarfile.open(archive) as tar:
+                names = tar.getnames()
+                for required in ("bin/cloudseed", "cloudseed/__init__.py", "cloudseed/cli.py", "cloudseed/web/app.js"):
+                    self.assertIn(required, names)
+                self.assertFalse(any("credentials.json" in name or "envs/aws-fixture" in name or ".tfstate" in name for name in names))
+                tar.extractall(payload, filter="data")
+            env.update(HOME=str(home / "bastion"), CLOUDSEED_HOME=str(home / "bastion/state"))
+            portable = subprocess.run([sys.executable, "-I", str(payload / "bin/cloudseed"), "--version"], env=env,
+                                      cwd=home, capture_output=True, text=True, timeout=30)
+            version = subprocess.run([binary, "--version"], env=env, capture_output=True, text=True, timeout=30)
+            self.assertEqual(portable.returncode, 0, portable.stdout + portable.stderr)
+            self.assertEqual(portable.stdout, version.stdout)
+            helps = subprocess.run([sys.executable, "-I", str(payload / "bin/cloudseed"), "help"], env=env,
+                                   cwd=home, capture_output=True, text=True, timeout=30)
+            self.assertEqual(helps.returncode, 0, helps.stdout + helps.stderr)
+
     def test_console_job_keeps_bundled_resources_after_console_stops(self):
         binary = str(Path(os.environ["CLOUDSEED_TEST_BINARY"]).resolve())
         with tempfile.TemporaryDirectory(prefix="cs-bundle-life-") as temporary:

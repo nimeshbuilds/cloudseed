@@ -140,6 +140,7 @@ class PrivatelinkHintTests(unittest.TestCase):
         env, cfg = _env("azure")
         outputs = {"kubernetes_endpoint": "x.privatelink.westeurope.azmk8s.io", "bastion_public_ip": "203.0.113.5"}
         with mock.patch.object(services, "_tcp_open", return_value=False), \
+                mock.patch.object(services, "ensure_tool", return_value="kubectl"), \
                 mock.patch.object(services.subprocess, "run", return_value=_cp(255)), _silenced() as out:
             self.assertFalse(services._ensure_reachable(clouds.get("azure"), env, cfg, outputs, env.dir / "kc"))
         self.assertIn(f"Re-run cloudseed setup azure --env {env.name}", out.getvalue())
