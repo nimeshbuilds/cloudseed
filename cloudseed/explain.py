@@ -136,8 +136,13 @@ FEATURES: dict[str, dict] = {
     },
     "agentic": {
         "what": "Optional agent layer: built-in agent (Claude API tool loop with one tool = run cloudseed) or external CLIs (Claude Code, Codex, Gemini, Grok). "
-                "Headliner brief (deterministic research) prepended; skills in skills/ installed into the agent; credentials stripped from agent env and redacted from output.",
-        "files": ["cloudseed/agents.py", "cloudseed/builtin_agent.py", "cloudseed/headliner.py", "cloudseed/secrets.py", "cloudseed/skills.py", "skills/*/SKILL.md"],
+                "Context brief (deterministic research, controlled by the compatible headliner setting) prepended; "
+                "private session cloudseed/cs launchers use the current installation. Skills in skills/ installed into the agent; "
+                "credentials stripped from agent env and redacted from output. Saved reports are read through evidence list/read, "
+                "with redacted, revision-bound pages. The brief does not compress conversations; the separate Headroom "
+                "integration provides lossless compression through an owned loopback proxy for supported provider routes. "
+                "Connecting an independently launched MCP client does not route that client's model requests through this proxy.",
+        "files": ["cloudseed/agents.py", "cloudseed/builtin_agent.py", "cloudseed/headliner.py", "cloudseed/headroom.py", "cloudseed/evidence.py", "cloudseed/secrets.py", "cloudseed/skills.py", "skills/*/SKILL.md"],
         "controls": ["secret env vars (and the vault's secrets) stripped from the agent and served to child cloudseed commands over a per-session unix socket (nothing on disk)",
                      "redaction of prompts and cloudseed output, kubectl/helm/databricks/snowflake output included (k9s, kubectl edit and "
                      "exec/attach/run/debug -i/-t, calls that never end - logs -f, get -w, port-forward, proxy -, databricks auth login, prompts "
@@ -177,7 +182,9 @@ FEATURES: dict[str, dict] = {
     "mcp": {
         "what": "cloudseed as an MCP server (JSON-RPC, protocol 2025-06-18 with 2025-03-26/2024-11-05 negotiation): one tool per feature generated from "
                 "cloudseed/mcp.py TOOLS, resources (cloudseed://environments, cloudseed://skills/<name>), the resource template cloudseed://explain/{query} "
-                "(explain.lookup as JSON; cloudseed_explain with format=json returns the same, in-process) and prompts. Two transports: stdio (client launches "
+                "(explain.lookup as JSON; cloudseed_explain with format=json returns the same, in-process), saved-evidence templates "
+                "cloudseed://evidence/{cloud}/{env}{?area,offset,limit,revision} and "
+                "cloudseed://evidence/{cloud}/{env}/{artifact}{?offset,limit,revision} (redacted, revision-bound pages), and prompts. Two transports: stdio (client launches "
                 "`cloudseed mcp serve`) and Streamable HTTP on 127.0.0.1 (+ legacy SSE at /sse) deployed by `cs setup mcp` as a launchd/systemd user service with "
                 "a bearer token; the same command writes the client configs (Claude Code, Claude Desktop, Codex, Cursor, Windsurf, Gemini CLI, VS Code) and prints "
                 "the connection guide. Each call runs `cloudseed ...` as a child under the credential session broker with redacted output; destructive tools need confirm=true.",
@@ -263,8 +270,10 @@ FEATURES: dict[str, dict] = {
         "controls": ["JSON and Markdown retain saved findings, detail and remediation; terminal output is a bounded summary",
                      "Console Reports exposes findings and coverage limits; a PASS applies only to the scanner's performed checks",
                      "Cloud benchmark scope is the provider account/project/subscription, including resources outside this environment",
-                     "Run cloud security scans before architecture when their saved evidence is needed; reports are historical snapshots"],
-        "commands": ["cs scan all", "cs scan cis", "cs scan kube", "cs scan images", "cs scan host --profile stig", "cs scan stig", "cs scan cloud", "cs scan fips", "cs scan architecture --profile production --json", "cs scan reports"],
+                     "Run cloud security scans before architecture when their saved evidence is needed; reports are historical snapshots",
+                     "Read saved artifacts with evidence list/read, following next_offset with the same revision until complete=true; "
+                     "complete pages and unknown=0 do not establish complete assessment coverage"],
+        "commands": ["cs scan all", "cs scan cis", "cs scan kube", "cs scan images", "cs scan host --profile stig", "cs scan stig", "cs scan cloud", "cs scan fips", "cs scan architecture --profile production --json", "cs scan reports", "cs evidence list --area scans --json", "cs evidence read --artifact scans/NAME.json --json"],
     },
     "architecture": {
         "what": "A local Well-Architected assessment for an existing environment, using saved configuration and evidence. "
@@ -447,8 +456,8 @@ SUMMARIES: dict[str, str] = {
     "topic services": "Optional services per environment (Kubernetes, VPN) switched on with --var or the setup prompts.",
     "topic troubleshooting": "Common failures and their fixes: missing tools, credentials, 'already exists', SSH timeouts, permissions.",
     "topic examples": "Worked examples of common tasks on every target, from the first environment to teardown.",
-    "command enable": "Turn on agentic mode, the headliner brief, the MCP server or the local web console.",
-    "command disable": "Turn off agentic mode, the headliner brief, the MCP server or the local web console.",
+    "command enable": "Turn on agentic mode, the context brief (headliner), Headroom compression, the MCP server or the local web console.",
+    "command disable": "Turn off agentic mode, the context brief (headliner), Headroom compression, the MCP server or the local web console.",
     "command ui": "The local web console: every cloudseed capability as a form and a button (cs ui opens it).",
     "command help": "Help pages: the overview, one page per command and the topic guides.",
     "command finops": "Cost estimates, actual cloud bills and Kubernetes cost allocation (OpenCost), saved as reports.",

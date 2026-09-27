@@ -774,12 +774,17 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(cmd[cmd.index("--compliance") + 1], "cis_10.0_azure")
         self.assertEqual(json.loads(res.read_text())["verdict"], "FAIL")
 
-    def test_cloud_scan_failure_is_explained_and_cleaned_up(self):
+    def test_cloud_scan_failure_is_explained_and_diagnostic_evidence_retained(self):
         res, cmd, text, env = self._cloud_scan("aws", {"vars": {}}, lambda cmd: cp(1, "", "2026 CRITICAL: NoCredentialsError: Unable to locate credentials"))
         self.assertIsInstance(res, SystemExit)
         self.assertIn("aws configure", res.msg)
         self.assertNotIn("prowler finished", text)
-        self.assertEqual(list((env.dir / "scans").glob("prowler-*")), [])
+        output = list((env.dir / "scans").glob("prowler-*/prowler.log"))
+        self.assertEqual(len(output), 1)
+        self.assertEqual(output[0].stat().st_mode & 0o777, 0o600)
+        self.assertIn("NoCredentialsError", output[0].read_text())
+        self.assertIn(str(output[0].relative_to(env.dir)), res.msg)
+        self.assertEqual(list((env.dir / "scans").glob("cloud-*.json")), [])
 
     def test_fips_gcp_images_and_non_fips_verdict(self):
         env = paths.Env("gcp", "fipsg")

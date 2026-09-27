@@ -178,6 +178,12 @@ changes without applying them.”
 `{"kind":"architecture","cloud":"aws","env":"demo","profile":"lab","max_age_days":30,"json":true}`.
 Complete any prerequisite tool installation through the normal host flow first.
 
+For an existing scan, use `cs evidence list aws --env demo --area scans --json` and `cs evidence read` with the listed
+artifact, or MCP `cloudseed_evidence` action `list`/`read`. Follow `next_offset` with the same `revision` until
+`complete=true`. [Scenario 14](14-ai-agents-and-mcp.md#step-7a-explain-a-saved-scan-without-running-it-again) shows this
+review workflow without starting a new scan. Read findings and diagnostics before explaining the result:
+`unknown=0` does not prove complete benchmark coverage, and saved reports do not prove current cloud state.
+
 **UI:** select aws-demo, run **Cloud CIS** from **Resilience → Scans**, then run the **Well-Architected** lab assessment.
 Open both in **Reports**. Inspect status, severity, resources, evidence and remediation; use the full saved JSON/Markdown
 when the preview says it is limited. Legacy reports may contain fewer normalized details; a new scan produces the

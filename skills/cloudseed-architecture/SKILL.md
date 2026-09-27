@@ -19,7 +19,10 @@ cloudseed scan architecture vmware --env lab --profile lab --json
 `production` and 30 days are the defaults. Target/environment selection follows the core cloudseed skill; pass both
 explicitly when several environments exist. The assessment queries no cloud APIs, installs no tools and changes no
 infrastructure. It reads local configuration and saved evidence, then writes JSON/Markdown reports under the
-environment's `scans/` directory. `cloudseed scan reports` lists them. Do not run `doctor`, provisioning, security
+environment's `scans/` directory. `cloudseed scan reports` summarizes them; `cloudseed evidence list` finds readable
+artifacts. Read the chosen artifact with `cloudseed evidence read --artifact scans/NAME.json --json` and the same
+cloud/environment. Follow every `next_offset` with the same `revision` until `complete=true`; restart if the revision
+changes. MCP uses `cloudseed_evidence` action `list`/`read` without confirmation. Do not run `doctor`, provisioning, security
 scanners, DR drills or chaos experiments just to obtain this local assessment; those are separate actions.
 
 AWS and GCP findings map to six provider pillars. Azure has five pillars, with sustainability shown separately as
@@ -41,6 +44,12 @@ assessment therefore remains INCOMPLETE; individual configuration or recovery ch
 Read finding evidence and remediation before recommending changes. Saved configuration represents intended settings;
 it does not prove deployed state. Manual workload requirements, recovery objectives and operational processes need
 owner review. Do not invent evidence, weaken policy, suppress unknowns or provision resources to produce a green verdict.
+
+Read saved reports through the redacted evidence interface instead of direct filesystem tools. Artifact pagination
+being complete does not establish assessment coverage. `unknown=0` only counts that category among the returned
+observations; it does not establish complete service, region, resource or framework coverage. Inspect explicit
+coverage limits and diagnostics, and distinguish the report's recorded time from its filename or file mtime.
+If an artifact or page cannot be read, state the evidence gap and avoid unsupported conclusions.
 
 `--max-age-days 30` accepts saved evidence no older than 30 days. It does not schedule scans or query 30 days of cloud
 activity. Run a cloud benchmark first, then rerun architecture to consume its saved evidence. Account-level findings

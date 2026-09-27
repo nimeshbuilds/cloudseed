@@ -26,7 +26,7 @@ TOOLS = {
     'provision': 'cloudseed_provision', 'ssh': 'cloudseed_ssh', 'k8s': 'cloudseed_k8s', 'env': 'cloudseed_env',
     'node': 'cloudseed_node', 'kubectl': 'cloudseed_kubectl', 'helm': 'cloudseed_helm', 'platform': 'cloudseed_platform',
     'vpn': 'cloudseed_vpn', 'finops': 'cloudseed_finops', 'dr': 'cloudseed_dr', 'chaos': 'cloudseed_chaos',
-    'scan': 'cloudseed_scan', 'databricks': 'cloudseed_managed', 'snowflake': 'cloudseed_managed',
+    'scan': 'cloudseed_scan', 'evidence': 'cloudseed_evidence', 'databricks': 'cloudseed_managed', 'snowflake': 'cloudseed_managed',
     'undo': 'cloudseed_undo', 'explain': 'cloudseed_explain', 'help': 'cloudseed_help', 'skill': 'cloudseed_skill',
 }
 OP_SCENARIOS = {'health': ['16'], 'network': ['16'], 'profile': ['17'], 'spec-export': ['17'], 'spec-validate': ['17'],

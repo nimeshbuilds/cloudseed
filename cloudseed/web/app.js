@@ -556,13 +556,13 @@
   };
   // Argument labels in words (the argument name itself stays visible next to them when they differ), and per-form
   // presentation: a multi-line task, helm --set values one per line, clearer wording where the registry is terse.
-  const KEY_LABELS = { env: 'Environment', no_headliner: 'Skip the research brief', purge_state: 'Also delete the remote state storage', purge: 'Also delete the local directory',
+  const KEY_LABELS = { env: 'Environment', no_headliner: 'Skip the research brief', no_headroom: 'Skip Headroom compression', purge_state: 'Also delete the remote state storage', purge: 'Also delete the local directory',
     set: 'Helm values (--set)', args: 'Arguments' };
   const humanKey = (k) => KEY_LABELS[k] || k.split('_').map((w) => WORDS[w] || w).join(' ').replace(/^./, (c) => c.toUpperCase());
   const FORM_UI = {
     cloudseed_kubectl: { local_context: { label: 'Use this host’s kubeconfig', description: 'Use the existing context on the console server host; confirm the target before running.' }, cloud: { when: { local_context: ['', 'false'] } }, env: { when: { local_context: ['', 'false'] } } },
     cloudseed_helm: { local_context: { label: 'Use this host’s kubeconfig', description: 'Use the existing context on the console server host; confirm the target before running.' }, cloud: { when: { local_context: ['', 'false'] } }, env: { when: { local_context: ['', 'false'] } } },
-    cloudseed_agentic: { task: { multiline: true, wide: true }, model: { description: "model id; blank = the agent's selected model" }, no_headliner: { description: 'no headliner research brief before this task' } },
+    cloudseed_agentic: { task: { multiline: true, wide: true }, model: { description: "model id; blank = the agent's selected model" }, no_headliner: { description: 'skip the environment and evidence context brief' }, no_headroom: { description: 'run this task without Headroom lossless compression' } },
     cloudseed_use: { model: { description: "model id; blank = the agent's default model" } },
     cloudseed_platform: { set: { lines: true, description: 'helm --set overrides, one key=value per line (a list like hosts={a,b} stays one value; put mode= on a line of its own)' } },
     cloudseed_destroy: { purge: { description: 'also remove the local environment directory; config.json and the SSH keys stay in the undo history, VPN keys, logs and reports do not' } },
@@ -1160,7 +1160,7 @@
       tile('Resources in state', resources, 'across all environments', ''),
       tile('Running jobs', running, `${s.jobs.length} recent`, running ? 'seed' : '', () => setDrawer(!drawer.classList.contains('open'))),
       tile('MCP', s.mcp.url ? (s.mcp.running ? 'up' : 'down') : s.mcp.enabled ? 'stdio' : 'off', s.mcp.url || 'cs setup mcp', s.mcp.running || (s.mcp.enabled && !s.mcp.url) ? 'leaf' : '', () => go('agents')),
-      tile('Agent', s.settings.agentic ? (s.settings.agent || 'builtin') : 'off', s.settings.headliner !== false ? 'headliner on' : 'headliner off', s.settings.agentic ? 'leaf' : '', () => go('agents')));
+      tile('Agent', s.settings.agentic ? (s.settings.agent || 'builtin') : 'off', headroomLabel(s), s.settings.agentic ? 'leaf' : '', () => go('agents')));
     v.append(tiles);
     const grid = el('div', { class: 'grid cols-3' });
     for (const e of s.envs) grid.append(envCard(e));
@@ -2220,11 +2220,24 @@
   // Agents & MCP. Switches and the MCP enable button read the state when clicked (never a value captured when the page
   // was drawn), and views.agents.patch keeps them, the chips and the clients table in step with the state while a form
   // here holds unsent input (the page itself is then redrawn later).
-  const featureOn = (k) => (k === 'agentic' ? !!STATE.settings.agentic : k === 'headliner' ? STATE.settings.headliner !== false : !!STATE.mcp.enabled);
+  const featureOn = (k) => (k === 'agentic' ? !!STATE.settings.agentic : k === 'headliner' ? STATE.settings.headliner !== false : k === 'headroom' ? STATE.settings.headroom !== false : !!STATE.mcp.enabled);
+  function headroomLabel(s) {
+    const h = s.headroom || {};
+    if (s.settings.headroom === false) return 'Headroom off';
+    if (h.supported === false) return 'Headroom unsupported';
+    if (h.ready) return 'Headroom ready · lossless';
+    return 'Headroom not ready';
+  }
+  function headroomReason(s) {
+    const h = s.headroom || {};
+    if (s.settings.headroom === false) return 'Compression is disabled for future tasks.';
+    return h.supported === false ? h.unsupported_reason : h.reason || 'Headroom prepares on the first supported task.';
+  }
   const toggleFeature = (k) => { const on = featureOn(k); run('cloudseed_' + (on ? 'disable' : 'enable'), { feature: k }, (on ? 'disable ' : 'enable ') + k); };
   const LIVE_CHIPS = {
     'agentic-chip': () => [STATE.settings.agentic ? 'leaf' : '', STATE.settings.agentic ? 'on' : 'off'],
     'agent-chip': () => ['', 'agent: ' + (STATE.settings.agent || 'none')],
+    'headroom-chip': () => [STATE.settings.headroom !== false && STATE.headroom && STATE.headroom.ready && STATE.headroom.supported !== false ? 'leaf' : '', headroomLabel(STATE)],
     'mcp-chip': () => [STATE.mcp.enabled ? 'leaf' : '', STATE.mcp.enabled ? 'enabled' : 'disabled'],
     'mcp-run-chip': () => (STATE.mcp.url ? [STATE.mcp.running ? 'leaf' : 'rose', (STATE.mcp.running ? 'running · ' : 'down · ') + STATE.mcp.url] : ['', 'stdio only']),
   };
@@ -2265,7 +2278,11 @@
     const sw = (k, label) => el('label', { class: 'check', style: 'gap:12px' }, el('button', { type: 'button', role: 'switch', 'aria-checked': String(featureOn(k)), class: 'switch ' + (featureOn(k) ? 'on' : ''), 'data-live': k, 'data-fk': 'switch:' + k, onclick: () => toggleFeature(k) }), el('span', {}, label));
     const agentCard = el('div', { class: 'card' }, el('h3', {}, 'Agentic mode', explainBtn('agentic', 'agentic mode'), liveChip('agentic-chip'), liveChip('agent-chip')),
       el('p', { class: 'muted small' }, 'Let an agent drive cloudseed from plain English: the built-in agent (Claude API) or the Claude Code, Codex, Gemini and Grok CLIs. Credentials are stripped from the agent process; every output is redacted.'),
-      sw('agentic', 'Agentic mode'), sw('headliner', 'Headliner research brief before each task'),
+      sw('agentic', 'Agentic mode'), sw('headroom', 'Headroom lossless context compression'),
+      el('div', { class: 'row', style: 'margin:8px 0' }, liveChip('headroom-chip')),
+      el('p', { class: 'muted small', 'data-live': 'headroom-reason' }, headroomReason(STATE)),
+      el('p', { class: 'muted small' }, 'Headroom starts locally for supported agent tasks. Task output confirms when compression is active and explains unsupported connections. Full saved evidence remains readable.'),
+      sw('headliner', 'Context brief: environment facts and saved evidence locations'),
       el('div', { class: 'row', style: 'margin:8px 0 4px' }, el('button', { class: 'btn ghost small', 'data-fk': 'agents:status', onclick: () => run('cloudseed_agents', {}, 'agents') }, 'Agent status'), el('button', { class: 'btn ghost small', 'data-fk': 'agents:models', title: s.agent ? `models of ${s.agent}` : 'no agent chosen yet: shows the built-in agent\'s models', onclick: () => run('cloudseed_model', STATE.settings.agent ? {} : { agent: 'builtin' }, 'models') }, 'Models')),
       el('h4', {}, 'Choose the agent', explainBtn('use', 'choosing the agent')), actionForm(action('cloudseed_use'), { agent: s.agent || 'builtin' }, true),
       el('h4', {}, 'Run a task', explainBtn('command agentic', 'running a task')), actionForm(action('cloudseed_agentic'), {}, true, { task: 'e.g. list my environments and tell me which have a bastion running' }),
@@ -2288,6 +2305,7 @@
     for (const n of $$('[data-live]', v)) {
       const k = n.dataset.live;
       if (LIVE_CHIPS[k]) { const [cls, text] = LIVE_CHIPS[k](); n.className = 'chip ' + cls; n.textContent = text; }
+      else if (k === 'headroom-reason') n.textContent = headroomReason(STATE);
       else if (k === 'mcp-toggle') n.textContent = mcpToggleText();
       else { const on = featureOn(k); n.setAttribute('aria-checked', String(on)); n.classList.toggle('on', on); }
     }

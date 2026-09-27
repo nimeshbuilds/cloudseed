@@ -130,15 +130,17 @@ def _mcp_argv(a: dict) -> list[str]:
 UI_ACTIONS: dict[str, dict] = {
     "cloudseed_agentic": {"description": "Run a natural-language task through the selected agent (built-in, Claude Code, Codex, Gemini, Grok or a custom one).",
                           "schema": mcp._p(task={"type": "string", "title": "Task", "description": "the task in plain English", "multiline": True}, agent=S_AGENT, model=S_MODEL,
-                                           no_headliner={"type": "boolean", "title": "Skip the research brief", "description": "send the task without the headliner brief"}),
+                                           no_headliner={"type": "boolean", "title": "Skip the research brief", "description": "send the task without the context brief"},
+                                           no_headroom={"type": "boolean", "title": "Skip Headroom compression", "description": "run this task without Headroom; the context brief is separate"}),
                           "required": ["task"], "destructive": True,
                           # a task starting with '-' would be parsed as an option: a leading space keeps it a positional (cmd_do strips it)
                           "argv": lambda a: ["agentic"] + (["--agent", a["agent"]] if a.get("agent") else []) + (["--model", a["model"]] if a.get("model") else [])
-                                   + (["--no-headliner"] if a.get("no_headliner") is True else []) + ["--force", (" " + a["task"]) if a["task"].startswith("-") else a["task"]]},
-    "cloudseed_enable": {"description": "Enable a feature: agentic (agent-driven tasks), headliner (a research brief for agent prompts) or mcp (the MCP server).",
-                         "schema": mcp._p(feature={"type": "string", "title": "Feature", "enum": ["agentic", "headliner", "mcp"]}, agent=S_AGENT),
+                                   + (["--no-headliner"] if a.get("no_headliner") is True else []) + (["--no-headroom"] if a.get("no_headroom") is True else [])
+                                   + ["--force", (" " + a["task"]) if a["task"].startswith("-") else a["task"]]},
+    "cloudseed_enable": {"description": "Enable agentic tasks, Headroom lossless compression, the context brief (legacy headliner setting), or MCP.",
+                         "schema": mcp._p(feature={"type": "string", "title": "Feature", "enum": ["agentic", "headroom", "headliner", "mcp"]}, agent=S_AGENT),
                          "required": ["feature"], "argv": lambda a: ["enable", a["feature"]] + (["--agent", a["agent"]] if a.get("agent") else [])},
-    "cloudseed_disable": {"description": "Disable a feature: agentic, headliner or mcp.", "schema": mcp._p(feature={"type": "string", "title": "Feature", "enum": ["agentic", "headliner", "mcp"]}),
+    "cloudseed_disable": {"description": "Disable agentic tasks, Headroom compression, the context brief, or MCP.", "schema": mcp._p(feature={"type": "string", "title": "Feature", "enum": ["agentic", "headroom", "headliner", "mcp"]}),
                           "required": ["feature"], "argv": lambda a: ["disable", a["feature"]]},
     "cloudseed_use": {"description": "Select the agent (and optionally its model); installs its cloudseed skills. A missing agent CLI is installed with Install (cloudseed_install).",
                       "schema": mcp._p(agent={**S_AGENT, "enum": list(_AGENTS), "description": "builtin needs no install; custom agents come from agents.json"}, model=S_MODEL),
@@ -1310,13 +1312,21 @@ def _tool_rows(cloud_key: str, environ: dict) -> list[dict]:
 
 
 def state() -> dict:
+    from . import headroom
     settings = paths.load_settings()
     envs = [_env_row(e) for e in paths.Env.list_all()]
     mstate = mcp.load_state()
     environ = _job_environ()
+    headroom_state = {**headroom.status(), "enabled": settings.get("headroom", True)}
+    try:
+        unsupported = agents.headroom_unsupported(agents.get(settings.get("agent") or "builtin"), env=environ)
+    except ui.Abort:
+        unsupported = "The selected agent is unavailable"
+    headroom_state.update(supported=unsupported is None, unsupported_reason=unsupported)
     tools = {cloud_key: _tool_rows(cloud_key, environ) for cloud_key in ("aws", "gcp", "azure", "vmware")}
     return {"version": __version__, "home": str(paths.HOME), "settings": {k: v for k, v in settings.items() if k not in ("models", "custom_models")} | {"models": settings.get("models", {})},
             "envs": envs, "current_env": settings.get("current_env"),
+            "headroom": headroom_state,
             "mcp": {"enabled": bool(settings.get("mcp")), "transport": mstate.get("transport"), "url": mcp.url(mstate) if mstate.get("transport") == "http" else None,
                     "running": bool(mcp.health(mstate)) if mstate.get("transport") == "http" else None, "clients": _mcp_clients(mstate)},
             "tools": tools, "clouds": clouds_catalog(), "platform": platform_catalog(), "jobs": [j.to_dict(tail=0) for j in recent_jobs(30)],

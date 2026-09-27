@@ -18,6 +18,10 @@ has "builtin +Built-in agent"
 has "claude +Claude Code"
 
 step "2. Turn on agentic mode and pick a model"
+# Keep routine local interface checks free of Headroom downloads.
+# Dedicated Headroom tests exercise actual compression against a local provider stub.
+ok cs disable headroom
+skip "Headroom compression (disabled in this scenario; separate local proxy tests cover it)"
 ok cs enable agentic
 has "Agentic mode enabled with Built-in agent"
 ok cs use builtin --model claude-sonnet-5
@@ -57,7 +61,7 @@ has "my database is postgres://shop:\[REDACTED\]@db.internal"
 hasnt "Tr0ub4dor-3"
 has "secrets in env: 0"
 has "human-only refused: exit 2"
-check "the headliner brief is long" bash -c "grep -Eo 'brief: [0-9]+ lines' '$SCN_OUT' | awk '{exit !(\$2 > 10)}'"
+check "the context brief is long" bash -c "grep -Eo 'brief: [0-9]+ lines' '$SCN_OUT' | awk '{exit !(\$2 > 10)}'"
 ok cs disable headliner
 ok cs agentic --agent echo "list my environments"
 has "brief: [0-9] lines"
@@ -77,7 +81,7 @@ step "6. Deploy the MCP server"
 # Exercise a real server without creating a login service from a throw-away home.
 ok cs setup mcp -y --no-service --client none --port "$PORT"
 has "MCP server up: http://127.0.0.1:$PORT/mcp"
-has "48 tools"
+has "[0-9]+ tools"
 
 step "7. Check it and connect clients"
 ok cs mcp status
@@ -86,6 +90,7 @@ ok cs status mcp
 has "Transport +http"
 ok cs mcp tools
 has "cloudseed_platform"
+has "cloudseed_evidence"
 ok cs mcp test
 has "MCP round-trip over stdio"
 ok cs mcp test --http
@@ -106,6 +111,12 @@ ok curl -s -X POST "http://127.0.0.1:$PORT/mcp" -H "Authorization: Bearer $(cat 
 has '"structuredContent"'
 has '"INCOMPLETE"'
 has '"live": false'
+
+step "7a. Review complete saved evidence through CLI and MCP"
+# Synthetic saved evidence only: no setup, scanner, cloud credentials or cloud API calls.
+ok python3 "$SCN_REPO/tests/scenarios/evidence-review.py" "$PORT"
+has "CLI and MCP retrieved every redacted finding"
+has "Historical timestamps, coverage limits, stale revisions and unsafe paths checked"
 
 step "8. Operate the server"
 ok cs mcp logs -n 20

@@ -161,9 +161,10 @@ the same `cloudseed` command.
 </td>
 <td valign="top">
 
-**MCP server (48 tools)**<br>
+**MCP server**<br>
 `cs setup mcp` exposes every feature to Claude Code, Claude Desktop, Codex, Cursor, Windsurf, Gemini CLI and VS Code.
-Anything destructive refuses to run without `confirm=true`.
+Anything destructive refuses to run without `confirm=true`. Saved evidence is readable in full through redacted,
+revision-checked pages (`cloudseed_evidence` or `cs evidence list/read`).
 
 </td>
 <td valign="top">
@@ -171,6 +172,8 @@ Anything destructive refuses to run without `confirm=true`.
 **Agentic mode**<br>
 `cs agentic "create a staging env on aws in us-west-2"` with the built-in agent, Claude Code, Codex, Gemini or Grok.
 Credential variables are stripped from the agent, output is redacted, risky commands wait for you.
+Supported connections use managed [Headroom AI](https://nimeshbuilds.github.io/cloudseed/guides/agentic/#headroom-context-compression) lossless compression;
+the environment context brief is separate. Status explains unsupported routes and `--no-headroom` opts out.
 
 </td>
 </tr>

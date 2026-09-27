@@ -45,7 +45,7 @@ The left rail holds ten views; the number keys `1` to `0` switch between them.
 | **Resilience** (5) | Disaster recovery (DR drill, backup now, restore, schedules), chaos engineering (suites, your own workload, stop all), security scans (everything, CIS, NSA / MITRE, vulnerabilities, host CIS, STIG, cloud CIS, FIPS), and Well-Architected assessments with profile and evidence age controls. |
 | **All actions** (6) | Every action as a card with a form: search it, fill it in, run it. The cards say whether an action is read-only or changes things. |
 | **Reports** (7) | The DR drill, chaos and scan reports of the selected environment with their verdicts, plus the logs of its setup, apply and destroy runs. |
-| **Agents & MCP** (8) | Turn agentic mode and the headliner brief on or off, pick the agent and model, run a task; deploy the MCP server, connect or disconnect each detected client, self-test, read the connection guide. |
+| **Agents & MCP** (8) | Turn agentic mode, the context brief and Headroom compression on or off, inspect Headroom readiness, pick the agent and model, run a task; deploy the MCP server, connect or disconnect each detected client, self-test, read the connection guide. |
 | **Credentials** (9) | The local credential vault: set, replace or remove cloud keys and API tokens (masked, never shown back). |
 | **Help** (0) | The CLI's help topics and the Explain search. |
 
@@ -70,7 +70,8 @@ is resolved. Missing evidence for requested checks, execution errors and require
 inapplicable checks show **N/A**. Open the finding for the specific gap and its next step.
 Unknown findings include the reason evidence could not establish a result and how to resolve it. Scanner diagnostics
 also explain report-wide problems such as zero observations, a nonzero exit, access denial or unreachable endpoints;
-raw error output is not copied into that summary.
+new cloud scans retain redacted diagnostic examples and an output-artifact reference. Older reports may contain
+only an error count, which cannot identify the original cause without saved diagnostic text.
 Cloud scans can include resources outside the selected Cloudseed environment; check the report's scope before
 deciding which resource needs a change.
 
@@ -79,6 +80,16 @@ exist. **View full JSON** and **View full Markdown** open the complete saved rep
 retention limits and raw-output location remain visible there. Reports above the console's 32 MiB display limit
 must be opened locally. Older cloud reports display a warning because they may have retained only high/critical
 failures; rerun the cloud scan to export complete findings and explanations.
+
+An agent launched from the console can review saved results through `cs evidence list|read`; MCP clients use
+`cloudseed_evidence`. Follow every page with the same revision until the artifact is complete. Read the recorded
+time, diagnostics and coverage limits: `unknown=0` does not establish that all resources or controls were checked.
+See [scenario 14's saved-report exercise](../scenarios/14-ai-agents-and-mcp.md#step-7a-explain-a-saved-scan-without-running-it-again).
+
+Headroom's readiness display shows whether its dependency is available; the task output establishes whether a
+supported agent session actually uses its proxy. The context brief is separate research prepared before the task.
+See [Headroom support and controls](agentic.md#headroom-context-compression) for unsupported provider routes and
+the distinction between console-launched agents and independently launched MCP clients.
 
 ## Create an environment
 

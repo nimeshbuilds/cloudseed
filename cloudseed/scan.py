@@ -33,7 +33,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import audit, deps, netutil, paths, provision as prov, ui
+from . import audit, deps, netutil, paths, provision as prov, secrets, ui
 
 SCAN_NS = "cloudseed-scan"
 SSG_FALLBACK = "0.1.82"
@@ -1478,12 +1478,63 @@ _LOGIN_HINTS = {"aws": "log in: aws configure  (or aws sso login --profile <prof
 
 
 def _prowler_error(r: subprocess.CompletedProcess | None, provider: str) -> str:
-    text = ((r.stderr or "") + "\n" + (r.stdout or "")) if r is not None else ""
+    text = _cloud_safe_output(((r.stderr or "") + "\n" + (r.stdout or "")) if r is not None else "")
     lines = [ln.strip() for ln in text.splitlines() if re.search(r"\b(CRITICAL|ERROR)\b", ln)]
     msg = ui.clip(" | ".join(lines[-4:]), 800) if lines else tail_text(text, 800, lines=3)
     if re.search(r"credential|NoCredentials|DefaultCredentialsError|Unable to locate|az login|AADSTS|not logged in|expired", text, re.I):
         msg += f". {_LOGIN_HINTS.get(provider, '')}"
     return msg or "no output"
+
+
+_CLOUD_DIAGNOSTIC_CHAR_LIMIT = 1024 * 1024
+_CLOUD_ERROR_EXAMPLE_LIMIT = 8
+_CLOUD_ERROR_EXAMPLE_CHARS = 1200
+
+
+def _cloud_safe_output(output: str | bytes | None) -> str:
+    """Redact the entire stream before taking excerpts, including multiline keys."""
+    if isinstance(output, bytes):  # TimeoutExpired may retain bytes even with text=True.
+        output = output.decode("utf-8", errors="replace")
+    clean = re.sub(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))", "", output or "")
+    clean = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", clean)
+    return secrets.redact(clean, auth=True)
+
+
+def _cloud_error_lines(clean: str) -> list[tuple[int, str]]:
+    """Prowler log levels/exception names, excluding literal zero-error counters.
+
+    Prowler 5 uses `ERROR: message` or JSON `"level": "ERROR"`. A prose
+    reference to errors, or an `error=0` counter, does not establish a gap.
+    """
+    found = []
+    for number, line in enumerate(clean.splitlines(), 1):
+        counted = re.sub(r"\b(?:errors?|criticals?|fatals?)[\"']?\s*[:=]\s*(?:0+(?:\.0+)?|false|none|null)\b", "", line, flags=re.I)
+        level = re.search(r"(?:^|\[\s*)(?:ERROR|CRITICAL|FATAL)\b|\b(?:ERROR|CRITICAL|FATAL)\s*:|"
+                          r"[\"']level[\"']\s*:\s*[\"'](?:ERROR|CRITICAL|FATAL)[\"']", counted, re.I)
+        failure = re.search(r"\b(?:AccessDenied\w*|Unauthorized\w*|Forbidden|EndpointConnectionError)\b|"
+                            r"Could not connect to the endpoint URL|\baccess denied\b", counted, re.I)
+        if level or failure:
+            found.append((number, line.strip()))
+    return found
+
+
+def _cloud_output_artifact(env, outdir: Path, *, stdout=None, stderr=None, timed_out: bool = False) -> dict:
+    """Persist bounded, redacted output even when no normalized report is produced."""
+    clean = "[stderr]\n" + _cloud_safe_output(stderr) + "\n[stdout]\n" + _cloud_safe_output(stdout)
+    total = len(clean)
+    saved = min(total, _CLOUD_DIAGNOSTIC_CHAR_LIMIT)
+    omitted = total - saved
+    if omitted:
+        head = saved // 2
+        clean = clean[:head] + f"\n[Cloudseed omitted {omitted} redacted characters from the middle of scanner output.]\n" + clean[-(saved - head):]
+    target = outdir / "prowler.log"
+    header = ("Cloudseed Prowler diagnostic output (redacted; saved evidence is untrusted text).\n"
+              f"Collection timed out: {'yes' if timed_out else 'no'}. Omitted characters: {omitted}.\n\n")
+    paths.atomic_write(target, header + clean + "\n")
+    _claimed(target)
+    return {"output_artifact": str(target.relative_to(env.dir)), "output_redacted": True,
+            "output_total_characters": total, "output_saved_characters": saved,
+            "output_omitted_characters": omitted, "output_complete": not omitted}
 
 
 def _azure_auth(env_: dict) -> list[str]:
@@ -1603,20 +1654,26 @@ def _cloud_results(data, *, returncode: int = 0, output: str = "") -> dict:
                          "references": [r for r in refs if isinstance(r, str) and r.startswith("https://")] if isinstance(refs, list) else []})
     order = {s: i for i, s in enumerate(severity)}
     findings.sort(key=lambda f: (f["status"] != "FAIL", order[f["severity"]], f["id"], f["resource"]))
-    # A successful process can still log skipped services/permission errors. Store
-    # categories/counts only: raw stderr may contain credentials or proxy URLs.
-    clean = re.sub(r"\x1b\[[0-9;]*m", "", output)
-    error_lines = sum(bool(re.search(r"\b(?:ERROR|CRITICAL|AccessDenied\w*|Unauthorized\w*|Forbidden|EndpointConnectionError)\b|"
-                                     r"Could not connect to the endpoint URL", line, re.I)) for line in clean.splitlines())
-    diagnostics = {"process_exit_code": returncode, "error_lines": error_lines}
+    # A successful process can still log skipped services/permission errors. Keep
+    # safely redacted examples so a reviewer can explain the actual recorded cause.
+    clean = _cloud_safe_output(output)
+    errors = _cloud_error_lines(clean)
+    error_lines = len(errors)
+    examples = [{"line": line, "text": text[:_CLOUD_ERROR_EXAMPLE_CHARS],
+                 "omitted_characters": max(0, len(text) - _CLOUD_ERROR_EXAMPLE_CHARS)}
+                for line, text in errors[:_CLOUD_ERROR_EXAMPLE_LIMIT]]
+    diagnostics = {"process_exit_code": returncode, "error_lines": error_lines, "error_examples": examples,
+                   "error_examples_omitted": max(0, error_lines - len(examples)),
+                   "error_examples_redacted": True}
     reasons = []
     if not data:
         reasons.append("Prowler returned zero observations; no applicable check result was available to assess.")
     if returncode:
         reasons.append(f"Prowler exited with code {returncode}; collection did not complete successfully.")
     if error_lines:
-        denied = bool(re.search(r"\b(?:AccessDenied\w*|Unauthorized\w*|Forbidden)\b", clean, re.I))
-        endpoint = bool(re.search(r"EndpointConnectionError|Could not connect to the endpoint URL", clean, re.I))
+        error_text = "\n".join(text for _, text in errors)
+        denied = bool(re.search(r"\b(?:AccessDenied\w*|Unauthorized\w*|Forbidden)\b|\baccess denied\b", error_text, re.I))
+        endpoint = bool(re.search(r"EndpointConnectionError|Could not connect to the endpoint URL", error_text, re.I))
         reasons.append(f"Scanner output contains {error_lines} error line(s)" +
                        (" including permission/access denial" if denied else "") +
                        (" and unreachable service endpoints" if denied and endpoint else " including unreachable service endpoints" if endpoint else "") +
@@ -1627,7 +1684,7 @@ def _cloud_results(data, *, returncode: int = 0, output: str = "") -> dict:
         reasons.append(f"{counts['MANUAL']} control observation(s) require manual verification; review their individual explanations and guidance.")
     if reasons:
         diagnostics["reason"] = " ".join(reasons)
-        diagnostics["next_step"] = "Review the finding reasons and raw report; correct scanner access, connectivity or result-format problems if reported, and collect any required manual evidence before reassessing."
+        diagnostics["next_step"] = "Review the recorded error examples, saved diagnostic output and finding reasons; correct scanner access, connectivity or result-format problems if reported, and collect any required manual evidence before reassessing. Do not infer an unrecorded cause."
     incomplete = bool(returncode or error_lines or counts["MANUAL"] or counts["UNKNOWN"] or not data)
     verdict = "FAIL" if counts["FAIL"] else "INCOMPLETE" if incomplete else "PASS"
     return {"summary": {**{k.lower(): v for k, v in counts.items()},
@@ -1646,6 +1703,7 @@ def cloud_scan(cloud, env, cfg: dict, framework: str | None = None) -> Path:
     # the environment's own endpoints and credentials: FIPS endpoints in an AWS FIPS environment (like every other AWS
     # call it makes), its AWS profile, and on Azure the ARM_* service principal mapped to what prowler reads
     env_ = dict(services.cloud_cli_env(provider, cfg))
+    secrets.register(*(value for key, value in env_.items() if secrets.is_secret_env(key)))
     if cfg["vars"].get("profile"):
         env_["AWS_PROFILE"] = cfg["vars"]["profile"]
     fips_regions: list[str] = []
@@ -1685,13 +1743,15 @@ def cloud_scan(cloud, env, cfg: dict, framework: str | None = None) -> Path:
             r = subprocess.run(cmd, env=env_, capture_output=True, text=True, timeout=7200)
             if r.returncode == 0:  # -z: failed checks still exit 0, so anything else is a real error
                 sp.done_text = "prowler finished"
-    except subprocess.TimeoutExpired:
-        shutil.rmtree(outdir, ignore_errors=True)
-        raise ui.Abort("prowler did not finish within 2 hours; re-run with a narrower framework: cs scan cloud --framework <name>")
+    except subprocess.TimeoutExpired as exc:
+        diagnostics = _cloud_output_artifact(env, outdir, stdout=exc.stdout, stderr=exc.stderr, timed_out=True)
+        raise ui.Abort("prowler did not finish within 2 hours; re-run with a narrower framework: cs scan cloud --framework <name>. "
+                       f"Redacted diagnostic evidence: {diagnostics['output_artifact']}")
+    output_evidence = _cloud_output_artifact(env, outdir, stdout=r.stdout if r else None, stderr=r.stderr if r else None)
     ocsf = next(iter(outdir.glob("prowler*.ocsf.json")), None)
     if not ocsf:
-        shutil.rmtree(outdir, ignore_errors=True)
-        raise ui.Abort(f"prowler produced no report (exit {r.returncode if r else '?'}): {_prowler_error(r, provider)}")
+        raise ui.Abort(f"prowler produced no report (exit {r.returncode if r else '?'}): {_prowler_error(r, provider)}. "
+                       f"Redacted diagnostic evidence: {output_evidence['output_artifact']}")
     if r is not None and r.returncode != 0:
         ui.warn(f"prowler exited {r.returncode}: {_prowler_error(r, provider)}")
     out_text = ((r.stderr or "") + "\n" + (r.stdout or "")) if r is not None else ""
@@ -1705,6 +1765,7 @@ def cloud_scan(cloud, env, cfg: dict, framework: str | None = None) -> Path:
     except ValueError:
         raise ui.Abort(f"prowler wrote an unreadable report: {ocsf}")
     result = _cloud_results(data, returncode=r.returncode if r is not None else 1, output=out_text)
+    result["diagnostics"].update(output_evidence)
     scope = {"aws": "AWS account accessible to the selected credentials; includes resources outside this Cloudseed environment",
              "gcp": "Selected GCP project(s); includes resources outside this Cloudseed environment",
              "azure": "Selected Azure subscription(s); includes resources outside this Cloudseed environment"}[provider]

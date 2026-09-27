@@ -140,6 +140,12 @@ Security scans and [Well-Architected assessments](well-architected.md) save JSON
 The console's **Reports** view exposes findings and coverage limits. A scan result describes the checks performed:
 it does not establish that every resource is secure or that an application can recover.
 
+Agents can read full saved artifacts through `cs evidence list|read` or MCP `cloudseed_evidence`, without direct
+filesystem access or running another scan. Follow the returned pages with the same revision until `complete=true`;
+see the [evidence walkthrough](../scenarios/14-ai-agents-and-mcp.md#step-7a-explain-a-saved-scan-without-running-it-again).
+That flag means the artifact was fully read. `unknown=0` counts one category of observations; neither establishes
+complete scan coverage. Use the report's recorded time, diagnostics and explicit coverage limits.
+
 | Scan result | Exit code | Interpretation |
 |---|---|---|
 | `PASS` | `0` | The performed checks satisfy that scanner's policy; inspect remaining coverage limits. |

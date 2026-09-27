@@ -90,6 +90,13 @@ For a local Well-Architected assessment, use `cloudseed scan architecture <cloud
 infrastructure changes. PASS exits 0, FAIL 1, INCOMPLETE 3; missing, stale and manual-review evidence never passes
 silently. `scan all` excludes architecture. See the cloudseed-architecture skill and `cloudseed explain architecture`.
 
+For saved scan, DR, chaos or operations results, use `cloudseed evidence list|read <cloud> --env NAME --json`
+(MCP `cloudseed_evidence`), selecting an artifact from the list. Read all pages by following `next_offset` with the
+same `revision` until `complete=true`; restart if the revision changes. This grants access to redacted evidence,
+not arbitrary files. Explain findings, diagnostics and coverage limits before proposing a change. Neither
+`unknown=0` nor all pages being read proves all resources or controls were assessed. Report observation times and
+make clear that saved results describe a past run. Do not rerun live operations solely to read existing evidence.
+
 ## Operational workflows across interfaces
 
 Use `cloudseed ops list --json` for the installed contract before selecting parameters. The CLI form is
