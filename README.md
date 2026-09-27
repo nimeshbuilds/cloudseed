@@ -172,8 +172,11 @@ revision-checked pages (`cloudseed_evidence` or `cs evidence list/read`).
 **Agentic mode**<br>
 `cs agentic "create a staging env on aws in us-west-2"` with the built-in agent, Claude Code, Codex, Gemini or Grok.
 Credential variables are stripped from the agent, output is redacted, risky commands wait for you.
-Supported connections use managed [Headroom AI](https://nimeshbuilds.github.io/cloudseed/guides/agentic/#headroom-context-compression) lossless compression;
-the environment context brief is separate. Status explains unsupported routes and `--no-headroom` opts out.
+The [Context brief](https://nimeshbuilds.github.io/cloudseed/guides/agentic/#the-context-brief) supplies environment facts before the task.
+Private command launchers and complete saved-evidence access help the agent explain results from the actual report.
+Review Cloudseed task metrics with `cs usage report`; optional ccusage analysis uses only Cloudseed-generated
+inputs. [Usage reports](https://nimeshbuilds.github.io/cloudseed/guides/usage/) explain missing metrics and distinguish
+cost estimates from billing.
 
 </td>
 </tr>

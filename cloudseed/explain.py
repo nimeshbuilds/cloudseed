@@ -139,10 +139,8 @@ FEATURES: dict[str, dict] = {
                 "Context brief (deterministic research, controlled by the compatible headliner setting) prepended; "
                 "private session cloudseed/cs launchers use the current installation. Skills in skills/ installed into the agent; "
                 "credentials stripped from agent env and redacted from output. Saved reports are read through evidence list/read, "
-                "with redacted, revision-bound pages. The brief does not compress conversations; the separate Headroom "
-                "integration provides lossless compression through an owned loopback proxy for supported provider routes. "
-                "Connecting an independently launched MCP client does not route that client's model requests through this proxy.",
-        "files": ["cloudseed/agents.py", "cloudseed/builtin_agent.py", "cloudseed/headliner.py", "cloudseed/headroom.py", "cloudseed/evidence.py", "cloudseed/secrets.py", "cloudseed/skills.py", "skills/*/SKILL.md"],
+                "with redacted, revision-bound pages.",
+        "files": ["cloudseed/agents.py", "cloudseed/builtin_agent.py", "cloudseed/headliner.py", "cloudseed/evidence.py", "cloudseed/secrets.py", "cloudseed/skills.py", "skills/*/SKILL.md"],
         "controls": ["secret env vars (and the vault's secrets) stripped from the agent and served to child cloudseed commands over a per-session unix socket (nothing on disk)",
                      "redaction of prompts and cloudseed output, kubectl/helm/databricks/snowflake output included (k9s, kubectl edit and "
                      "exec/attach/run/debug -i/-t, calls that never end - logs -f, get -w, port-forward, proxy -, databricks auth login, prompts "
@@ -250,6 +248,19 @@ FEATURES: dict[str, dict] = {
         "commands": ["cs dr status|backup|restore|backups|schedule|test [name] [<cloud> --env NAME]", "cs dr backup [name]", "cs dr restore <backup>",
                      "cs dr schedule <name> --cron \"0 2 * * *\" (UTC)", "cs dr test",
                      "cs dr describe|logs backup|restore <name> [--details] (velero's own view; in the velero pod without a CLI here)"],
+    },
+    "usage": {
+        "what": "Private usage metadata for Cloudseed-launched agent runs and this server's MCP tool activity. "
+                "Native counters require no proxy. Optional ccusage uses only these records and offline prices; "
+                "it never scans global agent history or sends model requests.",
+        "files": ["cloudseed/usage.py", "cloudseed/agents.py", "cloudseed/builtin_agent.py", "cloudseed/mcp.py"],
+        "state": ["~/.cloudseed/usage/ (private per-run metadata; no prompts, answers or tool arguments)"],
+        "controls": ["Missing provider counters stay unavailable with a specific reason",
+                     "Cache and reasoning counts are subsets of input/output; totals must not double count them",
+                     "MCP clients do not expose their host-model usage: Cloudseed records calls, timing and response sizes",
+                     "Follow coverage.next_offset for more records; counts and costs describe only the selected page",
+                     "ccusage installation is explicit and verified; cost estimates are not bills or subscription balances"],
+        "commands": ["cs usage --json", "cs usage report --agent claude --json", "cs usage install", "cs usage report --engine ccusage --json"],
     },
     "scan": {
         "what": "One command per scanner with saved reports: kube-bench (CIS, distro-aware benchmarks, EKS STIG), kubescape (NSA/MITRE/CIS), trivy "
@@ -410,6 +421,7 @@ TITLES: dict[str, str] = {
     "fips": "FIPS 140 mode",
     "chaos": "Chaos engineering: experiments with a verdict",
     "dr": "Disaster recovery: Velero backups, restores and drills",
+    "usage": "Usage: Cloudseed agent tokens and MCP activity",
     "scan": "Scans: security, compliance and Well-Architected assessments",
     "architecture": "Well-Architected: configuration and saved-evidence assessment",
     "undo": "Undo: a journal of inverse actions",
@@ -456,8 +468,8 @@ SUMMARIES: dict[str, str] = {
     "topic services": "Optional services per environment (Kubernetes, VPN) switched on with --var or the setup prompts.",
     "topic troubleshooting": "Common failures and their fixes: missing tools, credentials, 'already exists', SSH timeouts, permissions.",
     "topic examples": "Worked examples of common tasks on every target, from the first environment to teardown.",
-    "command enable": "Turn on agentic mode, the context brief (headliner), Headroom compression, the MCP server or the local web console.",
-    "command disable": "Turn off agentic mode, the context brief (headliner), Headroom compression, the MCP server or the local web console.",
+    "command enable": "Turn on agentic mode, the context brief (headliner), the MCP server or the local web console.",
+    "command disable": "Turn off agentic mode, the context brief (headliner), the MCP server or the local web console.",
     "command ui": "The local web console: every cloudseed capability as a form and a button (cs ui opens it).",
     "command help": "Help pages: the overview, one page per command and the topic guides.",
     "command finops": "Cost estimates, actual cloud bills and Kubernetes cost allocation (OpenCost), saved as reports.",

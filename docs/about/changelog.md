@@ -1,6 +1,6 @@
 ---
-title: "Changelog - cloudseed v0.2.2 highlights"
-description: "Cloudseed v0.2.2 adds Headroom context compression, complete saved-evidence access, reliable agent command discovery and retained scanner diagnostics."
+title: "Changelog - cloudseed v0.2.3 highlights"
+description: "Cloudseed v0.2.3 improves agent command discovery, complete saved-evidence access and retained scanner diagnostics."
 ---
 
 # Changelog
@@ -9,15 +9,17 @@ The full, detailed history is in [CHANGELOG.md](https://github.com/nimeshbuilds/
 GitHub. cloudseed follows [Semantic Versioning](https://semver.org/); while it is 0.x, a minor release may change
 commands or defaults, and such changes are called out.
 
-## v0.2.2 - 2026-09-27
+## v0.2.3 - 2026-09-27
 
-Cloudseed now manages **Headroom AI 0.39.1** through a session-only loopback proxy for supported agent connections.
-Lossless compression is enabled by default for agentic tasks and is separate from the deterministic **Context
-brief**, previously displayed as Headliner. `cs enable headroom`, `cs disable headroom` and `--no-headroom` control
-compression; the legacy `headliner` setting still controls the brief. Readiness and active-session status remain
-distinct, and unsupported routes explain their limitation without changing provider configuration or billing.
-Codex support requires default noninteractive execution with explicit `CODEX_API_KEY`; independently launched MCP
-clients retain their own model connection. See [Headroom support and controls](../guides/agentic.md#headroom-context-compression).
+This version includes the agent and saved-evidence improvements from the unpublished v0.2.2 candidate.
+
+`cs usage report`, MCP `cloudseed_usage` and the console show usage metadata for Cloudseed tasks and MCP activity.
+Optional ccusage analysis reads only Cloudseed-generated inputs. Missing metrics have explanations rather than
+invented zeroes, and estimated cost is separate from invoices and subscription quota. See [agent usage](../guides/usage.md).
+
+The **Context brief** gives an agent environment facts, tool status and saved evidence locations before its task.
+The compatible `headliner` setting controls this deterministic research; `cs disable headliner` turns it off.
+See [the Context brief](../guides/agentic.md#the-context-brief).
 
 Agents receive private `cloudseed` and `cs` launchers for the exact installation running the task, including
 standalone binaries absent from `PATH`. An absolute launcher path provides a fallback when the agent's shell
@@ -36,8 +38,13 @@ The built-in agent preserves full evidence pages and reports interrupted or trun
 
 macOS signing retries recognized Apple timestamp-service failures up to three times per signing operation.
 Other signing failures still stop immediately; secure timestamps, hardened runtime and final verification remain
-required. Developer ID signing remains separate from notarization. Compression savings depend on eligible content,
-and these improvements do not establish live deployment acceptance across all cloud providers.
+required. Developer ID signing remains separate from notarization. These improvements do not establish live
+deployment acceptance across all cloud providers.
+
+## v0.2.2 - unpublished candidate
+
+The release pipeline stopped after a runtime dependency packaging failure on Intel macOS. No v0.2.2 release assets
+were published. Its tag is retained, and the agent and saved-evidence improvements continue in v0.2.3.
 
 ## v0.2.1 - 2026-09-26
 

@@ -556,13 +556,13 @@
   };
   // Argument labels in words (the argument name itself stays visible next to them when they differ), and per-form
   // presentation: a multi-line task, helm --set values one per line, clearer wording where the registry is terse.
-  const KEY_LABELS = { env: 'Environment', no_headliner: 'Skip the research brief', no_headroom: 'Skip Headroom compression', purge_state: 'Also delete the remote state storage', purge: 'Also delete the local directory',
+  const KEY_LABELS = { env: 'Environment', no_headliner: 'Skip the research brief', purge_state: 'Also delete the remote state storage', purge: 'Also delete the local directory',
     set: 'Helm values (--set)', args: 'Arguments' };
   const humanKey = (k) => KEY_LABELS[k] || k.split('_').map((w) => WORDS[w] || w).join(' ').replace(/^./, (c) => c.toUpperCase());
   const FORM_UI = {
     cloudseed_kubectl: { local_context: { label: 'Use this host’s kubeconfig', description: 'Use the existing context on the console server host; confirm the target before running.' }, cloud: { when: { local_context: ['', 'false'] } }, env: { when: { local_context: ['', 'false'] } } },
     cloudseed_helm: { local_context: { label: 'Use this host’s kubeconfig', description: 'Use the existing context on the console server host; confirm the target before running.' }, cloud: { when: { local_context: ['', 'false'] } }, env: { when: { local_context: ['', 'false'] } } },
-    cloudseed_agentic: { task: { multiline: true, wide: true }, model: { description: "model id; blank = the agent's selected model" }, no_headliner: { description: 'skip the environment and evidence context brief' }, no_headroom: { description: 'run this task without Headroom lossless compression' } },
+    cloudseed_agentic: { task: { multiline: true, wide: true }, model: { description: "model id; blank = the agent's selected model" }, no_headliner: { description: 'skip the environment and evidence context brief' } },
     cloudseed_use: { model: { description: "model id; blank = the agent's default model" } },
     cloudseed_platform: { set: { lines: true, description: 'helm --set overrides, one key=value per line (a list like hosts={a,b} stays one value; put mode= on a line of its own)' } },
     cloudseed_destroy: { purge: { description: 'also remove the local environment directory; config.json and the SSH keys stay in the undo history, VPN keys, logs and reports do not' } },
@@ -1160,7 +1160,7 @@
       tile('Resources in state', resources, 'across all environments', ''),
       tile('Running jobs', running, `${s.jobs.length} recent`, running ? 'seed' : '', () => setDrawer(!drawer.classList.contains('open'))),
       tile('MCP', s.mcp.url ? (s.mcp.running ? 'up' : 'down') : s.mcp.enabled ? 'stdio' : 'off', s.mcp.url || 'cs setup mcp', s.mcp.running || (s.mcp.enabled && !s.mcp.url) ? 'leaf' : '', () => go('agents')),
-      tile('Agent', s.settings.agentic ? (s.settings.agent || 'builtin') : 'off', headroomLabel(s), s.settings.agentic ? 'leaf' : '', () => go('agents')));
+      tile('Agent', s.settings.agentic ? (s.settings.agent || 'builtin') : 'off', s.settings.headliner === false ? 'Context brief off' : 'Context brief on', s.settings.agentic ? 'leaf' : '', () => go('agents')));
     v.append(tiles);
     const grid = el('div', { class: 'grid cols-3' });
     for (const e of s.envs) grid.append(envCard(e));
@@ -2220,24 +2220,11 @@
   // Agents & MCP. Switches and the MCP enable button read the state when clicked (never a value captured when the page
   // was drawn), and views.agents.patch keeps them, the chips and the clients table in step with the state while a form
   // here holds unsent input (the page itself is then redrawn later).
-  const featureOn = (k) => (k === 'agentic' ? !!STATE.settings.agentic : k === 'headliner' ? STATE.settings.headliner !== false : k === 'headroom' ? STATE.settings.headroom !== false : !!STATE.mcp.enabled);
-  function headroomLabel(s) {
-    const h = s.headroom || {};
-    if (s.settings.headroom === false) return 'Headroom off';
-    if (h.supported === false) return 'Headroom unsupported';
-    if (h.ready) return 'Headroom ready · lossless';
-    return 'Headroom not ready';
-  }
-  function headroomReason(s) {
-    const h = s.headroom || {};
-    if (s.settings.headroom === false) return 'Compression is disabled for future tasks.';
-    return h.supported === false ? h.unsupported_reason : h.reason || 'Headroom prepares on the first supported task.';
-  }
+  const featureOn = (k) => (k === 'agentic' ? !!STATE.settings.agentic : k === 'headliner' ? STATE.settings.headliner !== false : !!STATE.mcp.enabled);
   const toggleFeature = (k) => { const on = featureOn(k); run('cloudseed_' + (on ? 'disable' : 'enable'), { feature: k }, (on ? 'disable ' : 'enable ') + k); };
   const LIVE_CHIPS = {
     'agentic-chip': () => [STATE.settings.agentic ? 'leaf' : '', STATE.settings.agentic ? 'on' : 'off'],
     'agent-chip': () => ['', 'agent: ' + (STATE.settings.agent || 'none')],
-    'headroom-chip': () => [STATE.settings.headroom !== false && STATE.headroom && STATE.headroom.ready && STATE.headroom.supported !== false ? 'leaf' : '', headroomLabel(STATE)],
     'mcp-chip': () => [STATE.mcp.enabled ? 'leaf' : '', STATE.mcp.enabled ? 'enabled' : 'disabled'],
     'mcp-run-chip': () => (STATE.mcp.url ? [STATE.mcp.running ? 'leaf' : 'rose', (STATE.mcp.running ? 'running · ' : 'down · ') + STATE.mcp.url] : ['', 'stdio only']),
   };
@@ -2272,16 +2259,91 @@
     if (!names.length) return toast(Object.values(STATE.mcp.clients).some((c) => c.present) ? 'Every detected client is connected already (Reconnect rewrites one)' : 'No MCP client was detected on this machine (Connect in the table pre-writes the config of one)');
     run('cloudseed_mcp', { action: 'connect', clients: names }, 'connect ' + (names.length > 2 ? `${names.length} clients` : names.join(', ')));
   };
+  function usagePanel() {
+    const body = el('div', { 'aria-live': 'polite' });
+    let offset = 0, previous = [], next = null, current = null, serial = 0;
+    const count = (value) => typeof value === 'number' ? value.toLocaleString() : 'unavailable';
+    const engine = el('select', { 'aria-label': 'Usage reporting engine', onchange: () => reset() },
+      el('option', { value: 'native' }, 'Recorded usage'), el('option', { value: 'ccusage' }, 'ccusage cost estimates'));
+    const agent = el('select', { 'aria-label': 'Filter usage by agent', onchange: () => reset() },
+      el('option', { value: '' }, 'All agents'), ...['builtin', 'claude', 'codex', 'gemini', 'grok'].map((name) => el('option', { value: name }, name)));
+    const back = el('button', { class: 'btn ghost small', disabled: true, onclick: () => { offset = previous.pop(); load(); } }, 'Previous');
+    const more = el('button', { class: 'btn ghost small', disabled: true, onclick: () => { previous.push(offset); offset = next; load(); } }, 'Next');
+    const download = el('button', { class: 'btn ghost small', disabled: true, onclick: () => {
+      if (!current) return;
+      const url = URL.createObjectURL(new Blob([JSON.stringify(current, null, 2)], { type: 'application/json' }));
+      const link = el('a', { href: url, download: 'cloudseed-usage.json' }); link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } }, 'Download this page');
+    const panel = el('section', { class: 'card', style: 'margin-top:20px', 'data-usage-panel': '' },
+      el('h3', {}, 'Cloudseed usage', explainBtn('usage', 'usage reporting')),
+      el('p', { class: 'muted small' }, 'Only tasks launched through Cloudseed and Cloudseed MCP tool activity. Prompts, answers and other projects’ conversations are excluded.'),
+      el('div', { class: 'row' }, agent, engine, el('button', { class: 'btn ghost small', onclick: () => reset() }, 'Refresh'), download), body,
+      el('div', { class: 'row', style: 'margin-top:12px' }, back, more));
+    function reset() { offset = 0; previous = []; load(); }
+    async function load() {
+      const requestId = ++serial;
+      back.disabled = more.disabled = download.disabled = true;
+      body.replaceChildren(el('p', { class: 'muted' }, 'Loading Cloudseed usage…'));
+      try {
+        const query = new URLSearchParams({ engine: engine.value, limit: '50', offset: String(offset) });
+        if (agent.value) query.set('agent', agent.value);
+        const data = await api('/api/usage?' + query);
+        if (requestId !== serial || !panel.isConnected) return;
+        current = data; next = data.coverage && data.coverage.next_offset;
+        back.disabled = !previous.length; more.disabled = next === null || next === undefined; download.disabled = false;
+        body.replaceChildren();
+        const counts = (data.summary || {}).known_usage || {}, mcp = data.mcp || {};
+        const metric = (label, value) => el('div', { class: 'card', style: 'padding:12px' }, el('div', { class: 'muted small' }, label), el('strong', {}, count(value)));
+        body.append(el('p', { class: 'muted small' }, `Page totals · ${fmtTime(data.generated_at)} · ${(data.coverage || {}).total_records ?? 0} matching records`),
+          el('div', { class: 'grid cols-2' }, metric('Recorded input tokens (includes cache)', counts.input_tokens), metric('Recorded output tokens (includes reasoning)', counts.output_tokens),
+            metric('Cache read / write tokens', null), metric('MCP calls', mcp.call_count)));
+        const cache = body.querySelectorAll('strong')[2]; cache.textContent = `${count(counts.cache_read_tokens)} / ${count(counts.cache_write_tokens)}`;
+        body.append(el('p', { class: 'muted small' }, 'Recorded totals include known counts on this page only. They do not fill in missing usage. Cache and reasoning counts are subsets; do not add them again.'),
+          el('p', { class: 'small' }, mcp.reason || 'Independent MCP clients do not expose their model token counts to Cloudseed.'));
+        for (const reason of (data.coverage || {}).reasons || []) body.append(el('p', { class: 'small', role: 'note' }, reason));
+        const rows = data.runs || [];
+        if (rows.length) {
+          const table = el('table', {}, el('thead', {}, el('tr', {}, ...['Run / time', 'Agent / model', 'Coverage', 'Input', 'Output', 'Details'].map((label) => el('th', {}, label)))));
+          const tbody = el('tbody');
+          for (const row of rows) {
+            const u = row.usage || {};
+            tbody.append(el('tr', {}, el('td', {}, el('code', {}, row.id), el('div', { class: 'small muted', title: row.started_at }, fmtTime(row.started_at))),
+              el('td', {}, row.agent, el('div', { class: 'small muted' }, (row.models || []).join(', ') || row.model || 'Model not reported'),
+                row.model && row.model_provenance !== 'provider' ? el('div', { class: 'small muted' }, 'Requested model; provider did not verify it') : null),
+              el('td', {}, el('span', { class: 'chip' }, row.status)), el('td', { style: 'white-space:nowrap' }, count(u.input_tokens)), el('td', { style: 'white-space:nowrap' }, count(u.output_tokens)),
+              el('td', {}, el('div', { class: 'small' }, (row.reasons || []).join(' ')), el('details', {}, el('summary', {}, 'Recorded metadata'), el('pre', { class: 'help' }, JSON.stringify(row, null, 2))))));
+          }
+          table.append(tbody); body.append(el('div', { class: 'table-wrap', style: 'margin-top:12px' }, table));
+        } else body.append(el('p', { class: 'muted small' }, 'No agent runs on this page. New tasks launched with cs agentic record usage when the agent supplies it.'));
+        if ((mcp.calls || []).length) body.append(el('details', {}, el('summary', {}, `MCP tool activity (${mcp.call_count} calls)`), el('pre', { class: 'help' }, JSON.stringify(mcp.calls, null, 2))));
+        const cc = data.ccusage || {};
+        if (engine.value === 'ccusage') {
+          body.append(el('h4', {}, 'Estimated API cost'), el('p', { class: 'small' }, cc.estimated_cost_usd === null || cc.estimated_cost_usd === undefined ? 'Estimate unavailable; see the reasons below.' : `$${Number(cc.estimated_cost_usd).toFixed(6)} USD for the records on this page`),
+            el('p', { class: 'muted small' }, cc.basis || 'Offline model prices, not an invoice or a subscription balance.'),
+            el('pre', { class: 'help' }, JSON.stringify(cc, null, 2)));
+        }
+        if (!cc.installed) body.append(el('p', { class: 'muted small' }, cc.reason || 'The optional ccusage reporting engine is not installed.'),
+          el('button', { class: 'btn ghost small', onclick: () => run('cloudseed_usage_install', {}, 'install ccusage reporting engine') }, 'Install ccusage…'));
+      } catch (error) {
+        if (requestId !== serial || !panel.isConnected) return;
+        current = null; back.disabled = !previous.length;
+        body.replaceChildren(el('p', { role: 'alert' }, `Could not read usage: ${error.message || error}`));
+        if (engine.value === 'ccusage' && String(error.message).includes('cs usage install')) {
+          body.append(el('button', { class: 'btn ghost small', onclick: () => run('cloudseed_usage_install', {}, 'install ccusage reporting engine') }, 'Install ccusage…'));
+        }
+      }
+    }
+    // Read once when mounted; routine state polling must not start another report.
+    setTimeout(load, 0);
+    return panel;
+  }
   views.agents = () => {
     const v = $('#view-agents'); v.innerHTML = '';
     const s = STATE.settings, m = STATE.mcp;
     const sw = (k, label) => el('label', { class: 'check', style: 'gap:12px' }, el('button', { type: 'button', role: 'switch', 'aria-checked': String(featureOn(k)), class: 'switch ' + (featureOn(k) ? 'on' : ''), 'data-live': k, 'data-fk': 'switch:' + k, onclick: () => toggleFeature(k) }), el('span', {}, label));
     const agentCard = el('div', { class: 'card' }, el('h3', {}, 'Agentic mode', explainBtn('agentic', 'agentic mode'), liveChip('agentic-chip'), liveChip('agent-chip')),
       el('p', { class: 'muted small' }, 'Let an agent drive cloudseed from plain English: the built-in agent (Claude API) or the Claude Code, Codex, Gemini and Grok CLIs. Credentials are stripped from the agent process; every output is redacted.'),
-      sw('agentic', 'Agentic mode'), sw('headroom', 'Headroom lossless context compression'),
-      el('div', { class: 'row', style: 'margin:8px 0' }, liveChip('headroom-chip')),
-      el('p', { class: 'muted small', 'data-live': 'headroom-reason' }, headroomReason(STATE)),
-      el('p', { class: 'muted small' }, 'Headroom starts locally for supported agent tasks. Task output confirms when compression is active and explains unsupported connections. Full saved evidence remains readable.'),
+      sw('agentic', 'Agentic mode'),
       sw('headliner', 'Context brief: environment facts and saved evidence locations'),
       el('div', { class: 'row', style: 'margin:8px 0 4px' }, el('button', { class: 'btn ghost small', 'data-fk': 'agents:status', onclick: () => run('cloudseed_agents', {}, 'agents') }, 'Agent status'), el('button', { class: 'btn ghost small', 'data-fk': 'agents:models', title: s.agent ? `models of ${s.agent}` : 'no agent chosen yet: shows the built-in agent\'s models', onclick: () => run('cloudseed_model', STATE.settings.agent ? {} : { agent: 'builtin' }, 'models') }, 'Models')),
       el('h4', {}, 'Choose the agent', explainBtn('use', 'choosing the agent')), actionForm(action('cloudseed_use'), { agent: s.agent || 'builtin' }, true),
@@ -2298,14 +2360,13 @@
       el('div', { class: 'row danger-row' }, el('button', { class: 'btn ghost', 'data-live': 'mcp-toggle', 'data-fk': 'mcp:toggle', onclick: () => toggleFeature('mcp') }, mcpToggleText()), b('Stop', 'stop', 'mcp stop'), el('span', { class: 'spacer' }),
         el('button', { class: 'btn rose', 'data-fk': 'mcp:uninstall', onclick: () => run('cloudseed_mcp', { action: 'uninstall' }, 'remove MCP', { message: 'Stops the MCP server and removes its service, its token and the cloudseed entry from every client config it wrote.' }) }, 'Remove everything')),
       el('h4', {}, 'Clients on this machine', explainBtn('command mcp', 'connecting MCP clients')), el('div', { class: 'table-wrap' }, clientsTable()));
-    v.append(el('div', { class: 'grid cols-2' }, agentCard, mcpCard));
+    v.append(el('div', { class: 'grid cols-2' }, agentCard, mcpCard), usagePanel());
   };
   views.agents.patch = () => {
     const v = $('#view-agents');
     for (const n of $$('[data-live]', v)) {
       const k = n.dataset.live;
       if (LIVE_CHIPS[k]) { const [cls, text] = LIVE_CHIPS[k](); n.className = 'chip ' + cls; n.textContent = text; }
-      else if (k === 'headroom-reason') n.textContent = headroomReason(STATE);
       else if (k === 'mcp-toggle') n.textContent = mcpToggleText();
       else { const on = featureOn(k); n.setAttribute('aria-checked', String(on)); n.classList.toggle('on', on); }
     }
@@ -2676,7 +2737,7 @@
     for (const [id, j] of jobs) if (j.running && !listed.has(id) && !(id === activeJob && es)) checkJob(id, false);   // restarted server, or older than the list
     for (const j of finished) { if (j.id === activeJob && !es) $('#job-status').textContent = jobStatusText(j); announce(j); }
     renderTabs();
-    const sig = JSON.stringify([STATE.envs, STATE.settings, STATE.headroom, STATE.mcp, STATE.creds, STATE.undo, STATE.jobs.map((j) => [j.id, j.running, j.rc])]);
+    const sig = JSON.stringify([STATE.envs, STATE.settings, STATE.mcp, STATE.creds, STATE.undo, STATE.jobs.map((j) => [j.id, j.running, j.rc])]);
     const changed = sig !== stateSig; stateSig = sig;
     return { changed: changed || finished.length > 0, selChanged: !first && prev !== sel.value };
   }

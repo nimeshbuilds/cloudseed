@@ -1,7 +1,7 @@
 """A compact, redacted local context brief prepended to agent prompts.
 
 The CLI does the discovery (environments, outputs, tool status, command cheat-sheet) deterministically so
-the agent does not burn tokens exploring. This is not a Headroom integration or live research. The legacy
+the agent does not burn tokens exploring. This is not live research. The legacy
 module name and `headliner` setting remain compatible with existing installations.
 """
 

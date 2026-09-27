@@ -28,6 +28,7 @@ TOOLS = {
     'vpn': 'cloudseed_vpn', 'finops': 'cloudseed_finops', 'dr': 'cloudseed_dr', 'chaos': 'cloudseed_chaos',
     'scan': 'cloudseed_scan', 'evidence': 'cloudseed_evidence', 'databricks': 'cloudseed_managed', 'snowflake': 'cloudseed_managed',
     'undo': 'cloudseed_undo', 'explain': 'cloudseed_explain', 'help': 'cloudseed_help', 'skill': 'cloudseed_skill',
+    'usage': 'cloudseed_usage',
 }
 OP_SCENARIOS = {'health': ['16'], 'network': ['16'], 'profile': ['17'], 'spec-export': ['17'], 'spec-validate': ['17'],
                 'spec-diff': ['17'], 'spec-import': ['17'], 'policy-check': ['17'], 'expiry-plan': ['17'], 'expiry-cleanup': ['17'],
@@ -40,15 +41,26 @@ def manifest():
     commands = []
     for command, subcommand in scenarios.cli_rows():
         tool = TOOLS.get(command)
+        usage_install = command == 'usage' and subcommand == 'install'
+        if usage_install:
+            tool = 'cloudseed_usage_install'
         if command == 'ops' and subcommand != 'list':
             tool = 'cloudseed_ops_' + subcommand.replace('-', '_')
         boundary = (command in ('install', 'deps', 'enable', 'disable', 'use', 'model', 'agents', 'agentic', 'do', 'mcp', 'ui', 'creds', 'k9s')
                     or command == 'skill' and subcommand in ('list', 'install') or command == 'ops' and subcommand == 'list')
+        agent_route = 'human-bootstrap-or-interactive' if boundary else 'bundled-skill-guided'
+        notes = ('Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md.'
+                 if boundary else 'Use the same selected environment, parameters, approvals and verification as the CLI steps.')
+        if usage_install:
+            agent_route = 'human-cli-bootstrap-or-confirmed-mcp-install'
+            notes = 'Optional analyzer installation is a human CLI action or an explicitly confirmed MCP/UI action; reports use only Cloudseed-generated inputs.'
+        elif command == 'usage':
+            notes = 'Read local Cloudseed-run metadata without selecting an environment; follow coverage.next_offset and retain missing-metric reasons and estimated-cost limits.'
         commands.append({'command': command, 'subcommand': subcommand, 'scenarios': sorted(coverage.get((command, subcommand), [])),
-                         'cli': True, 'agent': 'human-bootstrap-or-interactive' if boundary else 'bundled-skill-guided',
+                         'cli': True, 'agent': agent_route,
                          'mcp_tool': None if boundary else tool,
                          'ui': 'host-bootstrap-or-native-interaction' if boundary else 'typed-action-or-dedicated-page',
-                         'notes': 'Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md.' if boundary else 'Use the same selected environment, parameters, approvals and verification as the CLI steps.'})
+                         'notes': notes})
     return {'schema_version': 1, 'meaning': 'Documented interface and feature coverage; not proof of live cloud deployment or every chart installation.',
             'scenario_count': len(scenarios.scenario_pages()), 'commands': commands,
             'operations': [{'name': name, 'scenarios': OP_SCENARIOS.get(name, []), 'mcp_tool': 'cloudseed_ops_' + name.replace('-', '_'),

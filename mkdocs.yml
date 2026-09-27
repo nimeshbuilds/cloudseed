@@ -184,6 +184,7 @@ nav:
       - Undo and audit trail: guides/undo-and-audit.md
       - MCP server: guides/mcp.md
       - AI agent mode: guides/agentic.md
+      - Agent usage: guides/usage.md
       - Credentials vault: guides/credentials.md
       - Dependencies and runtimes: guides/dependencies-and-runtimes.md
       - Troubleshooting: guides/troubleshooting.md

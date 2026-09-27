@@ -45,11 +45,15 @@ The left rail holds ten views; the number keys `1` to `0` switch between them.
 | **Resilience** (5) | Disaster recovery (DR drill, backup now, restore, schedules), chaos engineering (suites, your own workload, stop all), security scans (everything, CIS, NSA / MITRE, vulnerabilities, host CIS, STIG, cloud CIS, FIPS), and Well-Architected assessments with profile and evidence age controls. |
 | **All actions** (6) | Every action as a card with a form: search it, fill it in, run it. The cards say whether an action is read-only or changes things. |
 | **Reports** (7) | The DR drill, chaos and scan reports of the selected environment with their verdicts, plus the logs of its setup, apply and destroy runs. |
-| **Agents & MCP** (8) | Turn agentic mode, the context brief and Headroom compression on or off, inspect Headroom readiness, pick the agent and model, run a task; deploy the MCP server, connect or disconnect each detected client, self-test, read the connection guide. |
+| **Agents & MCP** (8) | Turn agentic mode and the context brief on or off, pick the agent and model, run a task; review usage metadata and download its JSON; deploy the MCP server, connect or disconnect each detected client, self-test, read the connection guide. |
 | **Credentials** (9) | The local credential vault: set, replace or remove cloud keys and API tokens (masked, never shown back). |
 | **Help** (0) | The CLI's help topics and the Explain search. |
 
 The architecture assessment uses the same [`cs scan architecture`](well-architected.md) engine as the CLI and MCP.
+
+The **Agents & MCP** usage report needs no environment selection. It shows observed task and MCP activity, with
+reasons for unavailable metrics, and offers a JSON download. Estimates are not provider bills or remaining quota;
+the server cannot observe its MCP client's model tokens. See [agent usage](usage.md) for the supported measurements.
 It reads saved configuration and evidence without cloud access or infrastructure changes. Its reports distinguish
 `PASS`, `FAIL` and `INCOMPLETE`; missing, stale or manual-review evidence never silently passes.
 
@@ -85,11 +89,6 @@ An agent launched from the console can review saved results through `cs evidence
 `cloudseed_evidence`. Follow every page with the same revision until the artifact is complete. Read the recorded
 time, diagnostics and coverage limits: `unknown=0` does not establish that all resources or controls were checked.
 See [scenario 14's saved-report exercise](../scenarios/14-ai-agents-and-mcp.md#step-7a-explain-a-saved-scan-without-running-it-again).
-
-Headroom's readiness display shows whether its dependency is available; the task output establishes whether a
-supported agent session actually uses its proxy. The context brief is separate research prepared before the task.
-See [Headroom support and controls](agentic.md#headroom-context-compression) for unsupported provider routes and
-the distinction between console-launched agents and independently launched MCP clients.
 
 ## Create an environment
 

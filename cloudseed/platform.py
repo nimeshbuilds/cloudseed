@@ -259,7 +259,7 @@ CATALOG: dict[str, dict] = {
                        "values": {"default": {"spark.jobNamespaces[0]": "{spark}"}}},   # a list: a plain string breaks the webhook template
     # Sized for the default 4 GiB nodes (the chart's -Xmx8G heaps and BestEffort pods would be OOM-killed under load):
     # heaps with their limits around them, per-node query memory as a share of the heap (Trino needs it below heap minus
-    # its 30% headroom). process-forwarded: `cs platform ui` serves it behind the Gateway, which sends X-Forwarded-*
+    # its 30% capacity margin). process-forwarded: `cs platform ui` serves it behind the Gateway, which sends X-Forwarded-*
     # headers Trino otherwise answers with HTTP 406.
     "trino": {"group": "data", "desc": "Distributed SQL query engine", "method": "helm",
               "repo": "https://trinodb.github.io/charts", "chart": "trino", "version": "1.42.2", "ns": "trino",

@@ -185,7 +185,7 @@ class PassthroughTests(unittest.TestCase):
 
 # a minimal valid argv for every command, to prove the global options are accepted after each of them
 MINIMAL = {
-    "ops": ["list"], "evidence": ["list"],
+    "ops": ["list"], "evidence": ["list"], "usage": [],
     "setup": ["aws"], "provision": ["aws"], "k8s": ["info", "aws"], "vpn": ["status", "aws"], "plan": ["aws"],
     "apply": ["aws"], "destroy": ["aws"], "status": ["aws"], "troubleshoot": ["aws"], "inventory": ["aws"],
     "output": ["aws"], "ssh": ["aws"], "update-ip": ["aws"], "list": [], "doctor": [], "deps": ["status"],
@@ -213,6 +213,11 @@ class GlobalFlagTests(unittest.TestCase):
     def test_trailing_runtime_and_engine(self):
         for cmd, rest in MINIMAL.items():
             if cmd in CATCH_ALL:
+                continue
+            if cmd == "usage":
+                # Usage has its own report engine; the container engine remains a leading global option.
+                a = parse("--engine", "podman", cmd, *rest, "--runtime", "local", "--engine", "ccusage")
+                self.assertEqual((a.runtime, a.engine, a.usage_engine), ("local", "podman", "ccusage"), cmd)
                 continue
             a = parse(cmd, *rest, "--runtime", "local", "--engine", "podman")
             self.assertEqual((a.runtime, a.engine), ("local", "podman"), cmd)

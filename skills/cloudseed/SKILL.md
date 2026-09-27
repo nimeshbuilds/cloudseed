@@ -18,13 +18,8 @@ shell resets `PATH`, use the exact absolute launcher path supplied in the prompt
 search the user's files for one, install software yourself or bypass a refused command with another executable.
 
 The **Context brief** is deterministic Cloudseed research, controlled by the compatible `headliner` setting.
-**Headroom** is separate lossless context compression for supported model-provider routes, with its own truthful
-active/off/unsupported/unavailable status. It does not grant access to files or replace reading report pages.
-Codex compression requires default noninteractive execution with an explicit `CODEX_API_KEY`; `OPENAI_API_KEY`
-alone does not select that auth mode. Never copy keys, change provider configuration or switch billing to make
-compression active. Unsupported custom/provider/managed routing keeps the existing policy and reports its cause.
-An independently launched MCP client's provider connection is not automatically routed through Cloudseed's proxy.
-Changing either setting is human-only; give the user the appropriate command rather than changing it yourself.
+It summarizes environment facts before a task; read the full saved report before explaining findings.
+Changing the setting is human-only; give the user the appropriate command rather than changing it yourself.
 
 ## Mental model
 
@@ -66,11 +61,12 @@ Changing either setting is human-only; give the user the appropriate command rat
 | How something works | `cloudseed explain <thing> --json` - a feature, target, command, topic, platform group or item, or `variable <cloud> <name>` (read-only; see below) |
 | What is installed | `cloudseed install list`, `cloudseed doctor [cloud]` (read-only; `doctor <cloud>` exits 1 with an "is not ready" verdict when a required tool or the credentials are missing) |
 | Install software | Human-only: give the user `cloudseed install <tool\|group\|skills\|agent\|vmrun\|vmware-provider\|image\|bundle>` (or `cloudseed deps install <tool>`) and let them run it; never run it yourself |
-| Agents | `cloudseed agents`, `cloudseed skill list\|show`, `cloudseed model` (shows the models), `cloudseed use list` (read-only). Human-only - give the user the command: `cloudseed use <agent>`, `cloudseed model <id>`, `cloudseed enable\|disable agentic\|headliner\|headroom`, `cloudseed skill install` |
+| Agents | `cloudseed agents`, `cloudseed skill list\|show`, `cloudseed model` (shows the models), `cloudseed use list` (read-only). Human-only - give the user the command: `cloudseed use <agent>`, `cloudseed model <id>`, `cloudseed enable\|disable agentic\|headliner`, `cloudseed skill install` |
 | Disaster recovery | `cloudseed dr status\|backups\|backup [name]\|restore <backup>\|schedule <name> --cron "0 2 * * *"\|test\|describe\|logs backup\|restore <name> [--cloud <cloud>] [--env dev]` (Velero; cron in UTC; `cs platform install velero` creates the bucket + identity in the cloud first) |
 | Chaos engineering | `cloudseed chaos run [basic\|network\|stress\|full\|<experiment>...] [--target ns/deploy] [--cloud <cloud>] [--env dev]`, `cloudseed chaos list\|status\|stop\|report` (PASS/FAIL report per experiment) |
 | Security scans | `cloudseed scan cis\|kube\|images\|host\|stig\|cloud\|fips\|all [<cloud> --env dev]`, `cloudseed scan reports` (kube-bench, kubescape, trivy, OpenSCAP CIS/STIG, prowler, FIPS verifier) |
 | Read saved evidence | `cloudseed evidence list <cloud> --env dev --area scans --json`, then `cloudseed evidence read <cloud> --env dev --artifact scans/NAME.json --offset 0 --limit 8000 --json` (use a listed artifact; follow `next_offset` with the same `revision` until `complete=true`; MCP: `cloudseed_evidence` action `list`/`read`, no confirmation) |
+| Agent usage | `cloudseed usage report [--run-id UUID] [--agent NAME] [--offset N] [--limit N] [--engine native\|ccusage] --json`; MCP `cloudseed_usage` uses `run_id`, `agent`, `offset`, `limit`, `engine`, no confirmation. Follow `coverage.next_offset` until null; totals apply to the selected page. Read only Cloudseed-run metadata; missing metrics have reasons and are not zero. Costs are estimates, not invoices or quota. CLI `cloudseed usage install` is human-only; MCP `cloudseed_usage_install` needs explicit installation approval and `confirm=true`. |
 | Well-Architected assessment | `cloudseed scan architecture <cloud> --env prod --profile production --max-age-days 30 --json` (local configuration and saved evidence; `--profile lab` for a lab; see cloudseed-architecture skill) |
 | FIPS mode | `cloudseed setup <cloud> --env dev --var fips_mode=true` (new envs only; RSA-4096 SSH keys; VMware, and AWS with a VPN host, need `UBUNTU_PRO_TOKEN`; kubeadm/tailscale/ed25519 refused), verify with `cloudseed scan fips` |
 | Undo | `cloudseed undo [<cloud> --env dev] [--auto-approve]`, `cloudseed undo --list`, `cloudseed undo --id ID` (that entry, once it is the newest of its environment), `cloudseed undo --id ID --drop` (discard a step that can never succeed). Fifteen undo points per env (at most five of one kind; reports and scans have five more of their own); after that destroy and start over. Global entries (settings, agents, MCP, UI, credentials: `cloudseed undo --global`) are the user's only - you cannot undo them |

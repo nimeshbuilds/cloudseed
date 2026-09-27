@@ -46,6 +46,7 @@ CORE COMMANDS
   scan               cis | kube | images | host | stig | cloud | fips | architecture | all | reports:
                      security scans and local Well-Architected assessments with saved reports
   evidence           list | read: saved reports and logs, redacted and paginated without running new scans
+  usage              report | install: Cloudseed agent tokens, MCP activity and optional ccusage cost estimates
   databricks         Databricks: connect (profile per environment), test, or pass any CLI command through
   snowflake          Snowflake: the same, with the Snowflake CLI
   explain [name]     how anything works: a feature, target, command, topic, platform item or setup variable
@@ -67,7 +68,7 @@ AGENTIC AND INTEGRATIONS (optional)
   enable ui          the local web console: everything here as forms and buttons (cs ui opens it again)
   creds              list | set | unset | clear: the local credential vault (cloud keys, API keys, tokens) used by
                      every command and the UI
-  enable | disable   agentic | headroom | headliner | mcp | ui
+  enable | disable   agentic | headliner | mcp | ui
   setup mcp          deploy the local MCP server (every feature as a tool) and connect Claude Code, Claude Desktop,
                      Codex, Cursor, ...
   mcp <subcommand>   status, guide, connect, disconnect, tools, config, test, serve, start, stop, restart, logs,
@@ -787,21 +788,13 @@ EXAMPLES
 """,
     "enable": """\
 cloudseed enable agentic [--agent builtin|claude|codex|gemini|grok]
-cloudseed enable headroom | headliner | mcp | ui [--port N] [--no-open]
+cloudseed enable headliner | mcp | ui [--port N] [--no-open]
 
   agentic     turn on agentic mode: picks the agent (built-in by default, or your logged-in Claude Code
               when no API key is set), installs its CLI/SDK and skills if needed. Afterwards
               `cloudseed agentic "<task>"` (or `cs agentic "..."`) hands tasks to the agent.
               Deterministic commands keep working unchanged.
-  headroom    (default on for agentic tasks) the real Headroom AI lossless compression proxy. A pinned
-              dependency is installed in a private venv on enable or first supported task (Python 3.10+).
-              Direct Anthropic connections are supported. Standard noninteractive Codex exec requires
-              explicit CODEX_API_KEY; OPENAI_API_KEY alone does not choose this authentication mode.
-              Custom or managed routing settings are not overridden to force compression.
-              Other provider/auth configurations report why compression is inactive. A supported proxy
-              startup failure stops the task; --no-headroom explicitly runs without compression.
   headliner   legacy name for the optional Context brief: environment facts, evidence paths and commands.
-              It does not compress conversations and is independent of Headroom.
   mcp         allow the local MCP server to run (the full deployment with client wiring is `cloudseed setup mcp`)
   ui          start the local web console as a user service and open it (same as `cloudseed ui start`);
               it listens on --port (default 7434); --no-open starts it without opening the browser
@@ -828,6 +821,7 @@ Desktop, Codex, Cursor, Windsurf, Gemini CLI, VS Code, LangGraph, ... (`cs mcp t
   kubernetes        k8s, node, platform, kubectl, helm
   access            ssh, vpn, managed (databricks / snowflake)
   cost & docs       finops, troubleshoot, explain, help, skill
+  agent usage       usage (recorded tokens and MCP activity), usage-install (optional ccusage engine)
   resilience        dr (backup / restore / drill), chaos (experiments with verdicts), scan (CIS / STIG / CVEs /
                     cloud / FIPS / local Well-Architected assessments)
   undo & teardown   undo (revert the last environment action), destroy
@@ -846,6 +840,9 @@ Evidence tools/resources page through complete redacted reports and logs. Follow
 revision until complete=true; do not substitute the bounded scan summary for an artifact review. The explain template
 matches cloudseed_explain with format=json and `cs explain --json`. Prompts include create-environment,
 review-environment, troubleshoot and teardown.
+
+cloudseed_usage reads Cloudseed-only agent counters and MCP activity; cloudseed_usage_install explicitly installs
+the optional ccusage engine with confirm=true. Neither reads global agent history.
 
   --client-transport   setup: how the connected clients reach the server (default: http when the service is deployed)
   --yes-clients        setup -y: connect every detected client without asking
@@ -1160,6 +1157,36 @@ EXAMPLES
   cs dr status aws --env prod
   cs dr backup before-upgrade vmware --env lab
 """,
+    "usage": """\
+cloudseed usage [report] [--agent NAME] [--run-id UUID] [--limit N] [--offset N] [--engine native|ccusage] [--json]
+cloudseed usage install [--json]
+
+Inspect token counts for tasks launched with Cloudseed, plus Cloudseed MCP tool activity. The private usage ledger
+stores counts and metadata, never prompts, answers, tool arguments or other projects' conversation histories.
+Native usage needs no proxy or additional installation. No model requests are sent by a usage report.
+
+  report          default action; recorded counts, model information, timestamps and specific coverage reasons
+  --engine        native: recorded counts; ccusage: optional offline API-equivalent cost estimates for this page
+  --run-id UUID    one Cloudseed run; this is independent of credential sessions
+  --agent NAME     restrict to an agent (builtin, claude, codex, gemini or a custom agent name)
+  --limit N        page size, 1..1000 (default 100); the response-size budget can shorten a page
+  --offset N       continue from coverage.next_offset until it is null; runs and MCP calls share one timeline
+  --json           full structured counts, model provenance, coverage reasons and pagination
+  install          explicitly install the pinned, verified ccusage reporting engine; agent sessions cannot install
+
+Missing required provider counts stay unavailable, not zero. Cache tokens are included in input; reasoning tokens
+are included in output, so do not add these subsets twice. Interactive/custom agents may not expose usage.
+Independent MCP clients own their model usage and do not send it to Cloudseed: MCP shows calls, timing and response
+bytes, with model tokens unavailable for that specific reason. Costs are estimates, not bills or subscription quotas.
+ccusage receives only Cloudseed-owned records and offline pricing; it never discovers your global agent history.
+
+EXAMPLES
+  cs usage
+  cs usage report --agent claude --json
+  cs usage report --offset 100 --limit 100 --json
+  cs usage install
+  cs usage report --engine ccusage --json
+""",
     "evidence": """\
 cloudseed evidence list [<cloud> --env NAME] [--area scans|logs|operations|finops|chaos|dr] [--offset N] [--limit N] --json
 cloudseed evidence read [<cloud> --env NAME] --artifact <listed path> [--offset N --revision HASH] [--limit N] --json
@@ -1259,7 +1286,7 @@ EXAMPLES
   cs scan architecture vmware --env lab --profile lab
 """,
     "disable": """\
-cloudseed disable agentic | headroom | headliner | mcp | ui
+cloudseed disable agentic | headliner | mcp | ui
 
 Turns the feature off. With agentic off, only deterministic commands run. `disable mcp` also stops the deployed MCP server;
 `disable ui` stops the web console and removes its user service.
@@ -1284,7 +1311,7 @@ EXAMPLES
 cloudseed agents
 
 Lists every agent with what it is, whether it is installed, whether it is logged in, and the exact
-install / login command when it is not. Headroom dependency readiness is shown separately from an active session. Also shown by `cloudseed use help` and `cloudseed agentic --agent help`.
+install / login command when it is not. Also shown by `cloudseed use help` and `cloudseed agentic --agent help`.
 
   builtin  cloudseed's own loop on the Claude API (official SDK). Needs ANTHROPIC_API_KEY or `ant auth login`;
            otherwise it falls back to your logged-in Claude Code.
@@ -1312,7 +1339,7 @@ EXAMPLES
   cloudseed model gpt-5-codex --agent codex
 """,
     "agentic": """\
-cloudseed agentic [--agent NAME] [--model ID] [-i|--interactive] [--no-headroom] [--no-headliner] [--show-prompt] [--force] "<task>"
+cloudseed agentic [--agent NAME] [--model ID] [-i|--interactive] [--no-headliner] [--show-prompt] [--force] "<task>"
 (alias: cloudseed do ...   short: cs agentic "...")
 
 Hands a natural-language task to the selected agent, which then drives cloudseed for you using the
@@ -1322,8 +1349,7 @@ bundled skills. Everything after the flags is the task, so quote it; cloudseed's
 literal command; `cloudseed agentic "set up aws"` is the request to the agent.
 
   -i, --interactive   open the agent's interactive session instead of one-shot mode (external agents)
-  --no-headroom       skip Headroom compression for this run
-  --no-headliner      skip the context brief for this run (independent of Headroom)
+  --no-headliner      skip the context brief for this run
   --show-prompt       print the (redacted) prompt that is sent
   --force             one-off run even if agentic mode is disabled
   --agent / --model   override the selected agent / model for this run
@@ -1434,7 +1460,7 @@ cloudseed explain ... --json                   (the same page as data; exit 1 wh
 Deterministic explanation of anything cloudseed does - for you and for the agent:
   <feature>   how it is implemented: files, resources, security controls, where state/logs live, commands
               (overview network bastion security-baseline state kubernetes platform vpn vmware provisioning finops
-              managed-data agentic reconcile mcp prereqs fips chaos dr scan architecture operations undo ui audit dependencies)
+              managed-data agentic usage reconcile mcp prereqs fips chaos dr scan architecture operations undo ui audit dependencies)
   <target>    aws | gcp | azure | vmware: what is built there, every variable and output (= cs help aws|gcp|azure|vmware-skill)
   <command>   the full help page of that command (same as cs help <command>)
   <topic>     quickstart deps agents envs services destroy troubleshooting examples ... (same as cs help <topic>)
@@ -1678,10 +1704,6 @@ AGENTIC MODE
 
 Context brief (legacy headliner setting): before the agent runs, the CLI gathers environments, outputs,
 tool + credential status, saved evidence locations and a command cheat-sheet into a compact brief.
-Headroom AI is a separate managed lossless proxy for supported agent connections. It prepares on enablement or the
-first supported task; `cs disable headroom` and `--no-headroom` opt out. Ready means installed; only a running proxy
-is active. Savings depend on eligible content. Unsupported provider/auth modes explain why and keep their original
-connection. Independent MCP clients manage their own model connection.
 
 Built-in agent: official Anthropic SDK, installed on first use into ~/.cloudseed/venv-agent. Needs
 ANTHROPIC_API_KEY or an `ant auth login` profile. Without those, cloudseed automatically falls back to your

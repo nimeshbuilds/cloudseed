@@ -30,7 +30,7 @@ class AgentEvidenceE2ETests(unittest.TestCase):
                 "coverage_limits": ["unknown=0 does not prove complete collection"],
                 "note": "password=fixture-secret-value"}
             (saved / artifact).write_text(json.dumps(report, ensure_ascii=False))
-            (state / "settings.json").write_text('{"headroom":false}')
+            (state / "settings.json").write_text('{}')
             agent = home / "fixture-agent"
             # All child CLI calls are real processes. No original installation directory
             # is on PATH, and no Python interpreter needs to be discoverable there.
