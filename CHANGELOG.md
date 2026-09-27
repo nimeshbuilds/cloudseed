@@ -35,6 +35,8 @@ commands or defaults; such changes are called out under **Changed**.
 - Future cloud scans retain bounded, redacted diagnostic excerpts and a private `prowler.log`, including failed
   or timed-out collection. Reports identify omitted output explicitly. Zero-error counters and ordinary prose
   mentioning errors no longer create false incomplete verdicts. Historical discarded scanner output cannot be recovered.
+- macOS packaging retries recognized Apple timestamp-service failures up to three times per signing operation.
+  Other signing failures stop immediately; secure timestamps, hardened runtime and final verification remain required.
 
 ## [0.2.1] - 2026-09-26
 
