@@ -577,7 +577,7 @@ def assess(cloud, env, cfg: dict, profile: str = "production", max_age_days: int
          "A sample drill or topology alone cannot establish workload RTO/RPO, backup freshness or regional disaster recovery.",
          "Agree RTO/RPO and availability objectives, then exercise real application recovery and dependencies."),
         ("performance.capacity", "performance_efficiency", "Measured performance and capacity",
-         "Configured node sizes and autoscaling do not prove workload latency, throughput or capacity headroom.",
+         "Configured node sizes and autoscaling do not prove workload latency, throughput or capacity margin.",
          "Measure representative load against targets and test scaling, resource limits and bottlenecks."),
         ("cost.allocation_budget", "cost_optimization", "Environment cost allocation and budgets",
          "Estimates omit usage-dependent charges; account/subscription billing is not proof of this environment's cost or budget controls.",

@@ -152,35 +152,46 @@ class AgentCompletionTests(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("without a completed answer", error)
 
-    def test_headroom_preserves_sdk_resolved_upstream_and_only_changes_client_transport(self):
-        from cloudseed import headroom
+    def test_sdk_keeps_its_original_transport_and_closes_the_owned_client(self):
         sdk = types.ModuleType("anthropic")
         for name in ("AuthenticationError", "RateLimitError", "APIStatusError", "APIConnectionError"):
             setattr(sdk, name, type(name, (Exception,), {}))
         sdk.beta_tool = lambda function: function
-        client = types.SimpleNamespace(base_url="https://profile.example/v1", beta=types.SimpleNamespace(
-            messages=types.SimpleNamespace(tool_runner=lambda **kwargs: iter([
+        client = types.SimpleNamespace(base_url="https://profile.example/v1", close=mock.Mock(),
+            beta=types.SimpleNamespace(messages=types.SimpleNamespace(tool_runner=lambda **kwargs: iter([
                 types.SimpleNamespace(content=[], stop_reason="end_turn")]))))
         sdk.Anthropic = mock.Mock(return_value=client)
         sdk.DefaultHttpxClient = mock.Mock()
-        seen = {}
-        @contextlib.contextmanager
-        def session(agent, env, enabled, **kwargs):
-            seen.update(agent=agent, enabled=enabled, env=env, **kwargs)
-            yield headroom.Route(dict(env), True, "active", "http://127.0.0.1:12345")
+        network = {"ANTHROPIC_BASE_URL": "https://profile.example/v1", "HTTPS_PROXY": "https://proxy.example:8443",
+                   "SSL_CERT_FILE": "/synthetic/corporate-ca.pem"}
+        with mock.patch.dict(sys.modules, {"anthropic": sdk}), mock.patch.dict(os.environ, network), \
+             mock.patch.object(builtin_agent, "ensure_sdk"), \
+             mock.patch.object(builtin_agent, "has_api_credentials", return_value=True), \
+             mock.patch.object(builtin_agent, "system_prompt", return_value="system"), \
+             contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(builtin_agent.run("prompt", "claude-sonnet-5", "task"), 0)
+            for name, value in network.items():
+                self.assertEqual(os.environ[name], value)
+        sdk.Anthropic.assert_called_once_with()
+        sdk.DefaultHttpxClient.assert_not_called()
+        client.close.assert_called_once_with()
+        self.assertEqual(client.base_url, "https://profile.example/v1")
+
+    def test_sdk_client_is_closed_when_a_provider_request_fails(self):
+        sdk = types.ModuleType("anthropic")
+        for name in ("AuthenticationError", "RateLimitError", "APIStatusError", "APIConnectionError"):
+            setattr(sdk, name, type(name, (Exception,), {}))
+        sdk.beta_tool = lambda function: function
+        client = types.SimpleNamespace(close=mock.Mock(), beta=types.SimpleNamespace(messages=types.SimpleNamespace(
+            tool_runner=mock.Mock(side_effect=sdk.APIConnectionError("synthetic connection failure")))))
+        sdk.Anthropic = mock.Mock(return_value=client)
         with mock.patch.dict(sys.modules, {"anthropic": sdk}), \
              mock.patch.object(builtin_agent, "ensure_sdk"), \
              mock.patch.object(builtin_agent, "has_api_credentials", return_value=True), \
              mock.patch.object(builtin_agent, "system_prompt", return_value="system"), \
-             mock.patch.object(headroom, "session", side_effect=session), \
              contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            self.assertEqual(builtin_agent.run("prompt", "claude-sonnet-5", "task", headroom_enabled=True), 0)
-        sdk.DefaultHttpxClient.assert_called_once_with(trust_env=False)
-        sdk.Anthropic.assert_called_once_with(http_client=sdk.DefaultHttpxClient.return_value)
-        sdk.DefaultHttpxClient.return_value.close.assert_called_once_with()
-        self.assertEqual(seen["upstream_url"], "https://profile.example/v1")
-        self.assertTrue(seen["enabled"])
-        self.assertEqual(client.base_url, "http://127.0.0.1:12345")
+            self.assertEqual(builtin_agent.run("prompt", "claude-sonnet-5", "task"), 1)
+        client.close.assert_called_once_with()
 
 
 if __name__ == "__main__":

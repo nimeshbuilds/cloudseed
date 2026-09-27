@@ -78,7 +78,8 @@ class AgentLauncherTests(unittest.TestCase):
                 mock.patch.object(agents, "_agent_keys", return_value=((), None)), \
                 mock.patch.object(agents.secrets, "open_session", return_value=("test", {"PATH": "/missing"})), \
                 mock.patch.object(agents.secrets, "close_session") as close, \
-                mock.patch.object(agents.subprocess, "Popen", Process), contextlib.redirect_stdout(io.StringIO()):
+                mock.patch.object(agents.subprocess, "Popen", Process), \
+                mock.patch.object(agents, "_wait_usage", return_value=0), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(agents.run(spec, "Inspect saved report", None, False), 0)
         self.assertTrue(seen["exists"])
         self.assertFalse(seen["launcher"].parent.exists())

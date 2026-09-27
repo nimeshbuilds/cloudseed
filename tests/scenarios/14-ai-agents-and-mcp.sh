@@ -18,10 +18,6 @@ has "builtin +Built-in agent"
 has "claude +Claude Code"
 
 step "2. Turn on agentic mode and pick a model"
-# Keep routine local interface checks free of Headroom downloads.
-# Dedicated Headroom tests exercise actual compression against a local provider stub.
-ok cs disable headroom
-skip "Headroom compression (disabled in this scenario; separate local proxy tests cover it)"
 ok cs enable agentic
 has "Agentic mode enabled with Built-in agent"
 ok cs use builtin --model claude-sonnet-5
@@ -117,6 +113,19 @@ step "7a. Review complete saved evidence through CLI and MCP"
 ok python3 "$SCN_REPO/tests/scenarios/evidence-review.py" "$PORT"
 has "CLI and MCP retrieved every redacted finding"
 has "Historical timestamps, coverage limits, stale revisions and unsafe paths checked"
+
+step "7b. Inspect Cloudseed-only usage"
+ok cs usage --json
+has '"scope": "Only recorded Cloudseed-started'
+has '"model_tokens": null'
+has "no supported native per-run usage stream"
+ok cs usage --agent echo --json
+has '"agent": "echo"'
+ok curl -s -X POST "http://127.0.0.1:$PORT/mcp" -H "Authorization: Bearer $(cat "$CLOUDSEED_HOME/mcp/token")" \
+  -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"cloudseed_usage","arguments":{"limit":5}}}'
+has '"structuredContent"'
+has '"model_tokens": null'
+skip "cs usage install and --engine ccusage (optional verified download; native usage is tested without it)"
 
 step "8. Operate the server"
 ok cs mcp logs -n 20

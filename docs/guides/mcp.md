@@ -68,11 +68,6 @@ cs mcp config                         # copy-paste snippets for any other MCP cl
 
 Anything else that speaks MCP (LangGraph, your own agent) works with the snippets from `cs mcp config`.
 
-Cloudseed's [Headroom integration](agentic.md#headroom-context-compression) applies to supported agents launched
-through `cs agentic`. An independently launched MCP client owns its model-provider connection; adding this MCP
-server does not automatically compress that client's requests. MCP evidence retrieval works with or without
-Headroom.
-
 !!! tip "Long operations"
     `setup`, `apply` and `destroy` can take many minutes. Codex and Gemini CLI get a one-hour tool timeout
     automatically; start Claude Code with `MCP_TOOL_TIMEOUT=3600000` if long calls time out. Cancelling a call in the
@@ -146,6 +141,14 @@ Resource-capable clients can discover this interface at `cloudseed://evidence` a
 For example, `cloudseed://evidence/aws/dev?area=scans` lists the scan artifacts for `aws-dev`.
 It uses the same redaction, revision and pagination rules as the tool; the [generated reference](../reference/mcp-tools.md)
 shows the URI templates and query parameters.
+
+## Review usage
+
+`cloudseed_usage` reads saved Cloudseed usage metadata. Use `engine=native` (the default), and optionally `run_id`,
+`agent`, `offset` or `limit` to narrow the report. It needs no confirmation and does not install software. The server records
+tool calls, latency, errors and response bytes; its client's model tokens are unavailable because those requests
+belong to the client application. See [agent usage](usage.md) for the optional ccusage engine and billing limits.
+The separate `cloudseed_usage_install` tool requires `confirm=true` after approval to download the optional analyzer.
 
 ## Transports
 

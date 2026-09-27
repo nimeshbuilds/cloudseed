@@ -659,6 +659,17 @@ def _evidence_argv(a):
 
 
 TOOLS: dict[str, dict] = {
+    "cloudseed_usage": {"description": "Report only Cloudseed-launched agent usage and this server's MCP tool activity. No global agent-history scan. Missing provider counters stay unavailable with a reason. Optional ccusage estimates use only Cloudseed metadata and offline prices, not invoices or subscription balances. Independent MCP clients do not expose their model token counts here.",
+                        "schema": _p(engine={"type": "string", "enum": ["native", "ccusage"]},
+                                     run_id={"type": "string", "description": "Cloudseed run UUID from the usage report"},
+                                     agent={"type": "string", "description": "Recorded agent name"},
+                                     limit=_count("Maximum recent runs and MCP calls per page (default 20)", maximum=50),
+                                     offset=_count("Continuation offset for older records (default 0)", minimum=0)),
+                        "json_stdout": True,
+                        "argv": lambda a: ["usage", "report", "--json", "--limit", str(a.get("limit", 20))] + _opt(a, "engine", "--engine") + _opt(a, "run_id", "--run-id") + _opt(a, "agent", "--agent") + _opt(a, "offset", "--offset")},
+    "cloudseed_usage_install": {"description": "Install the pinned local ccusage reporting engine after verifying its download. It analyzes only Cloudseed metadata and does not alter agent settings or model routing.",
+                                "schema": _p(confirm=S_CONFIRM), "destructive": True, "json_stdout": True,
+                                "argv": lambda a: ["usage", "install", "--json"]},
     "cloudseed_list": {"description": "List all environments (cloud, region, state, bastion IP, working dir).", "schema": _p(), "argv": lambda a: ["list"]},
     "cloudseed_doctor": {"description": "Check tools, versions and cloud credentials. With a cloud it exits 1 when that cloud "
                                         "is not ready (a required tool missing or too old, no or invalid credentials; the "
@@ -1158,6 +1169,26 @@ def _spawn(name: str, argv: list[str], env: dict, call: _Call | None = None, pro
 
 
 def call_tool(name: str, args: dict, env, call: _Call | None = None, progress=None) -> dict:
+    """Record only tool metadata; MCP carries no host-model usage counters."""
+    started = time.monotonic()
+    result = None
+    try:
+        result = _call_tool(name, args, env, call, progress)
+        return result
+    finally:
+        # Reporting must not fail an otherwise successful tool or store its args,
+        # response text, environment, credential broker handle or transport ID.
+        if name in TOOLS and name != "cloudseed_usage":
+            try:
+                from . import usage
+                usage.record_mcp(name, (time.monotonic() - started) * 1000,
+                                 isinstance(result, dict) and not result.get("isError", False),
+                                 len(json.dumps(result, ensure_ascii=False).encode()) if result is not None else 0)
+            except Exception:
+                _log("Could not record local tool-usage metadata; the tool result is unchanged")
+
+
+def _call_tool(name: str, args: dict, env, call: _Call | None = None, progress=None) -> dict:
     """Validate, gate (confirm) and run one tool. Unknown tool names raise InvalidParams (JSON-RPC -32602).
     env: the child's environment (a dict), or the server's LiveEnv (a fresh credential session per call)."""
     t = TOOLS.get(name)
@@ -3497,6 +3528,7 @@ def client_configs(state: dict | None = None) -> dict[str, str]:
 
 # =============================================================================================== guide
 TOOL_GROUPS = [
+    ("Agent usage", "cloudseed_usage (Cloudseed-only agent tokens and MCP activity) · cloudseed_usage_install (optional verified ccusage engine)"),
     ("Operations & readiness", " · ".join("cloudseed_ops_" + name.replace("-", "_") for name in operation_contracts.OPERATIONS)),
     ("Discover", "cloudseed_list · cloudseed_doctor · cloudseed_status · cloudseed_output · cloudseed_inventory · cloudseed_env"),
     ("Build & change", "cloudseed_setup (plan / apply / dry_run) · cloudseed_plan · cloudseed_apply · cloudseed_update_ip · cloudseed_provision · cloudseed_install"),

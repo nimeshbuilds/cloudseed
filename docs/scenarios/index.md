@@ -227,7 +227,7 @@ to a walkthrough; it does not claim every item was deployed live. Together they 
 | Help system and `cs explain` | Per-command help, topics, generated variable and output references, how anything is implemented | [01](01-first-lab-vmware.md) · [02](02-aws-landing-zone.md) · [15](15-web-console-and-finops.md) |
 | FinOps | Estimates before you apply, the provider bill, OpenCost allocation, one report for an agent | [15](15-web-console-and-finops.md) · [02](02-aws-landing-zone.md) · [03](03-gcp-private-gke.md) · [04](04-azure-private-aks.md) |
 | Web console | `cs enable ui`: the wizard, environment actions, platform, resilience, reports, explain panel, Activity | [15](15-web-console-and-finops.md) |
-| AI agents | Agentic mode (built-in, Claude Code, Codex, Gemini, Grok), context brief, Headroom on supported routes, session launchers, skills, redaction, approvals and paged saved-evidence review | [14](14-ai-agents-and-mcp.md) |
+| AI agents | Agentic mode (built-in, Claude Code, Codex, Gemini, Grok), context brief, session launchers, skills, redaction, approvals and paged saved-evidence review | [14](14-ai-agents-and-mcp.md) |
 | MCP server | Every feature as a tool for Claude Code, Claude Desktop, Cursor, VS Code, Codex, Gemini CLI, Windsurf | [14](14-ai-agents-and-mcp.md) |
 | Access and hardening | `cs ssh`, `cs update-ip`, `cs provision` (Ansible hardening, re-runnable) | [01](01-first-lab-vmware.md) · [02](02-aws-landing-zone.md) · [12](12-private-access-vpn.md) · [13](13-day-2-operations.md) |
 
@@ -405,12 +405,10 @@ from the pages and checked by `tests/test_scenarios_docs.py`, so they are always
 | Command | Scenarios that run it |
 |---|---|
 | `cs enable agentic` | [14](14-ai-agents-and-mcp.md) |
-| `cs enable headroom` | [14](14-ai-agents-and-mcp.md) |
 | `cs enable headliner` | [14](14-ai-agents-and-mcp.md) |
 | `cs enable mcp` | [14](14-ai-agents-and-mcp.md) |
 | `cs enable ui` | [15](15-web-console-and-finops.md) |
 | `cs disable agentic` | [14](14-ai-agents-and-mcp.md) |
-| `cs disable headroom` | [14](14-ai-agents-and-mcp.md) |
 | `cs disable headliner` | [14](14-ai-agents-and-mcp.md) |
 | `cs disable mcp` | [14](14-ai-agents-and-mcp.md) |
 | `cs disable ui` | [15](15-web-console-and-finops.md) |
@@ -422,6 +420,8 @@ from the pages and checked by `tests/test_scenarios_docs.py`, so they are always
 | `cs skill list` | [14](14-ai-agents-and-mcp.md) |
 | `cs skill install` | [14](14-ai-agents-and-mcp.md) |
 | `cs skill show` | [14](14-ai-agents-and-mcp.md) |
+| `cs usage report` | [14](14-ai-agents-and-mcp.md) |
+| `cs usage install` | [14](14-ai-agents-and-mcp.md) |
 | `cs mcp setup` | [14](14-ai-agents-and-mcp.md) |
 | `cs mcp status` | [14](14-ai-agents-and-mcp.md) |
 | `cs mcp guide` | [14](14-ai-agents-and-mcp.md) |

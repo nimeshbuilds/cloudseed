@@ -12,6 +12,7 @@ import contextlib
 import io
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -231,7 +232,7 @@ class ClaudeFallbackTest(unittest.TestCase):
         self.assertEqual(calls, [])
 
     def test_do_routes_to_claude_only_when_it_is_logged_in(self):
-        args = argparse.Namespace(agent=None, task=["list", "envs"], force=True, model=None, no_headliner=True, no_headroom=True,
+        args = argparse.Namespace(agent=None, task=["list", "envs"], force=True, model=None, no_headliner=True,
                                   show_prompt=False, interactive=False)
         builtin = agents.get("builtin")
         for state, routed in (("ready", "claude"), ("login", None)):
@@ -254,20 +255,20 @@ class ClaudeFallbackCliTest(Sandbox):
     def test_use_and_do_with_a_claude_that_is_not_logged_in(self):
         ran = self.tmp / "claude-ran.log"
         # `claude auth status --json` prints nothing useful and there is no login file: not logged in
-        self.fake_tool("claude", f'if [ "$1" = -p ]; then echo "$@" >> {ran}; fi\necho "fake-claude $*"')
+        self.fake_tool("claude", f'for arg in "$@"; do if [ "$arg" = -p ]; then echo "$@" >> {shlex.quote(str(ran))}; break; fi; done\necho "fake-claude $*"')
         rc, out = self.cs("use", "builtin")
         self.assertEqual(rc, 0, out)
         self.assertIn("installed but not logged in", out)
         self.assertNotIn("✔ no API key; will use your logged-in Claude Code", out)
         self.assertFalse((self.user / ".claude" / "skills").exists())
         self.assertEqual(json.loads((self.home / "settings.json").read_text())["agent"], "builtin")
-        rc, out = self.cs("do", "--force", "--no-headroom", "list envs")
+        rc, out = self.cs("do", "--force", "list envs")
         self.assertEqual(rc, 1, out)
         self.assertEqual(out.count("needs Anthropic API credentials"), 1)
         self.assertFalse(ran.exists())                        # the task never went to a Claude Code that cannot run it
         # once Claude Code is logged in, the same command runs through it
         (self.user / ".claude.json").write_text(json.dumps({"oauthAccount": {"emailAddress": "t@example.com"}}))
-        rc, out = self.cs("do", "--force", "--no-headroom", "list envs")
+        rc, out = self.cs("do", "--force", "list envs")
         self.assertEqual(rc, 0, out)
         self.assertIn("runs through your Claude Code CLI", out)
         self.assertTrue(ran.exists())

@@ -50,6 +50,9 @@ cloud and environment explicitly for changes. `confirm:true` approves the named 
 | `vpn` | `cloudseed_vpn` | Environment VPN actions; host prompts may still be required |
 | `finops` | `cloudseed_finops` | All actions → FinOps; Reports |
 | `dr`, `chaos`, `scan` | `cloudseed_dr`, `cloudseed_chaos`, `cloudseed_scan` | Resilience; Reports |
+| `evidence list\|read` | `cloudseed_evidence` | Reports; full JSON/Markdown; agent task box for paginated review |
+| `usage report` | `cloudseed_usage` | Agents & MCP usage summary; JSON report |
+| `usage install` | `cloudseed_usage_install`, with `confirm:true` after approval | Confirmed optional analyzer installation action |
 | `databricks`, `snowflake` | `cloudseed_managed` | All actions → managed platform forms |
 | `undo`, `explain`, `help`, `skill show` | `cloudseed_undo`, `cloudseed_explain`, `cloudseed_help`, `cloudseed_skill` | All actions / Help / context explain buttons |
 | `ops ACTION` | `cloudseed_ops_ACTION` (hyphens become underscores) | All actions → Operations & readiness; Resilience shortcuts |

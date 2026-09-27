@@ -7,16 +7,15 @@ commands or defaults; such changes are called out under **Changed**.
 
 ## [Unreleased]
 
-## [0.2.2] - 2026-09-27
+## [0.2.3] - 2026-09-27
+
+Includes the agent command-access and saved-evidence improvements from the unpublished v0.2.2 candidate.
 
 ### Added
 
-- Managed integration with Headroom AI 0.39.1 for supported agent connections, using a task-local loopback proxy
-  and lossless compression. It starts with agentic tasks by default, installs in its own Python environment and
-  leaves agent configuration files untouched. `cs enable headroom`, `cs disable headroom` and `--no-headroom`
-  control it independently of the environment context brief. CLI and console distinguish ready, active, off and
-  unsupported routes; unsupported clients and authentication modes explain why. Compression depends on content;
-  no fixed token-saving percentage is promised. External MCP clients control their own model connection.
+- `cs usage report`, MCP `cloudseed_usage` and the console expose usage metadata for Cloudseed tasks and MCP
+  activity. Optional ccusage analysis reads only Cloudseed-generated usage inputs. Unavailable measurements carry
+  reasons instead of fabricated zeroes, and cost estimates are distinct from invoices and subscription quota.
 - `cs evidence list/read` and the `cloudseed_evidence` MCP tool expose complete saved reports and diagnostic logs
   through bounded, redacted pages with revision checks. Metadata includes actual report timestamps, scope,
   coverage limits and collection diagnostics. Access is limited to generated evidence, excluding credentials,
@@ -30,13 +29,18 @@ commands or defaults; such changes are called out under **Changed**.
 - Agent guidance requires complete evidence pagination and explicit reporting of diagnostics and coverage limits;
   zero unknown findings or a successful process exit no longer imply complete scanner coverage. The built-in agent
   preserves evidence pages beyond the ordinary output limit and reports interrupted or truncated tool output.
-- The former "Headliner" display is now "Context brief". Its legacy command and setting remain compatible; the brief
-  is separate from the real Headroom compression integration.
+- The environment research display is now "Context brief". Its legacy `headliner` command and setting remain
+  compatible, and the brief continues to prepare environment facts before an agent task.
 - Future cloud scans retain bounded, redacted diagnostic excerpts and a private `prowler.log`, including failed
   or timed-out collection. Reports identify omitted output explicitly. Zero-error counters and ordinary prose
   mentioning errors no longer create false incomplete verdicts. Historical discarded scanner output cannot be recovered.
 - macOS packaging retries recognized Apple timestamp-service failures up to three times per signing operation.
   Other signing failures stop immediately; secure timestamps, hardened runtime and final verification remain required.
+
+## [0.2.2] - 2026-09-27 (unpublished candidate)
+
+Release publication stopped after a runtime dependency packaging failure on Intel macOS. No v0.2.2 release assets
+were published. The tag remains unchanged; the agent and saved-evidence improvements continue in v0.2.3.
 
 ## [0.2.1] - 2026-09-26
 
@@ -192,7 +196,8 @@ The first public release.
   the mocked `terraform test` suites, `go vet`/`test`/`build` for the VMware provider, and the scenario scripts in
   dry-run mode.
 
-[Unreleased]: https://github.com/nimeshbuilds/cloudseed/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/nimeshbuilds/cloudseed/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/nimeshbuilds/cloudseed/compare/v0.2.1...v0.2.3
 [0.2.2]: https://github.com/nimeshbuilds/cloudseed/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/nimeshbuilds/cloudseed/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/nimeshbuilds/cloudseed/compare/v0.1.0...v0.2.0

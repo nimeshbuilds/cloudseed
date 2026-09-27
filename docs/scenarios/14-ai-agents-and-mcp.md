@@ -16,8 +16,6 @@ and Windsurf every cloudseed feature as a tool, with confirmation required for a
     round-trips the protocol over stdio and HTTP, wires a client, rotates the token and removes it. The step that
     sends a task to a real model runs when `ANTHROPIC_API_KEY` is set. Reviewing your own saved report additionally
     requires an existing environment and artifact; no cloud deployment is needed for the local interface checks.
-    This scenario disables Headroom to avoid package downloads; separate tests exercise its real lossless proxy
-    against a local provider stub. The echo agent is not evidence of model-provider compression.
 
 | :material-clock-outline: Time | :material-cash: Cost | :material-signal-cellular-1: Level | :material-robot-outline: Needs |
 |---|---|---|---|
@@ -42,8 +40,7 @@ flowchart TB
 
 ## Before you start
 
-- cloudseed installed. Headroom preparation needs Python 3.10+ and a package download; for the local demonstration
-  without that dependency, run `cs disable headroom` before step 2. You can enable it later.
+- cloudseed installed. The local echo-agent and MCP checks do not require a model login.
 - For step 5 (a real task): `ANTHROPIC_API_KEY` for the built-in agent, or a logged-in Claude Code (`claude`),
   Codex (`codex login`), Gemini CLI (`gemini`) or Grok CLI (`GROK_API_KEY`).
 
@@ -65,24 +62,8 @@ cs model
 cs model claude-opus-5
 ```
 
-The task display separates **Context brief** from **Headroom**. The brief is Cloudseed's deterministic research;
-Headroom is the actual lossless context-compression integration. Headroom defaults on for supported agentic runs,
-with a session-only loopback proxy and a managed Python 3.10+ environment. These controls are independent:
-
-```bash
-cs enable headroom
-cs agentic --no-headroom --show-prompt "list my environments"
-cs disable headroom
-```
-
-Use `cs enable headroom` again when you want compression. Built-in Claude, direct-Anthropic Claude Code and default
-noninteractive Codex `exec` with explicit `CODEX_API_KEY` are supported when routing can be verified.
-`OPENAI_API_KEY` alone does not select Codex API auth and is never implicitly copied. Interactive Codex,
-subscription/WIF authentication and unverified custom/provider/managed routing are unsupported, as are Gemini,
-Grok and custom agents. Only an **active** session status confirms a ready, supported proxy. See the
-[Headroom guide](../guides/agentic.md#headroom-context-compression) for lifecycle and support limits. Compression
-does not replace reading the report's evidence and coverage limits. If a supported route cannot prepare Headroom,
-the task stops; fix the reported problem or explicitly opt out with `--no-headroom` / `cs disable headroom`.
+The **Context brief** prepares environment facts and a command guide before a task. Its legacy `headliner`
+setting remains available; step 4 shows how to inspect the brief and turn it on or off.
 
 Prefer Claude Code with your claude.ai subscription? `cs use claude` (or `codex`, `gemini`, `grok`). Store an API key
 in the vault with hidden input:
@@ -143,7 +124,7 @@ unset AWS_SECRET_ACCESS_KEY
     ```
 
 - **Context brief**: a compact brief (environments, outputs, tool and credential status, a command cheat-sheet) is
-  put in front of every task. It is deterministic research, not conversation compression. The legacy `headliner`
+  put in front of every task. It is deterministic research gathered before the task. The legacy `headliner`
   setting still controls it: compare with `cs disable headliner`, then restore `cs enable headliner`.
 - **Command access**: the external agent receives temporary `cloudseed` and `cs` launchers for the installation
   running this task, even when you started a standalone binary by its full path. If its shell resets `PATH`, use
@@ -264,6 +245,51 @@ Verify that the explanation cites findings from the actual report and distinguis
 **all cloud resources assessed**. `unknown=0` only describes counted observations, and saved evidence may be stale.
 If a file or page cannot be read, the agent should name that gap instead of inventing a complete result.
 
+## Step 7b: Review usage without guessing costs
+
+The earlier echo-agent task makes no model request. Start by looking at the recorded Cloudseed runs:
+
+```bash
+cs usage report
+cs usage report --agent echo --json
+cs usage report --offset 0 --limit 10 --json
+```
+
+The custom echo agent should explain why token usage is unavailable. It must not turn a missing measurement into
+a zero-cost claim. If you completed step 5 with a supported standard agent, compare that run's reported metrics.
+Copy its actual run identifier to narrow the result:
+
+```bash
+cs usage report --run-id RUN_ID --json
+```
+
+**Agent:** “Read my recent Cloudseed usage. Identify the task and explain observed tokens, any estimated cost,
+and unavailable measurements. Do not install software or make another model request just to estimate usage.”
+
+**MCP:** call `cloudseed_usage` with `{"engine":"native","limit":10}`. The report includes activity observed by
+the Cloudseed server, such as tool calls, latency and errors. Model tokens from an independently running MCP
+client are unavailable to Cloudseed; they belong to that client's model connection.
+
+**UI:** open **Agents & MCP → Cloudseed usage**, select an agent and the **Recorded usage** engine, then inspect the
+run's **Recorded metadata**. Use **Next** and **Previous** to find the run, and **Download this page** to export its
+JSON. No cloud environment needs to be selected. Confirm that the run identifier and metric availability match
+the CLI result.
+
+To try the optional ccusage analyzer, install it yourself and then request that engine:
+
+```bash
+cs usage install
+cs usage report --engine ccusage --json
+```
+
+Installation downloads and verifies the pinned native analyzer. Reporting uses only Cloudseed-generated usage inputs,
+not global agent history. Native reporting works without this installation. Costs, where available, are estimates,
+not invoices or remaining quota. See [agent usage](../guides/usage.md) for the supported metrics and limits.
+For the same installation through MCP, approve the download first, then call `cloudseed_usage_install` with
+`{"confirm":true}`. The console exposes the corresponding confirmed install action. Use the report's
+`coverage.next_offset` to read another page until it is `null`; page sizes may shrink to fit the response limit.
+Reported cost totals apply to the selected page, not all stored runs.
+
 ## Step 8: Operate the server
 
 ```bash
@@ -293,7 +319,7 @@ Follow the same numbered steps and verification/cleanup conditions through your 
 [interface setup and coverage guide](interfaces-and-coverage.md); replace account/project/subscription and SSH
 placeholders before any live request.
 
-**Agent prompt:** “Inspect my cloudseed agent and MCP setup, list the available tools and load the architecture/platform skills. Demonstrate read-only environment discovery, then use evidence list/read to review a saved report completely, including its scope and coverage limits. Explain the permissions for changes. Ask me to complete host login or service bootstrap steps that cannot run inside an agent.”
+**Agent prompt:** “Inspect my cloudseed agent and MCP setup, list the available tools and load the architecture/platform skills. Demonstrate read-only environment discovery, then use evidence list/read to review a saved report completely, including its scope and coverage limits. Review the available usage metadata without inventing missing measurements or treating estimates as invoices. Explain the permissions for changes. Ask me to complete host login or service bootstrap steps that cannot run inside an agent.”
 
 **MCP starter:** `cloudseed_skill` with:
 
@@ -344,6 +370,7 @@ entry it wrote. Unattended: `cs destroy mcp -y --auto-approve`.
 - Every call is checked against the tool's schema, runs cloudseed as a child under the credential broker, and its
   output is redacted.
 - Learn more: [Agentic mode](../guides/agentic.md) · [MCP server](../guides/mcp.md) ·
+  [Agent usage](../guides/usage.md) ·
   [MCP tools reference](../reference/mcp-tools.md) · [Skills](../reference/skills.md) ·
   [Explain index](../reference/explain-index.md)
 

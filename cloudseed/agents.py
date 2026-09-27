@@ -576,127 +576,243 @@ def skills_prompt(task: str, prompt: str) -> str:
     return f"{SKILLS_INTRO}\n\n{bundle}\n{prompt}"
 
 
-def _claude_headroom_settings(env: dict) -> str | None:
-    """Reject settings that can override the requested route; never rewrite policy.
+# Usage capture observes only the native stream of this launched process. It never
+# reads global agent logs, changes provider settings, or persists transcript text.
+MAX_USAGE_EVENT = 1024 * 1024
+USAGE_DRAIN_SECONDS = 2.0
 
-    Claude settings.env overrides the inherited process environment. Managed
-    policy can also arrive remotely or through OS preferences; a detected
-    opaque source cannot be safely replaced by a loopback provider URL.
-    """
-    import stat
-    user = Path(env.get("CLAUDE_CONFIG_DIR") or str(Path.home() / ".claude")).expanduser()
-    files = [user / "settings.json", user / "settings.local.json"]
-    cwd = Path.cwd()
-    for folder in (cwd, *cwd.parents):
-        files += [folder / ".claude" / "settings.json", folder / ".claude" / "settings.local.json"]
-    if sys.platform == "darwin":
-        managed = Path("/Library/Application Support/ClaudeCode")
-        preferences = Path("/Library/Managed Preferences")
-        opaque = [preferences / "com.anthropic.claudecode.plist",
-                  preferences / Path.home().name / "com.anthropic.claudecode.plist"]
-    elif os.name == "nt" or env.get("WSL_DISTRO_NAME"):
-        return "Claude Windows/WSL managed policy routing cannot yet be verified for Headroom"
-    else:
-        managed = Path("/etc/claude-code")
-        opaque = []
-    opaque += [user / "remote-settings.json"]
-    for file in opaque:
+
+class _UsageCapture:
+    def __init__(self, agent: str, model: str | None, mode: str):
+        import threading
+        import uuid
+        self._lock = threading.RLock()
+        self._closed = False
+        self.id = str(uuid.uuid4())
+        self.record = None
+        self.exit_code = 1
+        self._warned = False
         try:
-            file.stat()
-        except FileNotFoundError:
-            continue
-        except OSError:
-            return "Claude managed policy could not be inspected; Headroom leaves its original route in place"
-        return "Claude remote or OS-managed policy needs its own verified Headroom routing"
-    files.append(managed / "managed-settings.json")
-    try:
-        files += sorted(p for p in (managed / "managed-settings.d").iterdir()
-                        if p.name.endswith(".json") and not p.name.startswith("."))
-    except FileNotFoundError:
-        pass
-    except OSError:
-        return "Claude managed settings directory could not be inspected for Headroom routing"
-    for file in dict.fromkeys(files):
-        try:
-            info = file.stat()
-            if not stat.S_ISREG(info.st_mode) or info.st_size > 1024 * 1024:
-                return "Claude settings cannot be safely inspected for Headroom routing"
-            data = json.loads(file.read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            continue
-        except (OSError, UnicodeError, ValueError):
-            return "Claude settings could not be parsed or read to verify Headroom routing"
-        if not isinstance(data, dict) or not isinstance(data.get("env", {}), dict):
-            return "Claude settings have an unsupported shape; Headroom leaves the original route in place"
-        if any(k in data for k in ("policyHelper", "forceLoginGatewayUrl", "gatewayInternalNetworks")) \
-                or data.get("forceLoginMethod") == "gateway" or data.get("forceRemoteSettingsRefresh"):
-            return "Claude managed helper/gateway policy needs its own verified Headroom routing"
-        for key in data.get("env", {}):
-            if (key in ("ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CONFIG_DIR")
-                    or key.startswith("CLAUDE_CODE_USE_")
-                    or (key.startswith("ANTHROPIC_") and key.endswith("_BASE_URL"))):
-                return "Claude settings contain provider/routing overrides; Headroom leaves the configured route in place"
-    return None
+            from . import usage
+            self.record = usage.start_run(agent, model=model, mode=mode)
+            self.id = str(uuid.UUID(str(self.record.id)))
+        except Exception:
+            self._warning()
+
+    def _warning(self):
+        if not self._warned:
+            self._warned = True
+            with contextlib.suppress(Exception):
+                ui.warn("Usage could not be recorded completely; the agent task continues normally.")
+
+    def observe(self, method: str, value):
+        with self._lock:
+            if self.record is None or self._closed:
+                return
+            try:
+                getattr(self.record, method)(value)
+            except Exception:
+                self.unavailable("A native usage event could not be recorded; token totals may be incomplete.")
+                self._warning()
+
+    def unavailable(self, reason: str):
+        with self._lock:
+            if self.record is not None and not self._closed:
+                try:
+                    self.record.unavailable(reason)
+                except Exception:
+                    self._warning()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, kind, error, traceback):
+        with self._lock:
+            if kind is not None:
+                self.exit_code = 130 if isinstance(error, KeyboardInterrupt) else getattr(error, "code", 1)
+                if not isinstance(self.exit_code, int):
+                    self.exit_code = 1
+                self.unavailable("The agent task ended before normal completion; recorded usage may be partial.")
+            # A detached child can keep output pipes open after its parent exits.
+            # Late events cannot modify the completed record after the drain deadline.
+            self._closed = True
+            if self.record is not None:
+                try:
+                    self.record.finish(self.exit_code)
+                except Exception:
+                    self._warning()
 
 
-def headroom_unsupported(spec: dict, interactive: bool = False, env: dict | None = None) -> str | None:
-    """Only claim routing for provider/auth configurations this adapter understands."""
-    key = spec.get("key", "builtin" if spec.get("builtin") else "")
-    env = os.environ if env is None else env
-    if key == "builtin":
-        return None
-    if key == "claude":
-        field = "interactive" if interactive else "exec"
-        if spec.get(field) != DEFAULT_AGENTS["claude"][field] or spec.get("binary") != "claude":
-            return "A customized Claude launch template needs its own verified proxy routing"
-        if any(k.startswith("CLAUDE_CODE_USE_") and str(v).lower() in ("1", "true", "yes", "on")
-               for k, v in env.items()):
-            return "Claude cloud-provider routing is unsupported; Headroom currently supports direct Anthropic connections"
-        if env.get("ANTHROPIC_CUSTOM_HEADERS"):
-            return "Claude custom request headers need their own verified Headroom routing"
-        return _claude_headroom_settings(env)
-    if key != "codex":
-        return f"{spec.get('display', key)} has no verified Headroom provider adapter"
+def _usage_adapter(spec: dict, interactive: bool) -> tuple[str | None, str | None]:
     if interactive:
-        return "Codex Headroom routing currently supports noninteractive exec only; interactive authentication is not verified"
-    if any(env.get(k) for k in ("OPENAI_FEDERATION_RULE_ID", "OPENAI_IDENTITY_TOKEN_FILE", "CODEX_ACCESS_TOKEN")):
-        return "Codex federated/access-token authentication needs its own verified Headroom routing"
-    if not str(env.get("CODEX_API_KEY", "")).strip():
-        return "Codex Headroom routing requires explicit CODEX_API_KEY for noninteractive exec; stored/subscription authentication is unchanged"
-    field = "interactive" if interactive else "exec"
-    if spec.get(field) != DEFAULT_AGENTS["codex"][field] or spec.get("binary") != "codex":
-        return "A customized Codex launch template needs its own verified proxy routing"
-    template = spec.get("interactive" if interactive else "exec") or []
-    if any(word in ("--profile", "-p", "--config", "-c") or word.startswith(("--profile=", "--config=", "-c=")) for word in template):
-        return "Codex profile/config overrides need their own verified proxy routing"
-    config = Path(env.get("CODEX_HOME") or str(Path.home() / ".codex")) / "config.toml"
-    # Project layers can override the user's provider/auth selection. Leave
-    # opaque configurations alone instead of claiming a proxy they can bypass.
-    cwd = Path.cwd()
-    for folder in (cwd, *cwd.parents):
-        candidate = folder / ".codex" / "config.toml"
-        if candidate != config and candidate.exists():
-            return "Codex project configuration needs its own verified proxy routing"
+        return None, "Interactive agent sessions do not expose a supported per-run usage stream."
+    key = spec.get("key")
+    if key not in ("claude", "codex", "gemini"):
+        return None, "This agent has no supported native per-run usage stream."
+    if spec.get("binary") != key or spec.get("exec") != DEFAULT_AGENTS[key]["exec"]:
+        return None, "Custom agent commands keep their original arguments; per-run usage is unavailable."
+    return key, None
+
+
+def _usage_command(cmd: list[str], adapter: str, run_id: str) -> list[str]:
+    if adapter == "claude":
+        return [cmd[0], "--session-id", run_id, "--output-format", "stream-json", "--verbose", *cmd[1:]]
+    if adapter == "codex":
+        return [*cmd[:2], "--json", *cmd[2:]]
+    return [cmd[0], "--output-format", "stream-json", *cmd[1:]]
+
+
+class _UsageDisplay:
+    """Render text/errors, never raw tool inputs or JSON envelopes. Bound partial lines."""
+    def __init__(self, stream):
+        self.stream = stream
+        self.redactor = secrets.StreamRedactor()
+        self.pending = ""
+        self.dropping = False
+
+    def write(self, text: str, complete: bool = False):
+        if not isinstance(text, str) or not text:
+            return
+        for piece in text.splitlines(keepends=True):
+            self.pending += piece
+            if len(self.pending) > MAX_USAGE_EVENT:
+                self.pending = ""
+                if not self.dropping:
+                    self._emit("[Agent output line exceeded the display limit and was omitted.]\n")
+                self.dropping = True
+            if piece.endswith(("\n", "\r")):
+                if not self.dropping:
+                    self._emit(self.pending)
+                self.pending = ""
+                self.dropping = False
+        if complete:
+            self.flush()
+
+    def _emit(self, text):
+        try:
+            self.stream.write(self.redactor.feed(text))
+            self.stream.flush()
+        except (OSError, ValueError):
+            pass
+
+    def flush(self):
+        if self.pending and not self.dropping:
+            self._emit(self.pending + "\n")
+        self.pending = ""
+        self.dropping = False
+
+
+def _usage_event_text(adapter: str, event: dict, display: _UsageDisplay, state: dict):
+    kind = event.get("type")
+    if adapter == "claude":
+        if kind == "assistant":
+            message = event.get("message")
+            blocks = message.get("content", []) if isinstance(message, dict) else []
+            for block in blocks if isinstance(blocks, list) else []:
+                if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
+                    display.write(block["text"], complete=True)
+                    state["assistant"] = True
+        elif kind == "result":
+            if event.get("is_error") or not state.get("assistant"):
+                display.write(event.get("result", ""), complete=True)
+            errors = event.get("errors", [])
+            for error in errors if isinstance(errors, list) else []:
+                if isinstance(error, str):
+                    display.write(error, complete=True)
+    elif adapter == "codex":
+        item = event.get("item")
+        if kind == "item.completed" and isinstance(item, dict) and item.get("type") == "agent_message":
+            display.write(item.get("text", ""), complete=True)
+    elif adapter == "gemini":
+        if kind == "message" and event.get("role") == "assistant":
+            display.write(event.get("content", ""), complete=event.get("delta") is False)
+        elif kind in ("tool_use", "tool_result", "result"):
+            display.flush()
+            if event.get("status") == "error":
+                error = event.get("error")
+                if isinstance(error, dict):
+                    display.write(error.get("message", ""), complete=True)
+    if kind in ("error", "turn.failed"):
+        error = event.get("error", event)
+        if isinstance(error, dict):
+            display.write(error.get("message", ""), complete=True)
+        elif isinstance(error, str):
+            display.write(error, complete=True)
+
+
+def _wait_usage(proc: subprocess.Popen, group: bool, adapter: str, usage: _UsageCapture) -> int:
+    """Drain stdout/stderr concurrently; oversized or malformed events cannot block the task."""
+    import threading
+    stopped = threading.Event()
+    stdout_display, stderr_display = _UsageDisplay(sys.stdout), _UsageDisplay(sys.stderr)
+    state = {}
+
+    def read(pipe, structured: bool):
+        display = stdout_display if structured else stderr_display
+        dropping = False
+        try:
+            while True:
+                line = pipe.readline(MAX_USAGE_EVENT + 1)
+                if not line:
+                    break
+                if stopped.is_set():
+                    continue
+                if dropping:
+                    dropping = not line.endswith("\n")
+                    continue
+                if len(line) > MAX_USAGE_EVENT:
+                    dropping = not line.endswith("\n")
+                    if structured:
+                        usage.unavailable("A native output event exceeded the bounded parser limit; usage may be incomplete.")
+                    display.write("[Oversized agent output event omitted.]", complete=True)
+                    continue
+                if not structured:
+                    display.write(line)
+                    continue
+                if not line.strip():
+                    continue
+                try:
+                    event = json.loads(line)
+                    if not isinstance(event, dict):
+                        raise ValueError("native event must be an object")
+                except (ValueError, RecursionError):
+                    usage.unavailable("The agent emitted unrecognized structured output; usage may be incomplete.")
+                    # Preserve plain CLI diagnostics, but not malformed JSON that
+                    # could contain tool arguments or an entire conversation.
+                    display.write("[Malformed agent event omitted.]" if line.lstrip().startswith(("{", "[")) else line,
+                                  complete=True)
+                    continue
+                usage.observe("observe_" + adapter, event)
+                _usage_event_text(adapter, event, display, state)
+        except Exception:
+            if not stopped.is_set():
+                usage.unavailable("Reading the agent's output stream failed; usage may be incomplete.")
+        finally:
+            if not stopped.is_set():
+                display.flush()
+            with contextlib.suppress(Exception):
+                pipe.close()
+
+    threads = [threading.Thread(target=read, args=(proc.stdout, True), daemon=True),
+               threading.Thread(target=read, args=(proc.stderr, False), daemon=True)]
+    for thread in threads:
+        thread.start()
     try:
-        text = config.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return None
-    except (OSError, UnicodeError):
-        return "Codex configuration could not be inspected to verify the upstream provider"
-    # Fail conservatively for profile/provider selection, including commented
-    # examples: do not redirect an opaque configuration to the wrong provider.
-    if re.search(r"\b(?:model_provider|model_providers|profile|profiles|openai_base_url|chatgpt_base_url|forced_login_method)\b", text):
-        return "Codex provider/profile configuration needs its own verified proxy routing"
-    return None
+        return _wait(proc, group)
+    finally:
+        deadline = time.monotonic() + USAGE_DRAIN_SECONDS
+        for thread in threads:
+            thread.join(max(0.0, deadline - time.monotonic()))
+        stopped.set()
+        if any(thread.is_alive() for thread in threads):
+            usage.unavailable("The agent exited before its output pipes closed; usage may be incomplete.")
 
 
-def run(spec: dict, prompt: str, model: str | None, interactive: bool, task: str = "", *, headroom_enabled: bool = False) -> int:
+def run(spec: dict, prompt: str, model: str | None, interactive: bool, task: str = "") -> int:
     if spec.get("builtin"):
         if interactive:
             ui.warn("--interactive only applies to external agents; the built-in agent runs the task one-shot.")
         from . import builtin_agent
-        if headroom_enabled:
-            return builtin_agent.run(prompt, model, task or prompt, headroom_enabled=True)
         return builtin_agent.run(prompt, model, task or prompt)
     binary = installed(spec)
     if not binary:
@@ -732,15 +848,18 @@ def run(spec: dict, prompt: str, model: str | None, interactive: bool, task: str
             cmd[0] = binary
             if Path(binary).name == "claude" or spec.get("auth_check") == "claude":
                 cmd = _with_claude_launchers(_with_claude_denies(cmd), launcher)
-            from . import headroom
-            unsupported = headroom_unsupported(spec, interactive, child_env) if headroom_enabled else None
-            with headroom.session(spec["key"], child_env, enabled=headroom_enabled and unsupported is None) as route:
-                if route.active:
-                    ui.kv("Headroom", "active · lossless context compression")
-                    cmd = [cmd[0], *route.command_args, *cmd[1:]]
-                elif headroom_enabled:
-                    ui.warn("Headroom inactive: " + (unsupported or route.reason))
-                return _wait(subprocess.Popen(cmd, env=route.env, stdin=None if interactive else subprocess.DEVNULL,
-                                              start_new_session=group), group)
+            with _UsageCapture(spec["key"], model, "interactive" if interactive else "exec") as usage:
+                adapter, reason = _usage_adapter(spec, interactive)
+                if adapter:
+                    cmd = _usage_command(cmd, adapter, usage.id)
+                    proc = subprocess.Popen(cmd, env=child_env, stdin=subprocess.DEVNULL, start_new_session=group,
+                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                            encoding="utf-8", errors="replace", bufsize=1)
+                    usage.exit_code = _wait_usage(proc, group, adapter, usage)
+                else:
+                    usage.unavailable(reason)
+                    usage.exit_code = _wait(subprocess.Popen(cmd, env=child_env,
+                        stdin=None if interactive else subprocess.DEVNULL, start_new_session=group), group)
+                return usage.exit_code
     finally:
         secrets.close_session(sid)

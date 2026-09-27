@@ -679,18 +679,6 @@
     },
     {
       "command": "enable",
-      "subcommand": "headroom",
-      "scenarios": [
-        "14"
-      ],
-      "cli": true,
-      "agent": "human-bootstrap-or-interactive",
-      "mcp_tool": null,
-      "ui": "host-bootstrap-or-native-interaction",
-      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
-    },
-    {
-      "command": "enable",
       "subcommand": "headliner",
       "scenarios": [
         "14"
@@ -728,18 +716,6 @@
     {
       "command": "disable",
       "subcommand": "agentic",
-      "scenarios": [
-        "14"
-      ],
-      "cli": true,
-      "agent": "human-bootstrap-or-interactive",
-      "mcp_tool": null,
-      "ui": "host-bootstrap-or-native-interaction",
-      "notes": "Authentication, host/service setup and interactive sessions retain human steps; see interfaces-and-coverage.md."
-    },
-    {
-      "command": "disable",
-      "subcommand": "headroom",
       "scenarios": [
         "14"
       ],
@@ -1459,6 +1435,30 @@
       "mcp_tool": "cloudseed_evidence",
       "ui": "typed-action-or-dedicated-page",
       "notes": "Use the same selected environment, parameters, approvals and verification as the CLI steps."
+    },
+    {
+      "command": "usage",
+      "subcommand": "report",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "bundled-skill-guided",
+      "mcp_tool": "cloudseed_usage",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Read local Cloudseed-run metadata without selecting an environment; follow coverage.next_offset and retain missing-metric reasons and estimated-cost limits."
+    },
+    {
+      "command": "usage",
+      "subcommand": "install",
+      "scenarios": [
+        "14"
+      ],
+      "cli": true,
+      "agent": "human-cli-bootstrap-or-confirmed-mcp-install",
+      "mcp_tool": "cloudseed_usage_install",
+      "ui": "typed-action-or-dedicated-page",
+      "notes": "Optional analyzer installation is a human CLI action or an explicitly confirmed MCP/UI action; reports use only Cloudseed-generated inputs."
     },
     {
       "command": "databricks",

@@ -59,7 +59,7 @@ AREAS = [
     ("Resilience and security", ["dr", "chaos", "scan", "evidence"]),
     ("Operational readiness", ["ops"]),
     ("Cost and data", ["finops", "databricks", "snowflake"]),
-    ("AI agents and MCP", ["enable", "disable", "agents", "use", "model", "agentic", "do", "skill", "mcp"]),
+    ("AI agents and MCP", ["enable", "disable", "agents", "use", "model", "agentic", "do", "skill", "usage", "mcp"]),
     ("Console, safety and help", ["ui", "undo", "creds", "explain", "help"]),
     ("Tooling", ["install", "deps"]),
 ]
@@ -67,7 +67,7 @@ AREAS = [
 SUB_DEST = {"k8s": "k8s_cmd", "vpn": "vpn_cmd", "env": "env_cmd", "node": "node_cmd", "platform": "platform_cmd",
             "dr": "dr_cmd", "chaos": "chaos_cmd", "scan": "scan_cmd", "finops": "finops_cmd", "mcp": "mcp_cmd",
             "ui": "ui_cmd", "creds": "creds_cmd", "enable": "feature", "disable": "feature", "deps": "deps_cmd",
-            "skill": "skill_cmd", "ops": "ops_cmd", "evidence": "evidence_cmd"}
+            "skill": "skill_cmd", "ops": "ops_cmd", "evidence": "evidence_cmd", "usage": "usage_cmd"}
 MANAGED_SUBS = ["connect", "test", "status", "CLI passthrough"]
 UNDO_SUBS = ["newest", "--list", "--global", "--id", "--drop"]
 SETUP_TARGETS = ["aws", "gcp", "azure", "vmware"]

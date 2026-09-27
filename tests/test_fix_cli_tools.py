@@ -423,7 +423,7 @@ class AgentsTest(Sandbox):
     def test_do_agent_is_a_one_off(self):
         self.fake_tool("codex", "echo fake-codex-ran")
         self.write_settings({"agent": "builtin", "agentic": True})
-        rc, out = self.cs("do", "--agent", "codex", "--no-headroom", "list my environments", extra_env={"OPENAI_API_KEY": "sk-test"})
+        rc, out = self.cs("do", "--agent", "codex", "list my environments", extra_env={"OPENAI_API_KEY": "sk-test"})
         self.assertEqual(rc, 0, out)
         self.assertIn("fake-codex-ran", out)
         self.assertEqual(self.settings()["agent"], "builtin")
@@ -438,15 +438,15 @@ class AgentsTest(Sandbox):
         self.assertEqual(s["agent"], "builtin")
         self.assertEqual(s["models"], {"builtin": "claude-sonnet-5"})
         self.assertTrue((self.user / ".claude" / "skills" / "cloudseed" / "SKILL.md").exists())
-        rc, out = self.cs("do", "--force", "--no-headroom", "list envs")
+        rc, out = self.cs("do", "--force", "list envs")
         self.assertEqual(rc, 0, out)
         self.assertIn("runs through your Claude Code CLI", out)
-        self.assertIn("fake-claude -p", out)
+        self.assertRegex(out, r"fake-claude [^\n]* --output-format stream-json [^\n]* -p(?:\s|$)")
         self.assertIn("claude-sonnet-5", out)
         self.assertEqual(self.settings()["agent"], "builtin")
 
     def test_no_credentials_and_no_claude_fails_once_before_the_header(self):
-        rc, out = self.cs("do", "--force", "--no-headroom", "list envs")
+        rc, out = self.cs("do", "--force", "list envs")
         self.assertEqual(rc, 1, out)
         self.assertEqual(out.count("needs Anthropic API credentials"), 1)
         self.assertNotIn("cloudseed · agentic", out)

@@ -260,10 +260,10 @@ _NEEDS_TERMINAL = {"ssh": "an interactive SSH session needs the user's terminal"
 _ALWAYS_REFUSED = ("agentic", "do", "enable", "disable", "ssh", "k9s")   # no form of these is for an agent
 # (keep in step with cli.human_only_reason / cli._AGENT_READ_FORMS and the extra refusals in _parse)
 _HUMAN_ONLY_TEXT = ("cloudseed ssh, k9s, agentic, enable, disable, install <anything>, deps install|image|bundle|runtime, "
-                    "skill install, creds set|unset|clear, use <agent>, model <id>|--forget, ui (open/start/stop/restart/"
+                    "skill install, usage install, creds set|unset|clear, use <agent>, model <id>|--forget, ui (open/start/stop/restart/"
                     "serve/token), mcp setup|connect|disconnect|start|stop|restart|serve|token|uninstall (setup/destroy "
                     "mcp). Their read-only forms work: creds (list), model, use list, install list, ui status|logs, mcp "
-                    "status|guide|tools|config|test|logs, deps status, skill list|show")
+                    "status|guide|tools|config|test|logs, deps status, usage [report], skill list|show")
 # Commands whose trailing arguments belong to another program (never strip or add flags there).
 _PASSTHROUGH = ("kubectl", "helm", "k9s", "databricks", "snowflake", "ssh", "agentic", "do")
 _SKILL_WORDS = skills.TASK_WORDS   # (kept under the old name)
@@ -389,6 +389,8 @@ def _parse(args: list[str]) -> tuple[argparse.Namespace | None, list[str]]:
         errs = [ln.strip().lstrip("✖").strip() for ln in text.splitlines() if "✖" in ln or ln.strip().startswith("error:")]
         raise _Refused("invalid arguments: " + secrets.redact("; ".join(errs) or text[-800:]) +
                        " (spell options out in full; for kubectl/helm put the verb first, e.g. kubectl get pods -n NS)")
+    if ns.cmd == "usage" and getattr(ns, "usage_cmd", None) == "install":
+        raise _Refused("`cloudseed usage install` installs a local tool and is human-only; give the user the command to run.")
     why = _NEEDS_TERMINAL.get(ns.cmd) or cli.human_only_reason(ns)
     if why:
         raise _Refused(f"`{_human_command(final)}` is human-only ({why}) and not available to the agent; give the "
@@ -997,7 +999,14 @@ def _stop_warning(final) -> str | None:
             ". Re-run the task, or split it into smaller steps.")
 
 
-def run(prompt: str, model: str | None, task: str, *, headroom_enabled: bool = False) -> int:
+def run(prompt: str, model: str | None, task: str) -> int:
+    from .agents import _UsageCapture
+    with _UsageCapture("builtin", model or DEFAULT_MODEL, "builtin") as usage:
+        usage.exit_code = _run(prompt, model, task, usage)
+        return usage.exit_code
+
+
+def _run(prompt: str, model: str | None, task: str, usage) -> int:
     ensure_sdk()
     import anthropic
     from anthropic import beta_tool
@@ -1038,28 +1047,11 @@ def run(prompt: str, model: str | None, task: str, *, headroom_enabled: bool = F
     # a profile that is selected but broken (bad file, bad pointer) raises this, at construction or at request time
     cred_errors = tuple(e for e in (getattr(anthropic, "CredentialsError", None),) if isinstance(e, type))
 
-    transport = None
+    client = None
     try:
-        from . import headroom
-        # The SDK still resolves its original credentials; only its transport
-        # destination is scoped to the owned proxy. Child cloudseed commands
-        # retain their original environment and approval/redaction policy.
-        # The agent-to-Headroom hop is owned loopback traffic. SDK transports
-        # capture HTTP_PROXY/ALL_PROXY at construction, so changing base_url
-        # afterwards alone could send local evidence to a network proxy.
-        # Headroom's separate upstream client retains approved network settings.
-        if headroom_enabled:
-            transport = anthropic.DefaultHttpxClient(trust_env=False)
-        client = anthropic.Anthropic(**({"http_client": transport} if transport is not None else {}))
-        # Resolve the SDK/profile destination before redirecting so a custom
-        # endpoint is retained (or explicitly refused by the proxy adapter).
-        upstream = str(client.base_url) if headroom_enabled else None
-        with secrets.exit_on_signals(), headroom.session("builtin", dict(os.environ), headroom_enabled,
-                                                         upstream_url=upstream) as route:
-            if headroom_enabled:
-                ui.info(route.reason)
-            if route.active:
-                client.base_url = route.base_url
+        # Use the SDK's normal credential, endpoint, TLS and proxy resolution.
+        client = anthropic.Anthropic()
+        with secrets.exit_on_signals():
             runner = client.beta.messages.tool_runner(
                 model=model,
                 max_tokens=16000,
@@ -1070,6 +1062,7 @@ def run(prompt: str, model: str | None, task: str, *, headroom_enabled: bool = F
             )
             final = None
             for message in runner:
+                usage.observe("observe_anthropic", message)
                 final = message
                 for block in message.content:
                     if block.type == "text" and block.text.strip():
@@ -1115,5 +1108,7 @@ def run(prompt: str, model: str | None, task: str, *, headroom_enabled: bool = F
         ui.err(f"Could not reach the Anthropic API: {secrets.redact(str(e))}")
         return 1
     finally:
-        if transport is not None:
-            transport.close()
+        close = getattr(client, "close", None)
+        if callable(close):
+            with contextlib.suppress(Exception):
+                close()

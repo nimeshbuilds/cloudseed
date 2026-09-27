@@ -254,7 +254,7 @@ cloudseed chaos run|list|status|stop|report [<cloud> --env N]      # Chaos Mesh 
 cloudseed scan cis|kube|images|host|stig|cloud|fips|all|reports [<cloud> --env N]   # compliance + vulnerability scans
 cloudseed scan architecture [<cloud> --env N] [--profile production|lab] [--max-age-days 30] [--json]
 cloudseed undo [<cloud> --env <name> | --global | --id ID] [--drop] [--list]   # revert (or drop) the previous action
-cloudseed creds list|set|unset|clear  ·  cloudseed enable|disable agentic|headroom|headliner|mcp|ui
+cloudseed creds list|set|unset|clear  ·  cloudseed enable|disable agentic|headliner|mcp|ui
 cloudseed list | doctor [cloud] | explain [name] [--json] | help [command|topic]
 ```
 
@@ -358,19 +358,11 @@ cloudseed disable agentic
   `skills` name skills (`install skills vmware` is the vmware skill, not the VMware tools).
 - **Context brief**: before a task is handed to the agent, the CLI does the research itself — environments,
   outputs, tool/credential status, a command cheat-sheet — and prepends a compact brief, so the agent
-  spends fewer tokens exploring. This does not compress conversations. The compatible setting is still
+  spends fewer tokens exploring. The compatible setting is still
   `headliner`; `cloudseed disable headliner` sends the task without this research brief.
 - **Command access**: external agents receive private `cloudseed` and `cs` session launchers for the current
   installation, including standalone binaries launched by full path. The prompt gives an absolute launcher path
   if their shell resets `PATH`; no global installation or shell alias is needed for the child agent.
-- **Headroom**: actual lossless context compression through a session-only local proxy, separate from the context
-  brief. It defaults on for supported agentic routes; `cloudseed enable|disable headroom` and `agentic --no-headroom`
-  control it. Built-in Claude, direct-Anthropic Claude Code and default noninteractive Codex `exec` with explicit
-  `CODEX_API_KEY` are supported when routing is verifiable. `OPENAI_API_KEY` alone does not select Codex API auth;
-  Cloudseed does not copy keys or switch subscription billing. Interactive Codex, subscription/WIF auth and
-  unverified custom/provider/managed routing stay unsupported. Read the active/off/unsupported/unavailable status and the
-  [support details](agentic.md#headroom-context-compression). Adding Cloudseed MCP to an independently launched
-  client does not route that client's model-provider requests through this proxy.
 - **Saved evidence**: use `cloudseed evidence list|read <cloud> --env NAME --json` or MCP `cloudseed_evidence` to
   inspect redacted reports and logs. Choose an artifact from the list; follow `next_offset` with the same `revision`
   until `complete=true`. This marks the final page; reading every page from offset 0 is required for a full read.
@@ -530,6 +522,17 @@ reversed.
 
 `cs undo --list` shows the history (`cs help undo` has the full table). When it is exhausted, destroy the environment
 and start over.
+
+## Agent usage: `cs usage`
+
+`cs usage report --json` reads usage metadata for Cloudseed runs. Filter with `--run-id UUID`, `--agent NAME` or
+`--limit N`; use `--offset N` for older pages. Supported standard agent runs record metrics exposed by the provider or agent; interactive and custom
+agents explain unavailable values. MCP records tool activity but cannot observe the client model's tokens.
+Missing values are not zero, and available costs are estimates rather than invoices or quota.
+
+The optional `--engine ccusage` analyzes only Cloudseed-generated inputs. Install its pinned native binary yourself
+with `cs usage install`, or approve MCP `cloudseed_usage_install` with `confirm=true`; native reports need no analyzer installation. MCP `cloudseed_usage` and the console's
+**Agents & MCP** page use the same reporting backend. See [agent usage](usage.md) for examples and limits.
 
 ## MCP server: talk to cloudseed from Claude, Codex, Cursor, ...
 
