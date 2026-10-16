@@ -69,7 +69,7 @@ jobs:
             python3 -m unittest tests.test_ccusage_integration
           ' 2>&1 | tee "$RUNNER_TEMP/container-tests.log"
 
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         if: failure()
         with:
           name: container-logs-${{ matrix.os }}
@@ -125,7 +125,7 @@ jobs:
           bash tests/scenarios/15-web-console-and-finops.sh 2>&1 | tee "$RUNNER_TEMP/bundle-ui.log"
           bash tests/scenarios/run.sh 16 17 18 19 2>&1 | tee "$RUNNER_TEMP/bundle-operations.log"
 
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         if: failure()
         with:
           name: bundle-logs-${{ matrix.os }}
