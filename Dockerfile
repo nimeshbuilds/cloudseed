@@ -12,7 +12,7 @@
 # ~/.cloudseed/container-linux-<arch>/ on the host (see cloudseed/container.py), never in the host's own ~/.cloudseed/bin.
 
 # python:3.14-slim-bookworm (to bump: docker buildx imagetools inspect python:3.14-slim-bookworm)
-FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56
+FROM python:3.15-slim-bookworm@sha256:122756f3fe72c4f5d3d71897888204ee85774bc79de952555b8a474e1d0a5d53
 
 ARG TERRAFORM_VERSION=1.16.4
 ARG AWSCLI_VERSION=2.37.1
