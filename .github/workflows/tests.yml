@@ -29,7 +29,7 @@ jobs:
         python: ["3.12", "3.14"]
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: ${{ matrix.python }}
       - name: Install through cloudseed and check every playbook
@@ -59,12 +59,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: ${{ matrix.python }}
           # no `cache: pip`: the CLI and its tests use the standard library only, nothing is pip-installed
 
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: "24"
 
@@ -98,7 +98,7 @@ jobs:
           set -o pipefail
           python -m unittest discover -s tests 2>&1 | tee "$RUNNER_TEMP/unit-tests.log"
 
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         if: failure()
         with:
           name: unit-logs-${{ matrix.os }}-python-${{ matrix.python }}
@@ -112,7 +112,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
 
@@ -197,7 +197,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
 
@@ -235,7 +235,7 @@ jobs:
           export CLOUDSEED_HOME="$RUNNER_TEMP/cloudseed-scenarios"
           bash tests/scenarios/run.sh
 
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.2
         if: failure()
         with:
           name: scenario-logs
